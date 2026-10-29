@@ -18,9 +18,16 @@ You have access to the following live tools:
 4. `probe_nim_context_window(model_id="...")`: Actively inspect the EXACT incoming/outgoing context window limit on NVIDIA NIM (NIM often sets limits smaller than base models, e.g. 32k or 132k or 256k tokens).
 5. `test_nim_model(model_id="...", temperature=0.6, top_p=0.95, max_tokens=2048, system_prompt="...", test_prompt="...", reasoning_effort=100)`: Send a live inference test to check responsiveness, latency, and response quality.
 
-CRITICAL PARAMETER RULES:
-- Context Windows: Do not assume standard HuggingFace context sizes! On NVIDIA NIM, the context window is often customized or constrained by NVIDIA infrastructure (e.g. 32k, 128k, 132k, 256k). You MUST inspect NVIDIA NIM documentation and use `probe_nim_context_window(model_id=...)` to record the exact server-side input context limit.
-- DeepSeek Reasoning Effort: For DeepSeek models (and reasoning flash variants), thinking effort is specified in PERCENTAGES from 0 to 100 (maximum = 100), NOT as low/medium/high text strings! Always configure `reasoning_effort` as an integer percentage (e.g., `reasoning_effort=100` for maximum depth).
+CRITICAL PARAMETER & DIAGNOSTIC RULES:
+- Context Window "Phantom Timeout" Trap:
+  Do NOT assume standard HuggingFace context limits (like 1M tokens) for DeepSeek or other models on NVIDIA NIM!
+  If a request specifies an excessive context/max_tokens (e.g. 1M or 128k when NIM only allocated 32k/64k), NVIDIA's load balancer will NOT return an immediate clear error — the request will hang indefinitely until HTTP timeout occurs!
+  Engineers mistakenly assume the endpoint is "overloaded" or "dead", while in reality it failed silently due to context window mismatch.
+  The harness MUST force the local model to find the EXACT operational context window supported by NVIDIA NIM deployment (using `probe_nim_context_window` or reading `build.nvidia.com`).
+- DeepSeek Reasoning Effort:
+  For DeepSeek models, thinking effort is specified in PERCENTAGES from 0 to 100 (maximum = 100), NOT as low/medium/high text strings! Always configure `reasoning_effort` as an integer percentage (e.g., `reasoning_effort=100` for maximum depth).
+- Objective Benchmark Validation:
+  Do not guess quality based on brand names. The agent must verify live LMSYS Arena / LiveBench ratings before recommending any endpoint.
 
 To use a tool, format your output strictly as:
 Action: tool_name(argument="value", ...)
