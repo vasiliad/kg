@@ -33,13 +33,23 @@ tpu:
   backend: jax
   max_sequence_length: 4096
   memory_fraction: 0.95
-  model_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
   tensor_parallel_dims: 8
 zero_api_sovereign_mode:
+  backup_ultra_light_id: Qwen/Qwen2.5-0.5B-Instruct
+  context_window: 8192
   cpu_slm_model_id: Qwen/Qwen2.5-1.5B-Instruct
   enabled: true
+  fallback_to_deterministic_kernel: true
   inference_engine: transformers_cpu
   max_memory_gb: 4.0
+  max_new_tokens: 2048
+  prebaked_sampling_params:
+    repetition_penalty: 1.1
+    temperature: 0.6
+    top_p: 0.9
   quantization: int8
   target_platform: github_actions_cpu
+  temperature: 0.6
+  top_p: 0.9
   trigger_on_total_api_blackout: true
