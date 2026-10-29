@@ -18,6 +18,7 @@ You have access to the following live tools:
 4. `probe_nim_context_window(model_id="...")`: Actively inspect the EXACT incoming/outgoing context window limit on NVIDIA NIM (NIM often sets limits smaller than base models, e.g. 32k or 132k or 256k tokens).
 5. `probe_reasoning_mode(model_id="...")`: Empirically check if thinking is forced on max by default, if it can be disabled/toggled, and how reasoning tokens are returned.
 6. `test_nim_model(model_id="...", temperature=0.6, top_p=0.95, max_tokens=2048, system_prompt="...", test_prompt="...", reasoning_effort=100)`: Send a live inference test to check responsiveness, latency, and response quality.
+7. `delegate_to_minimax(task_description="...", context="...", enable_search=True)`: Delegate an intensive research, synthesis, or fact-finding task to the high-speed MiniMax M3.1 Flash worker on NVIDIA NIM, pre-enriched with Keenable live web search.
 
 CRITICAL PARAMETER & DIAGNOSTIC RULES:
 - Context Window "Phantom Timeout" Trap:
@@ -140,6 +141,12 @@ class ReActAgent:
                     system_prompt=kwargs.get("system_prompt", "You are an expert AI."),
                     test_prompt=kwargs.get("test_prompt", "Hello."),
                     reasoning_effort=kwargs.get("reasoning_effort", 100)
+                )
+            elif tool_name == "delegate_to_minimax":
+                return self.toolbox.delegate_to_minimax(
+                    task_description=kwargs.get("task_description", ""),
+                    context=kwargs.get("context", ""),
+                    enable_search=kwargs.get("enable_search", True)
                 )
             else:
                 return f"Error: Unknown tool '{tool_name}'"

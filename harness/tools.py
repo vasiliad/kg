@@ -289,3 +289,22 @@ class AgentToolbox:
             }, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"model_id": model_id, "probe_error": str(e)})
+
+    def delegate_to_minimax(self, task_description: str, context: str = "", enable_search: bool = True) -> str:
+        """
+        Delegates an intensive research, synthesis, or fact-finding task to MiniMax M3.1 Flash on NVIDIA NIM.
+        MiniMax runs with Keenable Search integration and returns both reasoning trace and final result.
+        """
+        print(f"[TOOL: delegate_to_minimax] Delegating task to MiniMax M3.1 Flash: '{task_description[:80]}...'")
+        from harness.minimax_executor import MiniMaxExecutor
+        executor = MiniMaxExecutor(
+            nvidia_api_key=self.nvidia_api_key,
+            keenable_api_key=self.keenable_api_key
+        )
+        result = executor.execute_task(
+            task_prompt=task_description,
+            context=context,
+            enable_search=enable_search
+        )
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
