@@ -137,7 +137,7 @@ class AgentToolbox:
             # Some NIM deployments accept chat_template_kwargs or extra_body
             payload["extra_body"] = {"reasoning_effort": int(reasoning_effort)}
         try:
-            res = requests.post(url, headers=self.headers, json=payload, timeout=30)
+            res = requests.post(url, headers=self.headers, json=payload, timeout=60)
             if res.status_code != 200:
                 return json.dumps({"status": f"FAILED_HTTP_{res.status_code}", "error": res.text})
             
@@ -201,7 +201,7 @@ class AgentToolbox:
                 "model": model_id,
                 "messages": [{"role": "user", "content": test_q}],
                 "max_tokens": 512
-            }, timeout=25)
+            }, timeout=60)
             
             if res_default.status_code != 200:
                 return json.dumps({"model_id": model_id, "status": f"HTTP_{res_default.status_code}", "error": res_default.text})
@@ -220,7 +220,7 @@ class AgentToolbox:
                 "max_tokens": 512,
                 "reasoning_effort": 0,
                 "chat_template_kwargs": {"thinking": False}
-            }, timeout=25)
+            }, timeout=60)
             
             can_disable = False
             if res_zero.status_code == 200:
