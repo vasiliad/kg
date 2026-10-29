@@ -1,34 +1,30 @@
-project:
-  name: "deepseek-tpu-nim-harness"
-  version: "1.0.0"
-
-tpu:
-  backend: "jax"
-  memory_fraction: 0.95
-  model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-  max_sequence_length: 4096
-  tensor_parallel_dims: 8
-
-quota_guard:
-  max_session_minutes: 25
-  weekly_tpu_hours_limit: 20
-  target_runs_per_week: 7
-
+github_state:
+  branch: main
+  history_file: nim_history.log
+  repo: ''
+  state_file: active_models.json
 nvidia_nim:
-  base_url: "https://integrate.api.nvidia.com/v1"
-  catalog_api_url: "https://api.ngc.nvidia.com/v2/org/nvidia/team/nim"
-  default_timeout_sec: 30
+  base_url: https://integrate.api.nvidia.com/v1
   benchmark_min_score: 80.0
+  catalog_api_url: https://api.ngc.nvidia.com/v2/org/nvidia/team/nim
+  default_timeout_sec: 30
   rotation_alert_threshold_failures: 2
   target_model_keywords:
-    - "minimax/minimax-m3.1-flash"
-    - "zhipu/glm-5.3-flash"
-    - "deepseek-ai/deepseek-v4.1-flash"
-    - "nvidia/550b-ultra"
-    - "stepfun/step-5-preview"
-
-github_state:
-  repo: "" # Заполняется пользователем, например: "username/my-tpu-nim-state"
-  state_file: "active_models.json"
-  history_file: "nim_history.log"
-  branch: "main"
+  - minimax/minimax-m3.1-flash
+  - zhipu/glm-5.3-flash
+  - deepseek-ai/deepseek-v4.1-flash
+  - nvidia/550b-ultra
+  - stepfun/step-5-preview
+project:
+  name: deepseek-tpu-nim-harness
+  version: 1.0.0
+quota_guard:
+  max_session_minutes: 25
+  target_runs_per_week: 7
+  weekly_tpu_hours_limit: 20
+tpu:
+  backend: jax
+  max_sequence_length: 4096
+  memory_fraction: 0.95
+  model_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+  tensor_parallel_dims: 8
