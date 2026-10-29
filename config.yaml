@@ -33,7 +33,7 @@ tpu:
   backend: jax
   max_sequence_length: 4096
   memory_fraction: 0.95
-  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  model_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
   tensor_parallel_dims: 8
 zero_api_sovereign_mode:
   backup_ultra_light_id: Qwen/Qwen2.5-0.5B-Instruct

@@ -151,7 +151,19 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             )
             print(f"[*] Successor election: {election_res}")
             
-            # 2. Update state to sovereign CPU mode
+            # 2. Execute Sovereign CPU Mission via Pre-Baked Engine
+            from harness.sovereign_cpu_engine import SovereignCPUEngine
+            cpu_engine = SovereignCPUEngine(
+                model_id=target_model,
+                backup_model_id=zero_api_cfg.get("backup_ultra_light_id", "Qwen/Qwen2.5-0.5B-Instruct")
+            )
+            sovereign_mission = cpu_engine.execute_sovereign_mission(
+                task_description="Execute autonomous telemetry audit, preserve repository health, and enforce zero-API survival.",
+                context={"blackout_reason": "Total external API blackout detected"}
+            )
+            print(f"[*] Sovereign mission completed via {sovereign_mission.get('engine')} in {sovereign_mission.get('elapsed_sec')}s.")
+
+            # 3. Update state to sovereign CPU mode
             now_iso = datetime.now(timezone.utc).isoformat()
             sovereign_state = {
                 "timestamp": now_iso,
@@ -160,17 +172,17 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
                 "last_emergency_run": now_iso,
                 "emergency_reason": "Total external API blackout (NVIDIA NIM unavailable). Autonomous migration to CPU SLM.",
                 "local_arbiter": f"{target_model} (GitHub Actions CPU Sovereign)",
-                "local_arbiter_feedback": f"Autonomous migration completed. Zero external API dependencies. Operating on GitHub Actions 4 vCPU / 16GB RAM.",
+                "local_arbiter_feedback": f"Autonomous mission completed via {sovereign_mission.get('engine')}. Zero external API dependencies. Operating on GitHub Actions 4 vCPU / 16GB RAM.",
                 "catalog_diff": {"new_count": 0, "removed_count": 0, "status": "EXTERNAL_APIS_OFFLINE"},
-                "active_fleet": [
-                    {"id": target_model, "tier": "Sovereign-CPU-SLM", "quality_score": 90.0, "status": "APPROVED", "engine": zero_api_cfg.get("inference_engine", "transformers_cpu")}
-                ],
+                "active_fleet": sovereign_mission.get("approved_fleet", [
+                    {"id": target_model, "tier": "Sovereign-CPU-SLM", "quality_score": 92.0, "status": "APPROVED", "engine": "cpu_local"}
+                ]),
                 "last_updated": now_iso
             }
             state_mgr.save_local_state(sovereign_state)
             state_mgr.append_history_log(f"SOVEREIGN MIGRATION: Elected {target_model} on GitHub CPU due to total external API blackout.")
             
-            # 3. Commit and push
+            # 4. Commit and push
             if not dry_run:
                 try:
                     subprocess.run(["git", "add", "active_models.json", "nim_history.log", "config.yaml"], check=False)
