@@ -1,0 +1,75 @@
+name: Autonomous Heartbeat & Emergency Fallback
+
+on:
+  schedule:
+    # Runs every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force emergency execution regardless of heartbeat'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  heartbeat-and-fallback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 10
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Lightweight Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Run Autonomous Emergency / Heartbeat Orchestrator
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          # If triggered manually, pass --force
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_run }}" = "true" ]; then
+            python harness/emergency_runner.py --force
+          else
+            python harness/emergency_runner.py
+          fi
+
+      - name: Commit & Push Heartbeat (Profile & Workflow Keepalive)
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add active_models.json nim_history.log config.yaml || true
+          
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(heartbeat): autonomous state sync [skip ci]"
+            git push origin main
+            echo "Heartbeat changes committed and pushed."
+          else
+            echo "No state changes detected in this cycle."
+          fi
+
+      - name: Prevent GitHub Workflow Inactivity Auto-Disable
+        uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          gh_token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          commit_message: "chore(keepalive): automated repository heartbeat ping"
+          committer_username: "vasiliad"
+          committer_email: "vasiliadi@users.noreply.github.com"

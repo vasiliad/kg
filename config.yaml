@@ -28,3 +28,12 @@ tpu:
   memory_fraction: 0.95
   model_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
   tensor_parallel_dims: 8
+
+emergency_fallback:
+  enabled: true
+  mode: "cpu_orchestrator"
+  cpu_arbiter_surrogate: "minimaxai/minimax-m3.1-flash"
+  cron_schedule: "0 */6 * * *"
+  timeout_hours_before_fallback: 6
+  kaggle_kernel: "vasiliadi911/deepseek-r1-tpu-nim-orchestrator"
+
