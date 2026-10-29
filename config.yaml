@@ -53,3 +53,11 @@ zero_api_sovereign_mode:
   temperature: 0.6
   top_p: 0.9
   trigger_on_total_api_blackout: true
+
+telegram_bot:
+  enabled: true
+  polling_timeout_sec: 30
+  default_executor: "minimaxai/minimax-m3.1-flash"
+  enable_keenable_search: true
+  allowed_user_ids: []
+
