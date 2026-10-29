@@ -53,7 +53,7 @@ class HarnessTelegramBot:
         self.keenable_key = os.getenv("KEENABLE_API_KEY", "")
         
         # Password protection configuration
-        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "givi2026").strip()
+        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "arabyan3G").strip()
         self.sessions_file = PROJECT_ROOT / ".telegram_sessions.json"
         self.authorized_chats: Set[int] = self._load_authorized_sessions()
 
@@ -139,7 +139,9 @@ class HarnessTelegramBot:
             payload = {
                 "chat_id": chat_id,
                 "text": chunk,
-                "reply_markup": current_markup
+                "reply_markup": current_markup,
+                "disable_web_page_preview": True,
+                "link_preview_options": {"is_disabled": True}
             }
             if parse_mode:
                 payload["parse_mode"] = parse_mode
@@ -214,10 +216,18 @@ class HarnessTelegramBot:
         self.send_chat_action(chat_id, "typing")
         self.send_message(chat_id, "🧠 <i>Передаю задачу боевой модели MiniMax M3.1 Flash...</i>", parse_mode="HTML")
 
+        # Smart search detection: don't search internet for simple greetings or small talk
+        clean_prompt = prompt.lower().strip()
+        common_greetings = ["привет", "здравствуй", "здравствуйте", "добрый день", "доброе утро", "добрый вечер", "hi", "hello", "hey", "как дела", "кто ты", "спасибо", "пока", "тест", "test"]
+        is_greeting = clean_prompt in common_greetings or (len(clean_prompt.split()) <= 1 and len(clean_prompt) < 10)
+        
+        explicit_search_keywords = ["найди", "поиск", "новости", "свежие", "что случилось", "курс", "актуальн", "search", "latest", "news", "benchmarks", "сравни", "кто такой"]
+        needs_search = any(kw in clean_prompt for kw in explicit_search_keywords) and not is_greeting
+
         start_t = time.time()
         res = self.executor.execute_task(
             task_prompt=prompt,
-            enable_search=True,
+            enable_search=needs_search,
             max_tokens=32768,
             temperature=0.6
         )
@@ -226,11 +236,11 @@ class HarnessTelegramBot:
         citations = res.get("citations", [])
 
         citations_text = ""
-        if citations:
+        if citations and needs_search:
             citations_text = "\n\n🔗 <b>Использованные источники:</b>\n" + "\n".join(f"• {c}" for c in citations[:5])
 
         reply = f"🤖 <b>Ответ MiniMax M3.1 Flash ({elapsed}с):</b>\n\n{content}{citations_text}"
-        self.send_message(chat_id, reply)
+        self.send_message(chat_id, reply, parse_mode="HTML")
 
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""
