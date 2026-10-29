@@ -17,11 +17,22 @@ import requests
 class MiniMaxExecutor:
     def __init__(
         self,
-        nvidia_api_key: str,
+        nvidia_api_key: Optional[str] = None,
         keenable_api_key: Optional[str] = None,
         base_url: str = "https://integrate.api.nvidia.com/v1"
     ):
-        self.nvidia_api_key = nvidia_api_key
+        self.nvidia_api_key = nvidia_api_key or os.getenv("NVIDIA_API_KEY", "")
+        if not self.nvidia_api_key:
+            env_path = PROJECT_ROOT / ".env"
+            if env_path.exists():
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            if line.startswith("NVIDIA_API_KEY="):
+                                self.nvidia_api_key = line.strip().split("=", 1)[1].strip()
+                except Exception:
+                    pass
+
         self.keenable_api_key = keenable_api_key or os.getenv("KEENABLE_API_KEY", "")
         self.base_url = base_url.rstrip("/")
         self.model_id = "minimaxai/minimax-m3.1-flash"
