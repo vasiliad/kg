@@ -12,6 +12,7 @@ import os
 import sys
 import time
 import json
+import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,11 +26,20 @@ from harness.telegram_bot import HarnessTelegramBot
 from harness.disk_guard import DiskGuard
 from harness.state_manager import StateManager
 
+def _isolated_memory_engine() -> MemoryEngine:
+    """Memory engine on throwaway files — test runs must never pollute the
+    production vault in data/ (same files used to be rewritten by both)."""
+    tmp_dir = Path(tempfile.mkdtemp(prefix="kg-memory-test-"))
+    return MemoryEngine(
+        history_file=tmp_dir / "telegram_history.txt",
+        vault_file=tmp_dir / ".memory_vault.json"
+    )
+
 def test_1_memory_engine_and_nemotron():
     print("\n" + "=" * 60)
     print("TEST 1: Memory Engine & Nemotron 3.5 Embed Vector Recall")
     print("=" * 60)
-    engine = MemoryEngine()
+    engine = _isolated_memory_engine()
     
     # 1. Log test dialogue
     engine.append_message("user", "Какое точное окно контекста настроено для MiniMax M3.1 Flash?")
