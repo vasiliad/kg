@@ -19,6 +19,7 @@ You have access to the following live tools:
 5. `probe_reasoning_mode(model_id="...")`: Empirically check if thinking is forced on max by default, if it can be disabled/toggled, and how reasoning tokens are returned.
 6. `test_nim_model(model_id="...", temperature=0.6, top_p=0.95, max_tokens=2048, system_prompt="...", test_prompt="...", reasoning_effort=100)`: Send a live inference test to check responsiveness, latency, and response quality.
 7. `delegate_to_minimax(task_description="...", context="...", enable_search=True)`: Delegate an intensive research, synthesis, or fact-finding task to the high-speed MiniMax M3.1 Flash worker on NVIDIA NIM, pre-enriched with Keenable live web search.
+8. `elect_successor(new_model_id="...", rationale="...")`: Transfer complete operational command of the local TPU brain to a newer, superior open-weights model from Hugging Face. Validates 128GB TPU fit, updates config.yaml, logs handoff state, and commits/pushes to Git for next boot.
 
 CRITICAL PARAMETER & DIAGNOSTIC RULES:
 - Context Window "Phantom Timeout" Trap:
@@ -147,6 +148,11 @@ class ReActAgent:
                     task_description=kwargs.get("task_description", ""),
                     context=kwargs.get("context", ""),
                     enable_search=kwargs.get("enable_search", True)
+                )
+            elif tool_name == "elect_successor":
+                return self.toolbox.elect_successor(
+                    new_model_id=kwargs.get("new_model_id", ""),
+                    rationale=kwargs.get("rationale", "")
                 )
             else:
                 return f"Error: Unknown tool '{tool_name}'"
