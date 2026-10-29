@@ -67,14 +67,7 @@ def should_trigger_emergency(config: Dict[str, Any], force: bool = False) -> (bo
     if force:
         return True, "Trigger forced by user / CLI flag --force"
 
-    fallback_cfg = config.get("emergency_fallback", {})
-    if not fallback_cfg.get("enabled", True):
-        return False, "Emergency fallback is disabled in config.yaml"
-
-    timeout_hours = fallback_cfg.get("timeout_hours_before_fallback", 6)
-    kernel_id = fallback_cfg.get("kaggle_kernel", "vasiliadi911/deepseek-r1-tpu-nim-orchestrator")
-
-    # 1. Check last update timestamp in active_models.json
+    # Check last update timestamp in active_models.json
     state_file = config.get("github_state", {}).get("state_file", "active_models.json")
     if os.path.exists(state_file):
         try:
@@ -82,24 +75,17 @@ def should_trigger_emergency(config: Dict[str, Any], force: bool = False) -> (bo
                 state_data = json.load(f)
                 ts_str = state_data.get("timestamp") or state_data.get("last_updated")
                 if ts_str:
-                    # Clean ISO format
                     ts_clean = ts_str.replace("Z", "+00:00")
                     last_dt = datetime.fromisoformat(ts_clean)
                     now_dt = datetime.now(timezone.utc)
                     age_hours = (now_dt - last_dt).total_seconds() / 3600.0
                     print(f"[*] Last verified state timestamp: {ts_str} ({age_hours:.1f} hours ago)")
-                    if age_hours >= timeout_hours:
-                        return True, f"State stale by {age_hours:.1f}h (threshold: {timeout_hours}h)"
+                    if age_hours >= 6:
+                        return True, f"State stale by {age_hours:.1f}h (threshold: 6h)"
         except Exception as e:
             print(f"[!] Warning reading state file: {e}")
 
-    # 2. Check Kaggle worker status
-    k_res = check_kaggle_status(kernel_id)
-    print(f"[*] Kaggle kernel '{kernel_id}' status: {k_res.get('status')}")
-    if k_res.get("status") in ["QUEUED", "BLOCKED_OR_UNAUTHORIZED"]:
-        return True, f"Kaggle kernel state is {k_res.get('status')}"
-
-    return False, "Kaggle kernel is healthy and state is up to date"
+    return False, "Sovereign complex is operational and state is up to date"
 
 def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> Dict[str, Any]:
     print("=" * 72)

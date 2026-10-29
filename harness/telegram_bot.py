@@ -171,14 +171,13 @@ class HarnessTelegramBot:
 
         report = (
             "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n"
-            f"👑 <b>Верховный арбитр (Active):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct (CPU)')}</code>\n"
-            f"🛡️ <b>Резервный арбитр (TPU):</b> <code>{state.get('reserve_tpu_arbiter', 'DeepSeek-R1-32B (QUEUED)')}</code>\n"
+            f"👑 <b>Верховный арбитр (CPU):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct')}</code>\n"
             "⚡ <b>Тактический исполнитель:</b> <code>MiniMax M3.1 Flash (256k окно / 128k ответ)</code>\n"
             "🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n"
             f"🔑 <b>NVIDIA NIM API:</b> {key_res.get('message')} (HTTP {key_res.get('status_code', 0)})\n"
             f"💾 <b>Дисковое пространство:</b> {disk.get('free_gb')} ГБ свободно ({disk.get('percent_used')}% занято)\n"
             f"🕒 <b>Обновлено:</b> {state.get('last_updated', 'N/A')}\n\n"
-            "🛡️ <i>Двусторонняя шина арбитража и журнал data/telegram_history.txt активны.</i>"
+            "🛡️ <i>Автономный суверенный комплекс полностью отвязан от очередей сторонних сервисов.</i>"
         )
         self.send_message(chat_id, report, parse_mode="HTML")
 
@@ -236,7 +235,6 @@ class HarnessTelegramBot:
             "minimax_output": "Up to 128,000 tokens (131,072 tokens)",
             "pacing": "<= 30 RPM (min 2.0s slot intervals)",
             "supreme_arbiter": "Qwen/Qwen2.5-1.5B-Instruct on CPU Steady Active Duty",
-            "reserve_arbiter": "DeepSeek-R1-Distill-Qwen-32B on Kaggle TPU (QUEUED)",
             "eternal_memory": "NVIDIA Nemotron 3.5 Embed 8B active with data/telegram_history.txt"
         }
         arb_res = self.arbiter_engine.execute_sovereign_mission(
