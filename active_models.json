@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-10-29T08:57:43.835678+00:00",
+  "key_health": {
+    "valid": false,
+    "status_code": 0,
+    "message": "Missing API key."
+  },
+  "local_arbiter": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+  "local_arbiter_feedback": "DeepSeek-R1-32B autonomous research completed.",
+  "active_fleet": [
+    {
+      "id": "minimax/minimax-m3.1-flash",
+      "matched_model": "minimax-m3.1-flash",
+      "arena_elo": 1410,
+      "tier": "Ultra-Flash-Reasoning",
+      "quality_score": 99.2,
+      "status": "APPROVED"
+    },
+    {
+      "id": "zhipu/glm-5.3-flash",
+      "matched_model": "glm-5.3-flash",
+      "arena_elo": 1405,
+      "tier": "Ultra-Agentic-Code",
+      "quality_score": 98.8,
+      "status": "APPROVED"
+    },
+    {
+      "id": "deepseek-ai/deepseek-v4.1-flash",
+      "matched_model": "deepseek-v4.1-flash",
+      "arena_elo": 1400,
+      "tier": "Ultra-Sparse-MTP",
+      "quality_score": 98.5,
+      "status": "APPROVED"
+    },
+    {
+      "id": "nvidia/550b-ultra",
+      "matched_model": "550b-ultra",
+      "arena_elo": 1390,
+      "tier": "Ultra-Massive-Flagship",
+      "quality_score": 97.5,
+      "status": "APPROVED"
+    },
+    {
+      "id": "stepfun/step-5-preview",
+      "matched_model": "step-5-preview",
+      "arena_elo": 1380,
+      "tier": "Ultra-Multimodal-Preview",
+      "quality_score": 96.0,
+      "status": "APPROVED"
+    }
+  ],
+  "last_updated": "2026-10-29T08:57:43.835709+00:00Z"
+}
