@@ -48,3 +48,4 @@ temp/
 # Log rotations
 *.log.bak
 *.log.old
+.telegram_sessions.json

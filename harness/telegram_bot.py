@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-Interactive Telegram Bot Bridge for Autonomous Harness.
-Enables real-time human-in-the-loop interaction with active duty models:
+Interactive Telegram Bot Bridge with Password Protection.
+Enables secure human-in-the-loop interaction with active duty models:
 - MiniMax M3.1 Flash (live streaming + unpruned Keenable search)
 - DeepSeek-R1-32B / Sovereign CPU Engine
 - System Vitals, Fleet Telemetry, and Storage Monitoring
 
-Zero external library overhead: implemented via pure HTTP requests.
+Features:
+- Access-Control: Secret Passphrase / PIN protection
+- Persistent Session Memory (.telegram_sessions.json)
+- Automatic Password Deletion from chat history
+- Zero external library overhead: implemented via pure HTTP requests.
 """
 
 import os
@@ -15,7 +19,7 @@ import json
 import time
 import requests
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -48,10 +52,11 @@ class HarnessTelegramBot:
         self.nvidia_key = os.getenv("NVIDIA_API_KEY", "")
         self.keenable_key = os.getenv("KEENABLE_API_KEY", "")
         
-        # Whitelisted Telegram user IDs
-        raw_allowed = os.getenv("ALLOWED_TELEGRAM_USER_IDS", "")
-        self.allowed_users = [int(u.strip()) for u in raw_allowed.split(",") if u.strip().isdigit()]
-        
+        # Password protection configuration
+        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "givi2026").strip()
+        self.sessions_file = PROJECT_ROOT / ".telegram_sessions.json"
+        self.authorized_chats: Set[int] = self._load_authorized_sessions()
+
         self.state_mgr = StateManager()
         self.disk_guard = DiskGuard()
         self.executor = MiniMaxExecutor(nvidia_api_key=self.nvidia_key, keenable_api_key=self.keenable_key)
@@ -59,6 +64,23 @@ class HarnessTelegramBot:
 
     def is_configured(self) -> bool:
         return bool(self.bot_token and len(self.bot_token) > 10)
+
+    def _load_authorized_sessions(self) -> Set[int]:
+        if self.sessions_file.exists():
+            try:
+                with open(self.sessions_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return set(data.get("authorized_chats", []))
+            except Exception:
+                pass
+        return set()
+
+    def _save_authorized_sessions(self) -> None:
+        try:
+            with open(self.sessions_file, "w", encoding="utf-8") as f:
+                json.dump({"authorized_chats": list(self.authorized_chats)}, f, indent=2)
+        except Exception:
+            pass
 
     def get_me(self) -> Dict[str, Any]:
         """Validates bot token against Telegram API."""
@@ -77,13 +99,20 @@ class HarnessTelegramBot:
         except Exception:
             pass
 
+    def delete_message(self, chat_id: int, message_id: int) -> None:
+        """Deletes sensitive message (e.g. password) from chat history."""
+        try:
+            requests.post(f"{self.base_url}/deleteMessage", json={"chat_id": chat_id, "message_id": message_id}, timeout=5)
+        except Exception:
+            pass
+
     def get_main_keyboard(self) -> Dict[str, Any]:
         """Builds interactive reply keyboard with quick-access buttons."""
         return {
             "keyboard": [
                 [{"text": "📡 Статус системы"}, {"text": "🚀 Флот моделей"}],
                 [{"text": "🌐 Поиск Keenable"}, {"text": "📧 Проверка почты"}],
-                [{"text": "ℹ️ Справка"}]
+                [{"text": "🔒 Выход (/logout)"}, {"text": "ℹ️ Справка"}]
             ],
             "resize_keyboard": True,
             "is_persistent": True
@@ -101,7 +130,7 @@ class HarnessTelegramBot:
             print(f"[Telegram Bot] Token missing. Message to {chat_id}: {text[:100]}...")
             return False
 
-        markup = reply_markup or self.get_main_keyboard()
+        markup = reply_markup if reply_markup is not None else self.get_main_keyboard()
         chunks = [text[i:i + 3900] for i in range(0, len(text), 3900)]
         
         for idx, chunk in enumerate(chunks):
@@ -124,15 +153,6 @@ class HarnessTelegramBot:
                 print(f"[!] Error sending message to {chat_id}: {e}")
                 return False
         return True
-
-    def check_authorization(self, user_id: int, username: str = "") -> bool:
-        """Checks if the user is authorized to send tasks."""
-        if not self.allowed_users:
-            # If no users configured yet, automatically whitelist first user and notify
-            print(f"[*] No whitelist set. Auto-authorizing first user: {user_id} (@{username})")
-            self.allowed_users.append(user_id)
-            return True
-        return user_id in self.allowed_users
 
     def handle_status_command(self, chat_id: int) -> None:
         """Handles /status command."""
@@ -194,7 +214,6 @@ class HarnessTelegramBot:
         self.send_chat_action(chat_id, "typing")
         self.send_message(chat_id, "🧠 <i>Передаю задачу боевой модели MiniMax M3.1 Flash...</i>", parse_mode="HTML")
 
-        # Periodically refresh typing action during generation
         start_t = time.time()
         res = self.executor.execute_task(
             task_prompt=prompt,
@@ -233,24 +252,57 @@ class HarnessTelegramBot:
             self.send_message(chat_id, f"[-] Ошибка отправки: {res.get('error') or res.get('message')}")
 
     def process_message(self, message: Dict[str, Any]) -> None:
-        """Processes a single incoming message from Telegram."""
+        """Processes a single incoming message from Telegram with Password Guard."""
         chat_id = message.get("chat", {}).get("id")
         user_id = message.get("from", {}).get("id")
         username = message.get("from", {}).get("username", "")
+        message_id = message.get("message_id")
         text = message.get("text", "").strip()
 
         if not chat_id or not text:
             return
 
-        if not self.check_authorization(user_id, username):
+        # 1. Password Verification Layer
+        if chat_id not in self.authorized_chats:
+            candidate = text.replace("/login ", "", 1).strip() if text.startswith("/login ") else text
+
+            if candidate == self.bot_password:
+                self.authorized_chats.add(chat_id)
+                self._save_authorized_sessions()
+                if message_id:
+                    self.delete_message(chat_id, message_id)
+
+                welcome = (
+                    "🔓 <b>ДОСТУП УСПЕШНО РАЗРЕШЕН!</b>\n\n"
+                    "Пароль подтвержден. Вы авторизованы в командном центре автономного комплекса.\n"
+                    "Клавиатура быстрого управления активирована внизу экрана."
+                )
+                self.send_message(chat_id, welcome, parse_mode="HTML")
+                print(f"[+] User {user_id} (@{username}) successfully authenticated chat {chat_id} with password.")
+                return
+            else:
+                lock_msg = (
+                    "🔒 <b>ДОСТУП ЗАКРЫТ.</b>\n\n"
+                    "Этот бот защищен паролем.\n"
+                    "Введите секретный пароль для авторизации:"
+                )
+                self.send_message(chat_id, lock_msg, reply_markup={"remove_keyboard": True}, parse_mode="HTML")
+                return
+
+        # 2. Logout Command
+        if text in ["/logout", "🔒 Выход (/logout)"]:
+            self.authorized_chats.discard(chat_id)
+            self._save_authorized_sessions()
             self.send_message(
                 chat_id,
-                f"⛔ <b>Доступ ограничен.</b>\nВаш User ID: <code>{user_id}</code>.\nДобавьте его в <code>ALLOWED_TELEGRAM_USER_IDS</code>.",
+                "🔒 <b>Вы вышли из системы.</b>\nЧат заблокирован. Для повторного входа введите пароль:",
+                reply_markup={"remove_keyboard": True},
                 parse_mode="HTML"
             )
+            print(f"[*] Chat {chat_id} logged out.")
             return
 
-        # Check pending state
+        # 3. Pending Interaction States
         if chat_id in self.user_states:
             state = self.user_states.pop(chat_id)
             if state == "awaiting_search_query":
@@ -260,7 +312,7 @@ class HarnessTelegramBot:
                 self.handle_minimax_task(chat_id, text)
                 return
 
-        # Handle Commands & Button Clicks
+        # 4. Standard Commands & Buttons
         if text in ["/start", "/help", "ℹ️ Справка"]:
             welcome = (
                 "👋 <b>Добро пожаловать в Интерактивный Штаб Автономного Комплекса!</b>\n\n"
@@ -269,7 +321,8 @@ class HarnessTelegramBot:
                 "• <b>📡 Статус системы</b> — проверка ключей, диска, режимов и квот.\n"
                 "• <b>🚀 Флот моделей</b> — список 5 утвержденных моделей NIM.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
-                "• <b>📧 Проверка почты</b> — отправка отчета здоровья на ivanvasiliadi@gmail.com.\n\n"
+                "• <b>📧 Проверка почты</b> — отправка отчета здоровья на ivanvasiliadi@gmail.com.\n"
+                "• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
                 "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурная модель MiniMax M3.1 Flash сразу приступит к решению!</i>"
             )
             self.send_message(chat_id, welcome, parse_mode="HTML")
@@ -303,6 +356,7 @@ class HarnessTelegramBot:
         bot_username = me.get("result", {}).get("username", "Unknown")
         print("=" * 72)
         print(f"🤖 TELEGRAM BOT ACTIVATED: @{bot_username}")
+        print(f"[*] Password protection: ACTIVE (Passphrase set)")
         print(f"[*] Polling Telegram updates... Press Ctrl+C to terminate.")
         print("=" * 72)
 
