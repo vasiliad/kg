@@ -103,13 +103,14 @@ class MiniMaxExecutor:
         task_prompt: str,
         context: str = "",
         enable_search: bool = True,
-        max_tokens: int = 3072,
+        max_tokens: int = 131072,
         temperature: float = 0.6,
         top_p: float = 0.95
     ) -> Dict[str, Any]:
         """
         Executes delegated task via streaming to prevent timeouts.
         Captures dual-stream: internal reasoning_content and final content.
+        Supports full long-context budget from 128k (131,072) up to 256k (262,144).
         """
         start_time = time.time()
         citations = []
@@ -132,7 +133,6 @@ class MiniMaxExecutor:
                 search_text = "\n\n".join(full_items)
                 enriched_context += f"\n\n--- LIVE WEB FACTS (KEENABLE) ---\n{search_text}"
 
-
         system_prompt = (
             "You are MiniMax M3.1 Flash, a high-speed execution agent working under the direction "
             "of Lead Systems Architect DeepSeek-R1. Execute the assigned task with rigorous logical analysis. "
@@ -143,7 +143,15 @@ class MiniMaxExecutor:
         if enriched_context.strip():
             user_content += f"\n\nContext & References:\n{enriched_context}"
 
-        effective_max_tokens = max(int(max_tokens), 2560)
+        # Dynamic upper-boundary selection for 256K (262,144) context window:
+        # Prevent context_length overflow by subtracting prompt length from hard ceiling
+        total_chars = len(system_prompt) + len(user_content)
+        estimated_prompt_tokens = int(total_chars / 3.2) + 256
+        hard_ceiling = 262144 - estimated_prompt_tokens - 256
+
+        # Allocate full requested tokens up to the exact empirical ceiling (default >= 128k)
+        effective_max_tokens = min(max(int(max_tokens), 131072), hard_ceiling)
+
         payload = {
             "model": self.model_id,
             "messages": [
@@ -163,7 +171,7 @@ class MiniMaxExecutor:
         if pacer_sleep > 0:
             print(f"[NIM Pacer] Paced request (+{pacer_sleep:.2f}s) to maintain <=30 RPM...")
 
-        print(f"[MiniMax Harness] Streaming execution task (max_tokens={effective_max_tokens})...")
+        print(f"[MiniMax Harness] Streaming execution task (max_tokens={effective_max_tokens} / 256k limit)...")
         try:
             resp = requests.post(url, headers=self.headers, json=payload, stream=True, timeout=90)
             if resp.status_code != 200:
