@@ -211,18 +211,16 @@ class HarnessTelegramBot:
 
         self.send_message(chat_id, "\n".join(resp), parse_mode="HTML")
 
-    def handle_minimax_task(self, chat_id: int, prompt: str) -> None:
-        """Delegates task to MiniMax M3.1 Flash with CoT and Keenable."""
+    def handle_minimax_task(self, chat_id: int, prompt: str, enable_search: bool = False) -> None:
+        """Delegates tasks directly to MiniMax M3.1 Flash with CoT without search."""
         self.send_chat_action(chat_id, "typing")
         self.send_message(chat_id, "🧠 <i>Передаю задачу боевой модели MiniMax M3.1 Flash...</i>", parse_mode="HTML")
 
-        # Smart search detection: don't search internet for simple greetings or small talk
+        # Web search is STRICTLY DISABLED by default!
+        # Only triggered if explicitly requested via search prefixes or search button
         clean_prompt = prompt.lower().strip()
-        common_greetings = ["привет", "здравствуй", "здравствуйте", "добрый день", "доброе утро", "добрый вечер", "hi", "hello", "hey", "как дела", "кто ты", "спасибо", "пока", "тест", "test"]
-        is_greeting = clean_prompt in common_greetings or (len(clean_prompt.split()) <= 1 and len(clean_prompt) < 10)
-        
-        explicit_search_keywords = ["найди", "поиск", "новости", "свежие", "что случилось", "курс", "актуальн", "search", "latest", "news", "benchmarks", "сравни", "кто такой"]
-        needs_search = any(kw in clean_prompt for kw in explicit_search_keywords) and not is_greeting
+        search_prefixes = ["найди в интернете:", "найди в интернете ", "поиск в интернете:", "/search "]
+        needs_search = enable_search or any(clean_prompt.startswith(p) for p in search_prefixes)
 
         start_t = time.time()
         res = self.executor.execute_task(
