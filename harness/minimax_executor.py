@@ -1,6 +1,6 @@
 """
 MiniMax M3.1 Flash Dedicated Worker Harness (Streaming Protocol).
-Orchestrated by Lead Systems Architect DeepSeek-R1-32B on Kaggle TPU.
+Orchestrated by Supreme Local Systems Arbiter Qwen/Qwen2.5-1.5B on CPU.
 
 Ground-Truth Verified Rules for Minimax M3.1 Flash:
 1. Minimax generates extensive internal Chain-of-Thought (CoT) in reasoning_content (1200-1800 tokens).

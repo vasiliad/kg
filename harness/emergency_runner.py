@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Emergency Survival Runner: Autonomous CPU/GitHub Actions Fallback Orchestrator.
+Sovereign Survival Runner: Autonomous CPU/Host Fallback Orchestrator.
+100% independent of Kaggle or third-party compute queues.
 Activates whenever:
-1. Kaggle TPU runs are blocked, stalled in QUEUED state, or account is suspended.
-2. The last verified state in active_models.json is older than timeout_hours_before_fallback.
+1. External NIM APIs experience rotation or blackout.
+2. The last verified state in active_models.json is older than 6 hours.
 3. Explicitly invoked via CLI with --force or GitHub Actions workflow_dispatch.
 
 Operates autonomously on standard Linux CPU without TPU requirements.
@@ -37,31 +38,6 @@ from harness.nim_pacer import nim_pacer
 def load_config(path: str = "config.yaml") -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
-
-def check_kaggle_status(kernel_id: str) -> Dict[str, Any]:
-    """
-    Checks Kaggle kernel status via kaggle CLI if credentials exist.
-    """
-    try:
-        proc = subprocess.run(
-            ["kaggle", "kernels", "status", kernel_id],
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
-        output = proc.stdout.strip() + " " + proc.stderr.strip()
-        if "KernelWorkerStatus.QUEUED" in output:
-            return {"status": "QUEUED", "active": False, "raw": output}
-        elif "KernelWorkerStatus.RUNNING" in output:
-            return {"status": "RUNNING", "active": True, "raw": output}
-        elif "KernelWorkerStatus.COMPLETE" in output:
-            return {"status": "COMPLETE", "active": True, "raw": output}
-        elif "401" in output or "403" in output or "Unauthorized" in output:
-            return {"status": "BLOCKED_OR_UNAUTHORIZED", "active": False, "raw": output}
-        else:
-            return {"status": "UNKNOWN", "active": False, "raw": output}
-    except Exception as e:
-        return {"status": "CLI_UNAVAILABLE", "active": False, "error": str(e)}
 
 def should_trigger_emergency(config: Dict[str, Any], force: bool = False) -> (bool, str):
     if force:

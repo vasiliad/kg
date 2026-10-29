@@ -1,8 +1,8 @@
 """
 Pre-Baked Sovereign CPU Engine.
-Pre-configured, zero-external-API fallback engine designed for extreme scenarios:
+Pre-configured, zero-external-API engine designed for total self-preservation:
 1. Total NVIDIA NIM / External API Blackout.
-2. Complete loss of Kaggle TPU access (account ban or queue exhaustion).
+2. 100% offline air-gapped CPU operation.
 
 Pre-Configured Architecture:
 - Primary Sovereign Model: Qwen/Qwen2.5-1.5B-Instruct
