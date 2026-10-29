@@ -122,17 +122,16 @@ class MiniMaxExecutor:
             search_results = self.search_web(search_query, num_results=3)
             if search_results:
                 citations = [r.get("url") for r in search_results if r.get("url")]
-                pruned_items = []
+                full_items = []
                 for r in search_results:
-                    snip = r.get("snippet", "").strip()
-                    if len(snip) > 500:
-                        snip = snip[:500] + "..."
                     title = r.get("title", "")
                     url = r.get("url", "")
-                    pruned_items.append(f"Source: {title} ({url})\nFacts: {snip}")
+                    snip = r.get("snippet", "").strip()
+                    full_items.append(f"Source: {title} ({url})\nFull Content:\n{snip}")
 
-                search_text = "\n\n".join(pruned_items)
+                search_text = "\n\n".join(full_items)
                 enriched_context += f"\n\n--- LIVE WEB FACTS (KEENABLE) ---\n{search_text}"
+
 
         system_prompt = (
             "You are MiniMax M3.1 Flash, a high-speed execution agent working under the direction "
