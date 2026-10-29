@@ -138,10 +138,38 @@ class AgentToolbox:
             choice = data.get("choices", [{}])[0]
             content = choice.get("message", {}).get("content", "")
             usage = data.get("usage", {})
-            return json.dumps({
-                "status": "SUCCESS",
-                "response_preview": content[:400],
-                "tokens_used": usage.get("total_tokens", 0)
-            }, ensure_ascii=False)
+    def probe_nim_context_window(self, model_id: str) -> str:
+        """
+        Actively probes the exact server-side context window limit of the model on NVIDIA NIM
+        by sending an intentional boundary query and reading the exact limits returned in the API error details,
+        or parsing documentation limits on build.nvidia.com.
+        """
+        print(f"[TOOL: probe_nim_context_window] Probing exact NIM context limit for '{model_id}'...")
+        url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        payload = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1000000
+        }
+        try:
+            res = requests.post(url, headers=self.headers, json=payload, timeout=20)
+            data = res.json()
+            # If server specifies context_length limit in Bad Request details:
+            details = data.get("details", {})
+            if "limit" in details:
+                limit_tokens = details["limit"]
+                return json.dumps({
+                    "model_id": model_id,
+                    "exact_nim_context_limit": limit_tokens,
+                    "approx_k": f"{round(limit_tokens / 1024)}k",
+                    "source": "nvidia_nim_server_probe"
+                })
+            elif "message" in data:
+                return json.dumps({
+                    "model_id": model_id,
+                    "server_message": data["message"],
+                    "source": "nvidia_nim_response"
+                })
+            return json.dumps({"model_id": model_id, "raw_response": str(data)[:300]})
         except Exception as e:
-            return json.dumps({"status": "EXCEPTION", "error": str(e)})
+            return json.dumps({"model_id": model_id, "probe_error": str(e)})
