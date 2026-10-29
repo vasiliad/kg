@@ -112,12 +112,14 @@ class AgentToolbox:
         top_p: float,
         max_tokens: int,
         system_prompt: str,
-        test_prompt: str
+        test_prompt: str,
+        reasoning_effort: int = 100
     ) -> str:
         """
-        Sends a test request with custom parameters configured by the local agent to observe response quality and latency.
+        Sends a test request with custom parameters configured by the local agent.
+        Supports DeepSeek-specific reasoning_effort percentage (0-100).
         """
-        print(f"[TOOL: test_nim_model] Executing live test on '{model_id}' (T={temperature}, P={top_p})...")
+        print(f"[TOOL: test_nim_model] Executing live test on '{model_id}' (T={temperature}, P={top_p}, effort={reasoning_effort}%)...")
         url = "https://integrate.api.nvidia.com/v1/chat/completions"
         payload = {
             "model": model_id,
@@ -129,6 +131,11 @@ class AgentToolbox:
             "top_p": float(top_p),
             "max_tokens": int(max_tokens)
         }
+        # If testing DeepSeek or reasoning models, pass reasoning_effort in percentage (0 to 100)
+        if "deepseek" in model_id.lower() or "r1" in model_id.lower() or reasoning_effort is not None:
+            payload["reasoning_effort"] = int(reasoning_effort)
+            # Some NIM deployments accept chat_template_kwargs or extra_body
+            payload["extra_body"] = {"reasoning_effort": int(reasoning_effort)}
         try:
             res = requests.post(url, headers=self.headers, json=payload, timeout=30)
             if res.status_code != 200:
@@ -138,6 +145,13 @@ class AgentToolbox:
             choice = data.get("choices", [{}])[0]
             content = choice.get("message", {}).get("content", "")
             usage = data.get("usage", {})
+            return json.dumps({
+                "status": "SUCCESS",
+                "response_preview": content[:400],
+                "tokens_used": usage.get("total_tokens", 0)
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"status": "EXCEPTION", "error": str(e)})
     def probe_nim_context_window(self, model_id: str) -> str:
         """
         Actively probes the exact server-side context window limit of the model on NVIDIA NIM
