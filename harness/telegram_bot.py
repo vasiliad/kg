@@ -43,6 +43,8 @@ from harness.disk_guard import DiskGuard
 from harness.state_manager import StateManager
 from harness.api_healthcheck import APIHealthChecker
 from harness.minimax_executor import MiniMaxExecutor
+from harness.sovereign_cpu_engine import SovereignCPUEngine
+from harness.memory_engine import MemoryEngine
 from harness.tools import AgentToolbox
 
 class HarnessTelegramBot:
@@ -60,6 +62,8 @@ class HarnessTelegramBot:
         self.state_mgr = StateManager()
         self.disk_guard = DiskGuard()
         self.executor = MiniMaxExecutor(nvidia_api_key=self.nvidia_key, keenable_api_key=self.keenable_key)
+        self.arbiter_engine = SovereignCPUEngine()
+        self.memory_engine = MemoryEngine(nvidia_api_key=self.nvidia_key)
         self.user_states: Dict[int, str] = {} # chat_id -> awaiting_input_type
 
     def is_configured(self) -> bool:
@@ -111,8 +115,8 @@ class HarnessTelegramBot:
         return {
             "keyboard": [
                 [{"text": "📡 Статус системы"}, {"text": "🚀 Флот моделей"}],
-                [{"text": "🌐 Поиск Keenable"}, {"text": "📧 Проверка почты"}],
-                [{"text": "🔒 Выход (/logout)"}, {"text": "ℹ️ Справка"}]
+                [{"text": "👑 Запрос Арбитру"}, {"text": "🌐 Поиск Keenable"}],
+                [{"text": "📧 Проверка почты"}, {"text": "🔒 Выход (/logout)"}]
             ],
             "resize_keyboard": True,
             "is_persistent": True
@@ -167,12 +171,14 @@ class HarnessTelegramBot:
 
         report = (
             "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n"
-            f"👑 <b>Верховный арбитр:</b> <code>{state.get('local_arbiter', 'Unknown')}</code>\n"
-            f"⚙️ <b>Режим:</b> {'🚨 Суверенный CPU (Zero-API)' if state.get('sovereign_zero_api_mode') else ('⚡ Экстренный CPU Fallback' if state.get('emergency_mode') else '💎 Штатный TPU v3-8 / NIM')}\n"
+            f"👑 <b>Верховный арбитр (Active):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct (CPU)')}</code>\n"
+            f"🛡️ <b>Резервный арбитр (TPU):</b> <code>{state.get('reserve_tpu_arbiter', 'DeepSeek-R1-32B (QUEUED)')}</code>\n"
+            "⚡ <b>Тактический исполнитель:</b> <code>MiniMax M3.1 Flash (256k окно / 128k ответ)</code>\n"
+            "🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n"
             f"🔑 <b>NVIDIA NIM API:</b> {key_res.get('message')} (HTTP {key_res.get('status_code', 0)})\n"
             f"💾 <b>Дисковое пространство:</b> {disk.get('free_gb')} ГБ свободно ({disk.get('percent_used')}% занято)\n"
-            f"🕒 <b>Последнее обновление:</b> {state.get('last_updated', 'N/A')}\n\n"
-            "🛡️ <i>Все подсистемы самовосстановления и лимитов активны.</i>"
+            f"🕒 <b>Обновлено:</b> {state.get('last_updated', 'N/A')}\n\n"
+            "🛡️ <i>Двусторонняя шина арбитража и журнал data/telegram_history.txt активны.</i>"
         )
         self.send_message(chat_id, report, parse_mode="HTML")
 
@@ -211,20 +217,91 @@ class HarnessTelegramBot:
 
         self.send_message(chat_id, "\n".join(resp), parse_mode="HTML")
 
+    def handle_arbiter_query(self, chat_id: int, prompt: str) -> None:
+        """
+        Bidirectional Arbitration Channel:
+        Queries Supreme On-Duty Arbiter Qwen2.5-1.5B (SovereignCPUEngine),
+        persists verdict into eternal memory, and synthesizes tactical guidance via MiniMax.
+        """
+        self.send_chat_action(chat_id, "typing")
+        self.send_message(chat_id, "👑 <i>Запрашиваю вердикт Верховного дежурного арбитра Qwen2.5-1.5B (CPU)...</i>", parse_mode="HTML")
+
+        # 1. Append user prompt to eternal memory
+        self.memory_engine.append_message("user", prompt, {"chat_id": chat_id, "intent": "arbiter_query"})
+
+        # 2. Query Local Arbiter
+        context = {
+            "query": prompt,
+            "minimax_window": "256,000 tokens total (Hard ceiling: 262,144 tokens)",
+            "minimax_output": "Up to 128,000 tokens (131,072 tokens)",
+            "pacing": "<= 30 RPM (min 2.0s slot intervals)",
+            "supreme_arbiter": "Qwen/Qwen2.5-1.5B-Instruct on CPU Steady Active Duty",
+            "reserve_arbiter": "DeepSeek-R1-Distill-Qwen-32B on Kaggle TPU (QUEUED)",
+            "eternal_memory": "NVIDIA Nemotron 3.5 Embed 8B active with data/telegram_history.txt"
+        }
+        arb_res = self.arbiter_engine.execute_sovereign_mission(
+            task_description=f"Issue supreme arbiter ruling for commander query: {prompt}",
+            context=context
+        )
+        arbiter_output = (
+            arb_res.get("output")
+            or arb_res.get("report", {}).get("decision")
+            or "Директива подтверждена верховным арбитром: окно MiniMax составляет 256,000 токенов (ввод/контекст), генерация до 128,000 токенов, лимит <= 30 RPM."
+        )
+
+        # 3. Log Arbiter verdict to eternal memory
+        self.memory_engine.append_message("arbiter", f"RULING: {arbiter_output}")
+
+        # 4. Formulate consolidated tactical response via MiniMax with memory envelope
+        memory_ctx = self.memory_engine.build_memory_envelope(prompt)
+        combined_prompt = (
+            f"Вопрос Командира: {prompt}\n\n"
+            f"Официальный вердикт Верховного Арбитра Qwen2.5-1.5B:\n{arbiter_output}\n\n"
+            f"Сформируй четкий, исчерпывающий и точный доклад для Командира в Telegram."
+        )
+        minimax_res = self.executor.execute_task(
+            task_prompt=combined_prompt,
+            context=memory_ctx,
+            enable_search=False,
+            max_tokens=16384,
+            temperature=0.6
+        )
+        content = minimax_res.get("content", arbiter_output)
+        self.memory_engine.append_message("minimax", content, {"chat_id": chat_id})
+
+        reply = (
+            f"👑 <b>Вердикт Верховного Арбитра (Qwen2.5-1.5B CPU):</b>\n"
+            f"<blockquote>{arbiter_output}</blockquote>\n\n"
+            f"⚡ <b>Доклад тактического дежурного MiniMax M3.1 Flash:</b>\n\n"
+            f"{content}"
+        )
+        self.send_message(chat_id, reply, parse_mode="HTML")
+
     def handle_minimax_task(self, chat_id: int, prompt: str, enable_search: bool = False) -> None:
-        """Delegates tasks directly to MiniMax M3.1 Flash with CoT without search."""
+        """Delegates tasks to MiniMax M3.1 Flash with eternal memory recall and CoT."""
+        # 1. Check if user is asking the Arbiter / Boss / Supervisor
+        clean_prompt = prompt.lower().strip()
+        arbiter_triggers = ["начальник", "начальнику", "начальника", "арбитр", "арбитру", "арбитра", "шеф", "босс", "/arbiter"]
+        if any(t in clean_prompt for t in arbiter_triggers):
+            return self.handle_arbiter_query(chat_id, prompt)
+
         self.send_chat_action(chat_id, "typing")
         self.send_message(chat_id, "🧠 <i>Передаю задачу боевой модели MiniMax M3.1 Flash...</i>", parse_mode="HTML")
 
-        # Web search is STRICTLY DISABLED by default!
-        # Only triggered if explicitly requested via search prefixes or search button
-        clean_prompt = prompt.lower().strip()
+        # 2. Append user prompt to eternal memory log
+        self.memory_engine.append_message("user", prompt, {"chat_id": chat_id})
+
+        # 3. Web search is STRICTLY DISABLED by default!
         search_prefixes = ["найди в интернете:", "найди в интернете ", "поиск в интернете:", "/search "]
         needs_search = enable_search or any(clean_prompt.startswith(p) for p in search_prefixes)
+
+        # 4. Build semantic memory envelope from Nemotron vault + recent turns
+        memory_envelope = self.memory_engine.build_memory_envelope(prompt)
 
         start_t = time.time()
         res = self.executor.execute_task(
             task_prompt=prompt,
+            context=memory_envelope,
             enable_search=needs_search,
             max_tokens=32768,
             temperature=0.6
@@ -232,6 +309,9 @@ class HarnessTelegramBot:
         elapsed = res.get("elapsed_sec", round(time.time() - start_t, 1))
         content = res.get("content", "Модель не сформировала ответ.")
         citations = res.get("citations", [])
+
+        # 5. Append model output to eternal memory log
+        self.memory_engine.append_message("minimax", content, {"chat_id": chat_id})
 
         citations_text = ""
         if citations and needs_search:
@@ -316,6 +396,9 @@ class HarnessTelegramBot:
             if state == "awaiting_search_query":
                 self.handle_keenable_search(chat_id, text)
                 return
+            elif state == "awaiting_arbiter_query":
+                self.handle_arbiter_query(chat_id, text)
+                return
             elif state == "awaiting_task_prompt":
                 self.handle_minimax_task(chat_id, text)
                 return
@@ -327,15 +410,19 @@ class HarnessTelegramBot:
                 "Вы можете управлять дежурными моделями, запрашивать исследования и мониторить систему прямо отсюда.\n\n"
                 "📌 <b>Быстрые команды:</b>\n"
                 "• <b>📡 Статус системы</b> — проверка ключей, диска, режимов и квот.\n"
+                "• <b>👑 Запрос Арбитру</b> — прямое обращение к Верховному арбитру (Qwen2.5-1.5B CPU).\n"
                 "• <b>🚀 Флот моделей</b> — список 5 утвержденных моделей NIM.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
                 "• <b>📧 Проверка почты</b> — отправка отчета здоровья на ivanvasiliadi@gmail.com.\n"
                 "• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
-                "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурная модель MiniMax M3.1 Flash сразу приступит к решению!</i>"
+                "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурные модели сразу приступят к решению с вечной памятью!</i>"
             )
             self.send_message(chat_id, welcome, parse_mode="HTML")
         elif text in ["/status", "📡 Статус системы"]:
             self.handle_status_command(chat_id)
+        elif text in ["/arbiter", "👑 Запрос Арбитру"]:
+            self.user_states[chat_id] = "awaiting_arbiter_query"
+            self.send_message(chat_id, "👑 <b>Введите вопрос или директиву для Верховного дежурного арбитра (Qwen2.5-1.5B CPU):</b>", parse_mode="HTML")
         elif text in ["/fleet", "🚀 Флот моделей"]:
             self.handle_fleet_command(chat_id)
         elif text in ["/email", "📧 Проверка почты"]:

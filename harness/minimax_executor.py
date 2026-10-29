@@ -134,12 +134,20 @@ class MiniMaxExecutor:
                 enriched_context += f"\n\n--- LIVE WEB FACTS (KEENABLE) ---\n{search_text}"
 
         system_prompt = (
-            "You are MiniMax M3.1 Flash, a high-speed execution agent working under the direction "
-            "of Lead Systems Architect DeepSeek-R1. Execute the assigned task with rigorous logical analysis. "
-            "Use the provided live web context when applicable. Deliver a complete, clear, and actionable final response."
+            "You are MiniMax M3.1 Flash, the high-speed tactical execution agent in the Autonomous Complex.\n\n"
+            "OPERATIONAL RUNTIME SPECIFICATIONS & SYSTEM MANIFEST:\n"
+            "- Total Context Window: 256,000 tokens (Hard empirical ceiling: 262,144 tokens).\n"
+            "- Generation Output Budget: Up to 128,000 tokens (131,072 tokens).\n"
+            "- Request Rate Pacing: <= 30 RPM (enforced with >= 2.0s intervals via NIM Pacer).\n"
+            "- Supreme Arbiter (Active Duty): Qwen/Qwen2.5-1.5B-Instruct on CPU Steady Duty (SovereignCPUEngine).\n"
+            "- Strategic Heavy Reserve: DeepSeek-R1-Distill-Qwen-32B on Kaggle TPU (currently QUEUED).\n"
+            "- Persistent Long-Term Memory: ACTIVE via NVIDIA Nemotron 3.5 Embed and data/telegram_history.txt.\n"
+            "- Inter-Model Channel: Direct and reverse links with the Lead Arbiter and Telegram Command Center are ACTIVE.\n\n"
+            "When asked about your context window, environment limits, or supervisor/arbiter, cite these exact technical specifications without hesitation. "
+            "Execute assigned tasks with rigorous logical reasoning and deliver complete, actionable responses."
         )
 
-        user_content = f"Task Assignment from DeepSeek-R1:\n{task_prompt}"
+        user_content = f"Directive from Autonomous Command / Arbiter:\n{task_prompt}"
         if enriched_context.strip():
             user_content += f"\n\nContext & References:\n{enriched_context}"
 

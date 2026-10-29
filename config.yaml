@@ -61,3 +61,12 @@ telegram_bot:
   enable_keenable_search: true
   allowed_user_ids: []
 
+memory_engine:
+  enabled: true
+  model: "nvidia/nemotron-3.5-embed-8b"
+  backup_model: "nvidia/nemotron-3.5-embed-1b"
+  master_log_file: "data/telegram_history.txt"
+  vault_file: "data/.memory_vault.json"
+  max_working_memory_turns: 5
+
+
