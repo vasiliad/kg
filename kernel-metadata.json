@@ -1,0 +1,14 @@
+{
+  "id": "vasiliadi911/deepseek-r1-tpu-nim-orchestrator",
+  "title": "DeepSeek-R1 TPU NIM Orchestrator",
+  "code_file": "DeepSeek_R1_TPU_NIM_Orchestrator.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_tpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
