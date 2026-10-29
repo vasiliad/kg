@@ -40,6 +40,14 @@ def run_harness_cycle():
     github_repo = os.getenv("GITHUB_REPO", config.get("github_state", {}).get("repo", ""))
 
     state_mgr = StateManager()
+
+    # 0. Disk and Storage Quota Guard
+    from harness.disk_guard import DiskGuard
+    dg = DiskGuard()
+    quota_report = dg.enforce_quota_guard()
+    if quota_report["status"] == "DANGER_ABORT":
+        print("[!] CRITICAL: Disk space depleted (<1GB free). Aborting cycle to protect storage.")
+        return
     
     # 1. API Health Check for NVIDIA NIM
     print("\n--- STEP 1: NVIDIA NIM API KEY HEALTH & ROTATION CHECK ---")

@@ -3,3 +3,48 @@ __pycache__/
 *$py.class
 .ipynb_checkpoints/
 .env
+
+# Python & Runtime caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments & Packages
+.venv/
+venv/
+ENV/
+env/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Heavy AI Models & Weights (PREVENT ACCIDENTAL COMMITS)
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.gguf
+*.h5
+*.ckpt
+
+# Hugging Face & Cache Dirs
+.cache/
+hf_cache/
+tmp/
+temp/
+*.tmp
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Log rotations
+*.log.bak
+*.log.old

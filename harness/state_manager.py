@@ -30,11 +30,30 @@ class StateManager:
             json.dump(state_data, f, indent=2, ensure_ascii=False)
         print(f"[+] State successfully saved to {self.state_file}.")
 
-    def append_history_log(self, message: str) -> None:
-        """Appends a timestamped line to history log."""
+    def append_history_log(self, message: str, max_lines: int = 300) -> None:
+        """
+        Appends a timestamped line to history log with rolling FIFO buffer.
+        Automatically truncates oldest lines when exceeding max_lines,
+        preventing unbounded file bloat and Git repository packfile inflation.
+        """
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        with open(self.history_file, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] {message}\n")
+        new_entry = f"[{timestamp}] {message}\n"
+        
+        lines = []
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            except Exception:
+                lines = []
+                
+        lines.append(new_entry)
+        if len(lines) > max_lines:
+            lines = lines[-max_lines:]
+            
+        with open(self.history_file, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
 
     def sync_to_github(
         self,

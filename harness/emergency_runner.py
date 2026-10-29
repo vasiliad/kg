@@ -119,6 +119,14 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     keenable_key = os.getenv("KEENABLE_API_KEY", "")
     state_mgr = StateManager()
 
+    # Step 0: Storage & Disk Quota Guard
+    from harness.disk_guard import DiskGuard
+    dg = DiskGuard()
+    quota_report = dg.enforce_quota_guard()
+    if quota_report["status"] == "DANGER_ABORT":
+        print("[!] CRITICAL: Disk space depleted (<1GB free). Aborting emergency cycle.")
+        return {"status": "ABORTED", "reason": "Disk space depleted"}
+
     # Step 1: Healthcheck NVIDIA NIM key
     print("\n[STEP 1] Validating NVIDIA NIM API Key...")
     if not nvidia_key:
