@@ -8,19 +8,11 @@ Ground-Truth Verified Rules for Minimax M3.1 Flash:
 3. Streaming (stream=True) is MANDATORY to prevent HTTP socket ReadTimeouts during long reasoning traces.
 """
 import os
-import sys
 import time
 import json
 import urllib.parse
-from pathlib import Path
 from typing import Dict, Any, Optional, List
 import requests
-
-from harness.key_pool import NVIDIAKeyPool
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 class MiniMaxExecutor:
     def __init__(
@@ -44,8 +36,10 @@ class MiniMaxExecutor:
         self.keenable_api_key = keenable_api_key or os.getenv("KEENABLE_API_KEY", "")
         self.base_url = base_url.rstrip("/")
         self.model_id = "minimaxai/minimax-m3.1-flash"
-        self.key_pool = NVIDIAKeyPool(self.nvidia_api_key)
-        self.nvidia_api_key = self.key_pool.current()
+        self.headers = {
+            "Authorization": f"Bearer {self.nvidia_api_key}",
+            "Content-Type": "application/json"
+        }
         self._last_search_time = 0.0
 
     def search_web(self, query: str, num_results: int = 3) -> List[Dict[str, str]]:
@@ -95,29 +89,7 @@ class MiniMaxExecutor:
         except Exception:
             pass
 
-        # 2. Fallback: Tavily Search API (key via TAVILY_API_KEY env)
-        try:
-            tavily_key = os.getenv("TAVILY_API_KEY", "")
-            if tavily_key:
-                res = requests.post(
-                    "https://api.tavily.com/search",
-                    json={"api_key": tavily_key, "query": query, "max_results": num_results},
-                    timeout=12
-                )
-                if res.status_code == 200:
-                    results = []
-                    for item in res.json().get("results", [])[:num_results]:
-                        results.append({
-                            "title": item.get("title", ""),
-                            "url": item.get("url", ""),
-                            "snippet": item.get("content", "")
-                        })
-                    if results:
-                        return results
-        except Exception:
-            pass
-
-        # 3. Fallback: DuckDuckGo HTML
+        # 2. Fallback: DuckDuckGo HTML
         try:
             import re
             encoded = urllib.parse.quote_plus(query)
@@ -190,13 +162,14 @@ class MiniMaxExecutor:
         if enriched_context.strip():
             user_content += f"\n\nContext & References:\n{enriched_context}"
 
-        # Respect the caller's requested budget, capped by the 256k hard ceiling.
-        # Keep a floor of 2560 so reasoning models never exhaust the budget mid-CoT.
+        # Dynamic upper-boundary selection for 256K (262,144) context window:
+        # Prevent context_length overflow by subtracting prompt length from hard ceiling
         total_chars = len(system_prompt) + len(user_content)
         estimated_prompt_tokens = int(total_chars / 3.2) + 256
         hard_ceiling = 262144 - estimated_prompt_tokens - 256
 
-        effective_max_tokens = max(min(int(max_tokens), hard_ceiling), 2560)
+        # Allocate full requested tokens up to the exact empirical ceiling (default >= 128k)
+        effective_max_tokens = min(max(int(max_tokens), 131072), hard_ceiling)
 
         payload = {
             "model": self.model_id,
@@ -219,27 +192,12 @@ class MiniMaxExecutor:
 
         print(f"[MiniMax Harness] Streaming execution task (max_tokens={effective_max_tokens} / 256k limit)...")
         try:
-            # Try each pool key once: on 401/429 rotate to the next key and retry.
-            resp = None
-            for _ in range(max(len(self.key_pool), 1)):
-                headers = {
-                    "Authorization": f"Bearer {self.key_pool.current()}",
-                    "Content-Type": "application/json"
-                }
-                resp = requests.post(url, headers=headers, json=payload, stream=True, timeout=90)
-                if resp.status_code in (401, 403, 429) and len(self.key_pool) > 1:
-                    next_key = self.key_pool.mark_bad()
-                    print(f"[MiniMax Harness] Key rejected (HTTP {resp.status_code}). Rotating to ...{next_key[-6:]}.")
-                    continue
-                break
-
-            if resp is None or resp.status_code != 200:
-                err = resp.text[:300] if resp is not None else "no response"
-                code = resp.status_code if resp is not None else 0
+            resp = requests.post(url, headers=self.headers, json=payload, stream=True, timeout=90)
+            if resp.status_code != 200:
                 return {
                     "status": "FAILED",
                     "model": self.model_id,
-                    "error": f"HTTP {code}: {err}",
+                    "error": f"HTTP {resp.status_code}: {resp.text[:300]}",
                     "elapsed_sec": round(time.time() - start_time, 2)
                 }
 

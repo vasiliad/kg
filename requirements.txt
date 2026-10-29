@@ -5,7 +5,7 @@ keras-nlp>=0.14.0
 huggingface_hub>=0.25.0
 
 # HTTP, Scraping & API
-requests[socks]>=2.31.0
+requests>=2.31.0
 httpx>=0.27.0
 beautifulsoup4>=4.12.0
 pydantic>=2.7.0

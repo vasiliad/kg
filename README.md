@@ -1,41 +1,65 @@
-# Autonomous Sovereign Dual-Tier AI Complex
+# DeepSeek-R1-32B TPU Harness & NVIDIA NIM Fleet Orchestrator
 
-Автономный комплекс без привязки к сторонним очередям вычислений:
+Автономная система мониторинга, оценки бенчмарков и валидации актуальных моделей **NVIDIA NIM API** под управлением локального «арбитра» **DeepSeek-R1-Distill-Qwen-32B**, развернутого на **Kaggle TPU v3-8 (128GB HBM)**.
 
-- **Тактический исполнитель:** MiniMax M3.1 Flash через NVIDIA NIM (`integrate.api.nvidia.com`), контекст до 256k.
-- **Верховный арбитр:** Qwen2.5-1.5B локально на CPU (`SovereignCPUEngine`; без torch — мгновенный детерминированный kernel).
-- **Вечная память:** NVIDIA Nemotron 3.5 Embed (векторы) + человекочитаемый лог `data/telegram_history.txt`, cosine-поиск без внешних БД.
-- **Telegram-командный центр:** `harness/telegram_bot.py` — парольная защита, клавиатура, задачи моделям, арбитр, поиск, почта.
-- **Поиск:** Keenable API → Tavily (если задан `TAVILY_API_KEY`) → DuckDuckGo.
-- **Ключи:** пул `NVIDIA_API_KEY`, `NVIDIA_API_KEY_2..9` с автоматической ротацией при 401/429 (`harness/key_pool.py`).
+---
 
-## Запуск Telegram-бота (прод)
-
-1. Создайте `.env` в корне репозитория:
+## Архитектура системы
 
 ```
-TELEGRAM_BOT_TOKEN=1234567890:AA...
-NVIDIA_API_KEY=nvapi-...
-NVIDIA_API_KEY_2=nvapi-...
-TAVILY_API_KEY=tvly-...        # опционально
-TELEGRAM_BOT_PASSWORD=...      # опционально, иначе пароль по умолчанию из кода
+ [ GitHub Repo ] (active_models.json / state store)
+       ▲
+       │ (git push / pull)
+ [ Kaggle TPU v3-8 (128 GB) ]
+       ├── 1. DeepSeek-R1-32B (Локальный рассуждающий арбитр)
+       ├── 2. NIM Scanner (Поиск доступных моделей каталога integrate.api.nvidia.com)
+       ├── 3. Benchmark Tracker (Оценка ELO в LMSYS Arena, LiveBench, фильтрация лучших)
+       ├── 4. API Health Checker (Проверка ротации ключей, ловля 401/403/429)
+       └── 5. Live Verification (Стресс-тестирование эндпоинтов и подбор параметров)
+       ▼
+ [ NVIDIA NIM API Fleet ] (meta/llama-3.1-405b, nemotron-4-340b, deepseek-r1 и др.)
 ```
 
-2. `pip install -r requirements.txt` (нужны только requests/pyyaml/pysocks — torch не требуется).
-3. `python -m harness.telegram_bot` (или `python harness/telegram_bot.py`).
+---
 
-На сервере бот живёт под systemd: `kg-telegram-bot.service` с `Restart=always` — падение/ребут поднимаются автоматически.
+## Как это устроено и почему экономит лимиты TPU (20ч в неделю)
 
-## Цикл мониторинга
+* **Лимит Kaggle TPU:** 20 часов в неделю.
+* **Режим работы:** Скрипт `main_cron.py` спроектирован на быстрый прогон за **15–20 минут раз в сутки**.
+* **Расход:** ~2–2.5 часа в неделю из 20 доступных (запас более 85%).
+* **Сохранение состояния:** Файл `active_models.json` хранит текущий статус ключей, лучшие протестированные эндпоинты и рекомендуемые разработчиками параметры (`temperature`, `top_p`, `max_tokens`). Файл автоматически коммитится в ваш GitHub.
 
-`python main_cron.py` — healthcheck ключа, скан каталога NIM, бенчмарк-рейтинг, синхронизация `active_models.json`. По расписанию его гоняет GitHub Actions (`emergency_cron.yml`, каждые 6 часов) — это «пульс» комплекса.
+---
 
-## Память
+## Быстрый старт на Kaggle
 
-- `data/telegram_history.txt` — лог всех сообщений (append-only).
-- `data/.memory_vault.json` — записи с 4096-мерными векторами Nemotron (пишется атомарно, потокобезопасно).
-- Тесты используют временные копии и никогда не трогают боевую память.
+### Шаг 1: Создание ноутбука на Kaggle
+1. Перейдите на [Kaggle](https://www.kaggle.com/) -> **Create** -> **New Notebook**.
+2. В правой панели (**Notebook options**):
+   * **Accelerator:** Выберите **TPU v3-8** (128 GB).
+   * **Internet:** Переключите в положение **Internet on**.
 
-## История
+### Шаг 2: Добавление секретов (Kaggle Secrets)
+В меню блокнота выберите **Add-ons** -> **Secrets** и добавьте:
+* `HF_TOKEN`: Ваш токен Hugging Face (Read)
+* `NVIDIA_API_KEY`: Ваш ключ к каталогу NVIDIA NIM (с build.nvidia.com)
+* `GITHUB_TOKEN`: Ваш персональный токен GitHub (Personal Access Token с правами `repo`)
+* `GITHUB_REPO`: Имя вашего репозитория (например: `your_username/deepseek-tpu-nim-harness`)
 
-Изначально комплекс работал на Kaggle TPU (DeepSeek-R1-32B) — архивная архитектура описана в git-истории; сейчас всё исполняется на CPU + облачном NIM.
+### Шаг 3: Импорт и запуск
+1. Импортируйте готовый блокнот `DeepSeek_R1_TPU_NIM_Orchestrator.ipynb` через меню **File -> Import Notebook**.
+2. Нажмите **Run All** (или запланируйте запуск через Kaggle Schedule / API).
+
+---
+
+## Локальная структура файлов
+
+* `config.yaml` — Конфигурация порогов качества, моделей и лимитов TPU.
+* `main_cron.py` — Главная точка входа для циклического прогона.
+* `DeepSeek_R1_TPU_NIM_Orchestrator.ipynb` — Готовый блокнот для Kaggle.
+* `harness/tpu_loader.py` — Модуль загрузки DeepSeek-R1-32B на 8 ядер TPU с использованием 95% памяти (JAX/Keras 3).
+* `harness/nim_scanner.py` — Поиск актуальных моделей NVIDIA NIM и метаданных.
+* `harness/benchmark_tracker.py` — База данных ELO-рейтингов и отсев слабых моделей.
+* `harness/api_healthcheck.py` — Проверка статуса ключей (ротация/401) и live-тесты инференса.
+* `harness/prompt_suite.py` — Набор стресс-тестов (логика, код, JSON).
+* `harness/state_manager.py` — Менеджер состояния и синхронизация с GitHub.
