@@ -154,9 +154,7 @@ class AgentToolbox:
             return json.dumps({"status": "EXCEPTION", "error": str(e)})
     def probe_nim_context_window(self, model_id: str) -> str:
         """
-        Actively probes the exact server-side context window limit of the model on NVIDIA NIM
-        by sending an intentional boundary query and reading the exact limits returned in the API error details,
-        or parsing documentation limits on build.nvidia.com.
+        Actively probes the exact server-side context window limit of the model on NVIDIA NIM.
         """
         print(f"[TOOL: probe_nim_context_window] Probing exact NIM context limit for '{model_id}'...")
         url = "https://integrate.api.nvidia.com/v1/chat/completions"
@@ -168,7 +166,6 @@ class AgentToolbox:
         try:
             res = requests.post(url, headers=self.headers, json=payload, timeout=20)
             data = res.json()
-            # If server specifies context_length limit in Bad Request details:
             details = data.get("details", {})
             if "limit" in details:
                 limit_tokens = details["limit"]
@@ -185,5 +182,61 @@ class AgentToolbox:
                     "source": "nvidia_nim_response"
                 })
             return json.dumps({"model_id": model_id, "raw_response": str(data)[:300]})
+        except Exception as e:
+            return json.dumps({"model_id": model_id, "probe_error": str(e)})
+
+    def probe_reasoning_mode(self, model_id: str) -> str:
+        """
+        Empirically probes how the model handles thinking/reasoning mode:
+        1. Is thinking ON by default? (presence of <think> tokens or reasoning_content field).
+        2. Can thinking be disabled or minimized? (testing reasoning_effort=0 or chat_template_kwargs).
+        3. Is thinking forced on max by default?
+        """
+        print(f"[TOOL: probe_reasoning_mode] Probing reasoning behavior for '{model_id}'...")
+        url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        test_q = "How many 'r's are in strawberry? Answer in one word."
+        
+        try:
+            res_default = requests.post(url, headers=self.headers, json={
+                "model": model_id,
+                "messages": [{"role": "user", "content": test_q}],
+                "max_tokens": 512
+            }, timeout=25)
+            
+            if res_default.status_code != 200:
+                return json.dumps({"model_id": model_id, "status": f"HTTP_{res_default.status_code}", "error": res_default.text})
+            
+            body_default = res_default.json()
+            choice = body_default.get("choices", [{}])[0]
+            msg = choice.get("message", {})
+            content = msg.get("content", "")
+            reasoning_content = msg.get("reasoning_content", "")
+            has_think_tags = "<think>" in content or bool(reasoning_content)
+            
+            # Test B: Attempt to toggle / adjust reasoning effort (0% vs 100%)
+            res_zero = requests.post(url, headers=self.headers, json={
+                "model": model_id,
+                "messages": [{"role": "user", "content": test_q}],
+                "max_tokens": 512,
+                "reasoning_effort": 0,
+                "chat_template_kwargs": {"thinking": False}
+            }, timeout=25)
+            
+            can_disable = False
+            if res_zero.status_code == 200:
+                msg_zero = res_zero.json().get("choices", [{}])[0].get("message", {})
+                content_zero = msg_zero.get("content", "")
+                reasoning_zero = msg_zero.get("reasoning_content", "")
+                if "<think>" not in content_zero and not reasoning_zero:
+                    can_disable = True
+            
+            return json.dumps({
+                "model_id": model_id,
+                "thinking_on_by_default": has_think_tags,
+                "can_disable_thinking": can_disable,
+                "default_behavior": "MAX_THINKING_FORCED" if has_think_tags and not can_disable else "CONFIGURABLE",
+                "sample_content_preview": content[:150],
+                "has_separate_reasoning_field": bool(reasoning_content)
+            }, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"model_id": model_id, "probe_error": str(e)})

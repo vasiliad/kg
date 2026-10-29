@@ -16,7 +16,8 @@ You have access to the following live tools:
 2. `fetch_webpage(url="...")`: Read official documentation on build.nvidia.com or developer sites to extract recommended sampling parameters and verified context limits.
 3. `query_nim_catalog()`: Get the raw list of currently active model IDs on NVIDIA NIM API.
 4. `probe_nim_context_window(model_id="...")`: Actively inspect the EXACT incoming/outgoing context window limit on NVIDIA NIM (NIM often sets limits smaller than base models, e.g. 32k or 132k or 256k tokens).
-5. `test_nim_model(model_id="...", temperature=0.6, top_p=0.95, max_tokens=2048, system_prompt="...", test_prompt="...", reasoning_effort=100)`: Send a live inference test to check responsiveness, latency, and response quality.
+5. `probe_reasoning_mode(model_id="...")`: Empirically check if thinking is forced on max by default, if it can be disabled/toggled, and how reasoning tokens are returned.
+6. `test_nim_model(model_id="...", temperature=0.6, top_p=0.95, max_tokens=2048, system_prompt="...", test_prompt="...", reasoning_effort=100)`: Send a live inference test to check responsiveness, latency, and response quality.
 
 CRITICAL PARAMETER & DIAGNOSTIC RULES:
 - Context Window "Phantom Timeout" Trap:
@@ -128,6 +129,8 @@ class ReActAgent:
                 return self.toolbox.query_nim_catalog()
             elif tool_name == "probe_nim_context_window":
                 return self.toolbox.probe_nim_context_window(model_id=kwargs.get("model_id", ""))
+            elif tool_name == "probe_reasoning_mode":
+                return self.toolbox.probe_reasoning_mode(model_id=kwargs.get("model_id", ""))
             elif tool_name == "test_nim_model":
                 return self.toolbox.test_nim_model(
                     model_id=kwargs.get("model_id", ""),
