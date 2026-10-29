@@ -39,14 +39,61 @@ class NIMScanner:
             print(f"[-] Network exception while reaching NVIDIA NIM: {e}")
             return []
 
+    def detect_catalog_diff(self, current_models: List[Dict[str, Any]], previous_state_path: str = "active_models.json") -> Dict[str, Any]:
+        """
+        Calculates diff between currently available NIM models and previously saved state:
+        - newly_added: models deployed since last scan
+        - removed: models deprecated/taken down (e.g. full glm-5.3)
+        - flagship_newcomers: new models with high-capability architecture markers
+        """
+        current_ids = {m.get("id") for m in current_models if m.get("id")}
+        previous_ids = set()
+        
+        try:
+            with open(previous_state_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+                active_fleet = state.get("active_fleet", [])
+                previous_ids = {m.get("id") for m in active_fleet if isinstance(m, dict) and m.get("id")}
+        except Exception:
+            pass
+
+        new_ids = current_ids - previous_ids if previous_ids else set()
+        removed_ids = previous_ids - current_ids if previous_ids else set()
+
+        flagship_keywords = [
+            "ultra", "super", "nemotron", "550b", "340b", "253b", "120b", "70b",
+            "reasoning", "r1", "v4", "v5", "glm-5", "minimax", "step-5", "kimi"
+        ]
+        
+        flagship_newcomers = [
+            m_id for m_id in new_ids 
+            if any(kw in m_id.lower() for kw in flagship_keywords)
+        ]
+
+        if removed_ids:
+            print(f"[!] CATALOG ALERT: {len(removed_ids)} models were removed/retired from NIM: {list(removed_ids)}")
+        if new_ids:
+            print(f"[+] CATALOG ALERT: {len(new_ids)} new models discovered on NIM!")
+            if flagship_newcomers:
+                print(f"[🔥] ULTRA FLAGSHIP NEWCOMERS DETECTED: {flagship_newcomers}")
+
+        return {
+            "new_count": len(new_ids),
+            "removed_count": len(removed_ids),
+            "new_ids": list(new_ids),
+            "removed_ids": list(removed_ids),
+            "flagship_newcomers": flagship_newcomers
+        }
+
     def filter_high_tier_models(self, models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Filters models strictly to the Ultra-Tier NIM fleet:
-        MiniMax M3.1 Flash, GLM 5.3 Flash, DeepSeek V4.1 Flash, 550B Ultra, Step-5 Preview.
+        Detects both known Ultra candidates and any newly arrived flagships (550B, Ultra, Super, Flash, Reasoning).
         """
         ultra_tier_keywords = [
             "minimax", "m3.1", "glm-5.3", "glm5.3", 
-            "v4.1", "deepseek-v4.1", "550b", "step-5", "step5"
+            "v4.1", "deepseek-v4.1", "550b", "step-5", "step5",
+            "nemotron-3-ultra", "nemotron-3.5", "nemotron-4-340b", "kimi-k2.6"
         ]
         selected = []
         for m in models:

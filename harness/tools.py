@@ -34,23 +34,72 @@ class HTMLTextExtractor(HTMLParser):
     def get_text(self):
         return " ".join(self.result)
 
+import time
+import os
+
 class AgentToolbox:
-    def __init__(self, nvidia_api_key: str):
+    def __init__(self, nvidia_api_key: str, keenable_api_key: str = None):
         self.nvidia_api_key = nvidia_api_key
+        self.keenable_api_key = keenable_api_key or os.getenv("KEENABLE_API_KEY", "")
         self.headers = {
             "Authorization": f"Bearer {self.nvidia_api_key}",
             "Content-Type": "application/json"
         }
+        self._last_search_time = 0.0
 
     def web_search(self, query: str, num_results: int = 5) -> str:
         """
-        Searches the live web via DuckDuckGo HTML without external paid keys.
+        Searches the live web using Keenable Search API (with rate limit max 10 req/sec)
+        and automatic fallback to DuckDuckGo HTML.
         """
         print(f"[TOOL: web_search] Searching web for: '{query}'...")
-        encoded = urllib.parse.quote_plus(query)
-        url = f"https://html.duckduckgo.com/html/?q={encoded}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        
+        # Enforce rate limit (maximum 10 requests / second => minimum 0.1s interval)
+        now = time.time()
+        elapsed = now - self._last_search_time
+        if elapsed < 0.1:
+            time.sleep(0.1 - elapsed)
+        self._last_search_time = time.time()
+
+        # 1. Primary: Keenable Search API (Keyed or Keyless Public Tier)
         try:
+            if self.keenable_api_key:
+                k_url = "https://api.keenable.ai/v1/search"
+                k_headers = {
+                    "X-API-Key": self.keenable_api_key,
+                    "Content-Type": "application/json",
+                    "X-Keenable-Title": "DeepSeek-TPU-Harness"
+                }
+            else:
+                k_url = "https://api.keenable.ai/v1/search/public"
+                k_headers = {
+                    "Content-Type": "application/json",
+                    "X-Keenable-Title": "DeepSeek-TPU-Harness"
+                }
+            
+            k_res = requests.post(k_url, headers=k_headers, json={"query": query, "mode": "realtime"}, timeout=12)
+            if k_res.status_code == 200:
+                k_data = k_res.json()
+                raw_results = k_data.get("results", [])
+                if raw_results:
+                    formatted = []
+                    for item in raw_results[:num_results]:
+                        formatted.append({
+                            "title": item.get("title", ""),
+                            "link": item.get("url", ""),
+                            "snippet": item.get("snippet", "") or item.get("description", "")
+                        })
+                    return json.dumps(formatted, ensure_ascii=False, indent=2)
+            else:
+                print(f"[i] Keenable returned status {k_res.status_code}, trying public/fallback...")
+        except Exception as e:
+            print(f"[i] Keenable search request exception: {e}")
+
+        # 2. Secondary Fallback: DuckDuckGo HTML
+        try:
+            encoded = urllib.parse.quote_plus(query)
+            url = f"https://html.duckduckgo.com/html/?q={encoded}"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             res = requests.get(url, headers=headers, timeout=15)
             if res.status_code != 200:
                 return f"Search error HTTP {res.status_code}"
