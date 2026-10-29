@@ -85,8 +85,8 @@ class HarnessTelegramBot:
                 [{"text": "🌐 Поиск Keenable"}, {"text": "📧 Проверка почты"}],
                 [{"text": "ℹ️ Справка"}]
             ],
-            "resize_keyboard": true,
-            "is_persistent": true
+            "resize_keyboard": True,
+            "is_persistent": True
         }
 
     def send_message(
