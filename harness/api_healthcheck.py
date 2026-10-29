@@ -21,6 +21,8 @@ class APIHealthChecker:
         Quick probe to confirm if the current NVIDIA NIM API key is alive.
         """
         test_url = f"{self.base_url}/models"
+        from harness.nim_pacer import nim_pacer
+        nim_pacer.wait_for_slot()
         try:
             res = requests.get(test_url, headers=self.headers, timeout=10)
             if res.status_code == 200:

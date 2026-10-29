@@ -142,6 +142,8 @@ class AgentToolbox:
         """
         print("[TOOL: query_nim_catalog] Querying live NVIDIA NIM endpoints...")
         url = "https://integrate.api.nvidia.com/v1/models"
+        from harness.nim_pacer import nim_pacer
+        nim_pacer.wait_for_slot()
         try:
             res = requests.get(url, headers=self.headers, timeout=15)
             if res.status_code == 401:
@@ -185,6 +187,8 @@ class AgentToolbox:
             payload["reasoning_effort"] = int(reasoning_effort)
             # Some NIM deployments accept chat_template_kwargs or extra_body
             payload["extra_body"] = {"reasoning_effort": int(reasoning_effort)}
+        from harness.nim_pacer import nim_pacer
+        nim_pacer.wait_for_slot()
         try:
             res = requests.post(url, headers=self.headers, json=payload, timeout=60)
             if res.status_code != 200:
@@ -212,6 +216,8 @@ class AgentToolbox:
             "messages": [{"role": "user", "content": "ping"}],
             "max_tokens": 1000000
         }
+        from harness.nim_pacer import nim_pacer
+        nim_pacer.wait_for_slot()
         try:
             res = requests.post(url, headers=self.headers, json=payload, timeout=20)
             data = res.json()
@@ -245,6 +251,8 @@ class AgentToolbox:
         url = "https://integrate.api.nvidia.com/v1/chat/completions"
         test_q = "How many 'r's are in strawberry? Answer in one word."
         
+        from harness.nim_pacer import nim_pacer
+        nim_pacer.wait_for_slot()
         try:
             res_default = requests.post(url, headers=self.headers, json={
                 "model": model_id,
@@ -263,6 +271,7 @@ class AgentToolbox:
             has_think_tags = "<think>" in content or bool(reasoning_content)
             
             # Test B: Attempt to toggle / adjust reasoning effort (0% vs 100%)
+            nim_pacer.wait_for_slot()
             res_zero = requests.post(url, headers=self.headers, json={
                 "model": model_id,
                 "messages": [{"role": "user", "content": test_q}],

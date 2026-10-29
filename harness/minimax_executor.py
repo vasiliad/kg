@@ -158,6 +158,11 @@ class MiniMaxExecutor:
 
         url = f"{self.base_url}/chat/completions"
 
+        from harness.nim_pacer import nim_pacer
+        pacer_sleep = nim_pacer.wait_for_slot()
+        if pacer_sleep > 0:
+            print(f"[NIM Pacer] Paced request (+{pacer_sleep:.2f}s) to maintain <=30 RPM...")
+
         print(f"[MiniMax Harness] Streaming execution task (max_tokens={effective_max_tokens})...")
         try:
             resp = requests.post(url, headers=self.headers, json=payload, stream=True, timeout=90)

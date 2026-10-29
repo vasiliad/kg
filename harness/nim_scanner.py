@@ -22,6 +22,8 @@ class NIMScanner:
         """
         url = f"{self.base_url}/models"
         print(f"[*] Querying NVIDIA NIM models catalog from: {url}...")
+        from harness.nim_pacer import nim_pacer
+        nim_pacer.wait_for_slot()
         try:
             response = requests.get(url, headers=self.headers, timeout=20)
             if response.status_code == 401:
