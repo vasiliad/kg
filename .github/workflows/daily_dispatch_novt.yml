@@ -1,0 +1,55 @@
+name: Daily 12:00 NOVT Email Dispatch
+
+on:
+  schedule:
+    # 05:00 UTC corresponds to 12:00 PM (noon) Novosibirsk Time (UTC+7)
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      health_only:
+        description: 'Send only health check (Проверка связи)'
+        required: false
+        default: 'false'
+        type: boolean
+      news_only:
+        description: 'Send only AI news digest'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch-emails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Execute Daily Dispatcher (12:00 NOVT)
+        env:
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER || 'givi5me@gmail.com' }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.health_only }}" = "true" ]; then
+            FLAGS="--health-only"
+          elif [ "${{ inputs.news_only }}" = "true" ]; then
+            FLAGS="--news-only"
+          fi
+          
+          python harness/daily_dispatcher.py $FLAGS
