@@ -1,0 +1,47 @@
+name: Cloud Verification Suite
+
+# Runs the five-suite autonomous verification from inside the cloud runtime,
+# where the provider APIs are actually reachable. A failure here is a visible,
+# automated signal that a supplier changed something the complex depends on.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 6 hours, offset from the heartbeat and diagnostics slots.
+    - cron: '42 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Run Verification Suite
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
+          # The sovereign neural tier downloads multiple GB; the deterministic
+          # kernel is the fast, dependency-free path exercised in CI.
+          SOVEREIGN_FORCE_DETERMINISTIC: '1'
+        run: python tests/test_eternal_memory_suite.py

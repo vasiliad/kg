@@ -47,6 +47,10 @@ class SovereignCPUEngine:
 
     def is_neural_runtime_available(self) -> bool:
         """Checks if torch and transformers are available in the environment."""
+        # The deterministic kernel can be forced for fast, dependency-free
+        # verification cycles (the neural tier downloads multiple GB).
+        if os.getenv("SOVEREIGN_FORCE_DETERMINISTIC", "").strip().lower() in ("1", "true", "yes"):
+            return False
         try:
             import torch
             import transformers
