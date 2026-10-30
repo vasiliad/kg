@@ -181,7 +181,26 @@ class HarnessTelegramBot:
             return False
 
         markup = reply_markup if reply_markup is not None else self.get_main_keyboard()
-        chunks = [text[i:i + 3900] for i in range(0, len(text), 3900)]
+        # Split on paragraph boundaries, never mid-word: a message cut like
+        # "…ко | нфигурацию развёртывания" reads as corruption to the user.
+        chunks = []
+        current = ""
+        for para in text.split("\n\n"):
+            candidate = f"{current}\n\n{para}" if current else para
+            if len(candidate) <= 3900:
+                current = candidate
+                continue
+            if current:
+                chunks.append(current)
+            while len(para) > 3900:
+                cut = para.rfind("\n", 2400, 3900)
+                cut = cut if cut != -1 else 3900
+                chunks.append(para[:cut])
+                para = para[cut:].lstrip("\n")
+            current = para
+        if current:
+            chunks.append(current)
+        chunks = chunks or [text[:3900]]
         
         for idx, chunk in enumerate(chunks):
             # Only attach reply markup to the last chunk
@@ -399,96 +418,90 @@ class HarnessTelegramBot:
         task_context = f"{operational}\n\n{memory_envelope}"
 
         # 5. The keeper's dispatch plan over the measured duty roster.
-        from harness.duty_team import DutyTeam
+        from harness.duty_team import DutyTeam, ROLE_TITLES
         plan = DutyTeam().dispatch(prompt, max_calls=3)
         calls = plan.get("calls") or []
+        bench = plan.get("bench") or []
+
+        # Answer budget follows the task type: a quick question gets a crisp
+        # reply, code/analysis get room to work.
+        budget = {"quick": 4096, "general": 8192, "code": 16384, "analysis": 16384}.get(
+            plan.get("task_type", "general"), 8192
+        )
 
         answers: List[Dict[str, Any]] = []
-        if calls:
-            def run_call(idx: int, call: Dict[str, Any]) -> Dict[str, Any]:
-                params = call.get("params") or {}
-                res = self.executor.execute_task(
-                    task_prompt=prompt,
-                    context=task_context,
-                    enable_search=(needs_search and idx == 0),
-                    max_tokens=16384 if idx == 0 else 8192,
-                    temperature=float(params.get("temperature", 0.6)),
-                    top_p=float(params.get("top_p", 0.9)),
-                    model_id=call["id"],
-                )
-                return {
-                    "model": call["id"],
-                    "role": call.get("primary_role", ""),
-                    "score": call.get("score"),
-                    "verified": call.get("verified"),
-                    "ok": res.get("status") == "SUCCESS" and bool(res.get("content")),
-                    "status": res.get("status"),
-                    "elapsed": res.get("elapsed_sec"),
-                    "content": res.get("content", ""),
-                }
 
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=min(3, len(calls)), thread_name_prefix="duty") as pool:
-                futures = [pool.submit(run_call, i, c) for i, c in enumerate(calls)]
+        def run_call(idx: int, call: Dict[str, Any]) -> Dict[str, Any]:
+            params = call.get("params") or {}
+            res = self.executor.execute_task(
+                task_prompt=prompt,
+                context=task_context,
+                enable_search=(needs_search and idx == 0),
+                max_tokens=budget if idx == 0 else min(budget, 8192),
+                temperature=float(params.get("temperature", 0.6)),
+                top_p=float(params.get("top_p", 0.9)),
+                model_id=call["id"],
+            )
+            return {
+                "model": call["id"],
+                "role": call.get("primary_role", ""),
+                "score": call.get("score"),
+                "verified": call.get("verified"),
+                "ok": res.get("status") == "SUCCESS" and bool(res.get("content")),
+                "status": res.get("status"),
+                "elapsed": res.get("elapsed_sec"),
+                "content": res.get("content", ""),
+            }
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(3, max(len(calls), 1)), thread_name_prefix="duty") as pool:
+            futures = [pool.submit(run_call, i, c) for i, c in enumerate(calls)]
+            for fut in futures:
+                try:
+                    answers.append(fut.result())
+                except Exception as e:
+                    answers.append({"model": "?", "ok": False, "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
+
+        # 5b. Total failure: the keeper does not give up — it calls the bench
+        # (next measured models) before reporting degradation.
+        if not any(a.get("ok") for a in answers) and bench:
+            self.send_chat_action(chat_id, "typing")
+            retry_calls = [(len(answers) + i, c) for i, c in enumerate(bench[:2])]
+            with ThreadPoolExecutor(max_workers=min(2, len(retry_calls)), thread_name_prefix="duty-retry") as pool:
+                futures = [pool.submit(run_call, i, c) for i, c in retry_calls]
                 for fut in futures:
                     try:
                         answers.append(fut.result())
                     except Exception as e:
                         answers.append({"model": "?", "ok": False, "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
 
-        # 6. The keeper's synthesis: the local chief reads the duty answers
-        #    and issues the verdict — with zero network dependency.
-        keeper_verdict = ""
-        try:
-            succeeded = [a for a in answers if a.get("ok")]
-            keeper_context = {
-                "task": prompt,
-                "dispatch_rationale": plan.get("rationale", ""),
-                "duty_answers": [
-                    {"model": a["model"], "role": a.get("role", ""), "answer": a["content"][:1200]}
-                    for a in succeeded
-                ],
-                "duty_failures": [a["model"] for a in answers if not a.get("ok")],
-            }
-            arb_res = self.arbiter_engine.execute_sovereign_mission(
-                task_description="Сведи ответы дежурных моделей в краткий вердикт для командира.",
-                context=keeper_context,
-            )
-            keeper_verdict = (
-                arb_res.get("output")
-                or (arb_res.get("report") or {}).get("decision")
-                or ""
-            )
-        except Exception as e:
-            print(f"[!] Keeper synthesis skipped: {e}")
-
-        # 7. Persist duty answers into eternal memory (the event protocol).
+        # 6. Persist duty answers into eternal memory (the event protocol).
         for a in answers:
             if a.get("ok"):
                 self.memory_engine.append_message(
                     "duty", f"[{a['model']}] {a['content'][:800]}", {"chat_id": chat_id}
                 )
 
-        # 8. Compose the honest reply: who answered, on what evidence.
+        # 7. Compose the honest reply: who answered, on what evidence. The
+        # keeper's plan line is the only "verdict" — the deterministic CPU
+        # kernel's canned English reports proved to be noise here.
         ok_answers = [a for a in answers if a.get("ok")]
         if ok_answers:
-            parts = [f"🧑‍💼 <b>Хранитель:</b> <i>{html.escape(plan.get('rationale', ''))}</i>\n"]
-            for idx, a in enumerate(ok_answers):
-                role_txt = a.get("role") or "дежурный"
+            def label(a: Dict[str, Any]) -> str:
+                role_txt = ROLE_TITLES.get(a.get("role", ""), "дежурный")
                 score_txt = f"{a['score']}" if a.get("score") is not None else "UNRANKED"
-                mark = "✅ замер" if a.get("verified") else "⚠️ сид"
-                header = "⚡ Основной ответ" if idx == 0 else "🔁 Альтернативное мнение"
-                body = a["content"] if idx == 0 else a["content"][:900] + ("…" if len(a["content"]) > 900 else "")
-                parts.append(
-                    f"\n{header} — <b>{html.escape(a['model'])}</b> "
-                    f"({role_txt}, балл {score_txt} {mark}, {a.get('elapsed', '?')}с):\n"
-                    f"{html.escape(body)}"
-                )
-            if keeper_verdict:
-                parts.append(
-                    f"\n👑 <b>Вердикт хранителя (локальный CPU, без сети):</b>\n"
-                    f"<blockquote>{html.escape(keeper_verdict[:700])}</blockquote>"
-                )
+                mark = "замер ✅" if a.get("verified") else "сид ⚠️"
+                return f"{html.escape(a['model'])} — {role_txt} · балл {score_txt} ({mark}) · {a.get('elapsed', '?')}с"
+
+            primary = ok_answers[0]
+            parts = [
+                f"🧑‍💼 <i>Хранитель:</i> {html.escape(plan.get('rationale', ''))}",
+                f"\n⚡ <b>{label(primary)}</b>\n\n{html.escape(primary['content'])}",
+            ]
+            if len(ok_answers) > 1:
+                alt = ok_answers[1]
+                alt_body = alt["content"][:600] + ("…" if len(alt["content"]) > 600 else "")
+                parts.append(f"\n\n🔁 <b>Второе мнение</b> — {label(alt)}:\n{html.escape(alt_body)}")
             self.send_message(chat_id, "\n".join(parts), parse_mode="HTML")
         else:
             failed = ", ".join(a.get("model", "?") for a in answers) or "нет измеренных дежурных"
@@ -496,7 +509,7 @@ class HarnessTelegramBot:
                 chat_id,
                 "[-] <b>Ни одна дежурная модель не ответила.</b>\n"
                 f"Попытки: {html.escape(failed)}\n\n"
-                "Хранитель в строю, но сетевые модели недоступны или не измерены. "
+                "Хранитель в строю, но сетевые модели недоступны. "
                 "Нажмите «🔄 Обновить флот» — замер выберет работающие модели из живого каталога.",
                 parse_mode="HTML",
             )

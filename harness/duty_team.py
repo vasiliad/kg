@@ -157,30 +157,38 @@ class DutyTeam:
             for r in m["roles"] or ["reserve"]:
                 by_role.setdefault(r, []).append(m)
 
+        # How many duty models this task type warrants: a quick or general
+        # question gets ONE crisp answer; code/analysis may take a second
+        # opinion. Extra roster members go to the bench — the bot calls them
+        # only if the first answers fail (a three-model poll on every "what's
+        # the status?" made replies slow, expensive and cluttered).
+        wanted = {"quick": 1, "general": 1, "code": 2, "analysis": 2}.get(task_type, 1)
+
         calls: List[Dict[str, Any]] = []
+        bench: List[Dict[str, Any]] = []
         seen: set = set()
         for role in ROLE_ORDER.get(task_type, ROLE_ORDER["general"]):
             for m in by_role.get(role, []):
                 if m["id"] not in seen:
-                    calls.append({**m, "primary_role": role})
+                    target = calls if len(calls) < wanted else bench
+                    target.append({**m, "primary_role": role})
                     seen.add(m["id"])
                     break
-            if len(calls) >= max_calls:
-                break
         # fill with the best remaining measured models
         for m in duty:
-            if len(calls) >= max_calls:
+            if len(calls) + len(bench) >= max_calls:
                 break
             if m["id"] not in seen:
-                calls.append({**m, "primary_role": "duty_fallback"})
+                target = calls if len(calls) < wanted else bench
+                target.append({**m, "primary_role": "duty_fallback"})
                 seen.add(m["id"])
 
         why = {
             "code": "задача на код — первым идёт измеренный кодер",
             "analysis": "задача на анализ/рассуждение — первым идёт флагман или основной",
-            "quick": "быстрый вопрос — первым идёт самая быстрая дежурная",
-            "general": "общая задача — основным дежурным, остальные как усиление",
+            "quick": "быстрый вопрос — отвечает самая быстрая дежурная",
+            "general": "общая задача — отвечает основной дежурный",
         }[task_type]
         names = " → ".join(f"{c['id']} ({ROLE_TITLES.get(c['primary_role'], c['primary_role'])})" for c in calls)
         rationale = f"Тип: {task_type}; {why}. Порядок вызова: {names}."
-        return {"task_type": task_type, "calls": calls, "rationale": rationale}
+        return {"task_type": task_type, "calls": calls, "bench": bench, "rationale": rationale}
