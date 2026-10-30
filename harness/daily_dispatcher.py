@@ -4,7 +4,7 @@ Daily Dispatcher: Scheduled 12:00 NOVT (05:00 UTC) Dual-Email Pipeline.
 1. Local Arbiter Health & Incident Audit: "Проверка связи"
 2. MiniMax M3.1 Flash AI News Intelligence Digest: "Ежедневный дайджест ИИ"
 
-Route: givi5me@gmail.com -> ivanvasiliadi@gmail.com
+Route: configured via GMAIL_SENDER (sender) and DISPATCH_RECIPIENT_EMAIL (recipient)
 """
 
 import os
@@ -28,8 +28,10 @@ from harness.state_manager import StateManager
 from harness.api_healthcheck import APIHealthChecker
 from harness.minimax_executor import MiniMaxExecutor
 
-RECIPIENT_EMAIL = "ivanvasiliadi@gmail.com"
-SENDER_EMAIL = "givi5me@gmail.com"
+RECIPIENT_EMAIL = os.getenv("DISPATCH_RECIPIENT_EMAIL", "ivanvasiliadi@gmail.com")
+SENDER_EMAIL = os.getenv("GMAIL_SENDER", "")
+if not SENDER_EMAIL:
+    print("[!] WARNING: GMAIL_SENDER not set! Email dispatch will be skipped.")
 
 def get_recent_history_logs(history_file: str = "nim_history.log", hours: int = 24) -> List[Dict[str, Any]]:
     """
@@ -180,7 +182,7 @@ def build_health_report_email() -> Dict[str, str]:
             </div>
 
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 32px; font-size: 12px; color: #94a3b8; text-align: center;">
-                Автономный комплекс DeepSeek-TPU-NIM • Ежедневная рассылка 12:00 НСК • givi5me@gmail.com
+                Автономный комплекс DeepSeek-TPU-NIM • Ежедневная рассылка 12:00 НСК • {SENDER_EMAIL or 'sender-not-configured'}
             </div>
         </div>
     </body>
@@ -269,7 +271,7 @@ def build_ai_news_digest_email() -> Dict[str, str]:
             </div>
 
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 32px; font-size: 12px; color: #94a3b8; text-align: center;">
-                Синтез выполнен за {elapsed}с • Полные немодифицированные данные Keenable • Маршрут: givi5me@gmail.com -> ivanvasiliadi@gmail.com
+                Синтез выполнен за {elapsed}с • Полные немодифицированные данные Keenable • {SENDER_EMAIL or 'sender-not-configured'} → {RECIPIENT_EMAIL}
             </div>
         </div>
     </body>

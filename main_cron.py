@@ -122,7 +122,7 @@ def run_harness_cycle():
     state_payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "key_health": key_status,
-        "local_arbiter": config["tpu"]["model_id"],
+        "local_arbiter": config.get("tpu", {}).get("model_id", config["local_arbiter"]["model_id"]),
         "local_arbiter_feedback": tpu_decision[:300] + "..." if len(tpu_decision) > 300 else tpu_decision,
         "active_fleet": verified_fleet
     }

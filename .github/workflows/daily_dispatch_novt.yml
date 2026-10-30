@@ -40,10 +40,11 @@ jobs:
 
       - name: Execute Daily Dispatcher (12:00 NOVT)
         env:
-          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER || 'givi5me@gmail.com' }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
         run: |
           FLAGS=""
           if [ "${{ inputs.health_only }}" = "true" ]; then

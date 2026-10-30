@@ -20,8 +20,10 @@ class EmailSender:
         smtp_host: str = "smtp.gmail.com",
         smtp_port: int = 587
     ):
-        self.sender_email = sender_email or os.getenv("GMAIL_SENDER", "givi5me@gmail.com")
+        self.sender_email = sender_email or os.getenv("GMAIL_SENDER", "")
         self.app_password = app_password or os.getenv("GMAIL_APP_PASSWORD", os.getenv("GMAIL_PASSWORD", ""))
+        if not self.sender_email:
+            print("[!] WARNING: GMAIL_SENDER not set! Email dispatch will be skipped.")
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
 

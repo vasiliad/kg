@@ -57,8 +57,10 @@ class HarnessTelegramBot:
         self.nvidia_key = os.getenv("NVIDIA_API_KEY", "")
         self.keenable_key = os.getenv("KEENABLE_API_KEY", "")
         
-        # Password protection configuration
-        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "arabyan3G").strip()
+        # Password protection configuration — MUST be set via env/secret, no default
+        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "").strip()
+        if not self.bot_password:
+            print("[!] WARNING: TELEGRAM_BOT_PASSWORD not set! Bot will reject all connections.")
         self.sessions_file = PROJECT_ROOT / ".telegram_sessions.json"
         self.authorized_chats: Set[int] = self._load_authorized_sessions()
 
@@ -79,8 +81,7 @@ class HarnessTelegramBot:
         print(f"    TELEGRAM_BOT_TOKEN: {'set' if self.is_configured() else 'MISSING (bot cannot start)'}")
         print(f"    NVIDIA_API_KEY:     {'set' if self.nvidia_key else 'MISSING (model calls will fail)'}")
         print(f"    KEENABLE_API_KEY:   {'set' if self.keenable_key else 'not set (public endpoint / DuckDuckGo fallback)'}")
-        if self.bot_password == "arabyan3G":
-            print("    TELEGRAM_BOT_PASSWORD: using default from code — set your own in .env!")
+        print(f"    TELEGRAM_BOT_PASSWORD: {'set' if self.bot_password else 'MISSING (bot will reject all connections)'}")
 
     def is_configured(self) -> bool:
         return bool(self.bot_token and len(self.bot_token) > 10)
@@ -342,14 +343,15 @@ class HarnessTelegramBot:
 
         mail = build_health_report_email()
         sender = EmailSender()
+        recipient = os.getenv("DISPATCH_RECIPIENT_EMAIL", "ivanvasiliadi@gmail.com")
         res = sender.send_email(
-            recipient_email="ivanvasiliadi@gmail.com",
+            recipient_email=recipient,
             subject=mail["subject"],
             html_content=mail["html"],
             plain_text_content=mail["plain"]
         )
         if res.get("status") == "DELIVERED":
-            self.send_message(chat_id, "✅ Письмо «Проверка связи» успешно отправлено на <b>ivanvasiliadi@gmail.com</b>!", parse_mode="HTML")
+            self.send_message(chat_id, f"✅ Письмо «Проверка связи» успешно отправлено на <b>{recipient}</b>!", parse_mode="HTML")
         else:
             self.send_message(chat_id, f"[-] Ошибка отправки: {res.get('error') or res.get('message')}")
 
@@ -368,7 +370,7 @@ class HarnessTelegramBot:
         if chat_id not in self.authorized_chats:
             candidate = text.replace("/login ", "", 1).strip() if text.startswith("/login ") else text
 
-            if candidate == self.bot_password:
+            if self.bot_password and candidate == self.bot_password:
                 with self._state_lock:
                     self.authorized_chats.add(chat_id)
                 self._save_authorized_sessions()
@@ -430,7 +432,7 @@ class HarnessTelegramBot:
                 "• <b>👑 Запрос Арбитру</b> — прямое обращение к Верховному арбитру (Qwen2.5-1.5B CPU).\n"
                 "• <b>🚀 Флот моделей</b> — список 5 утвержденных моделей NIM.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
-                "• <b>📧 Проверка почты</b> — отправка отчета здоровья на ivanvasiliadi@gmail.com.\n"
+                "• <b>📧 Проверка почты</b> — отправка отчета здоровья на {os.getenv('DISPATCH_RECIPIENT_EMAIL', 'configured-recipient')}.\n"
                 "• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
                 "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурные модели сразу приступят к решению с вечной памятью!</i>"
             )
