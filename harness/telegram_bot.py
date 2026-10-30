@@ -215,6 +215,17 @@ class HarnessTelegramBot:
         checker = APIHealthChecker(api_key=self.nvidia_key) if self.nvidia_key else None
         key_res = checker.check_key_validity() if checker else {"valid": False, "message": "Key not set"}
 
+        # The last recorded report dispatch — the authoritative answer to
+        # "were the reports sent?", taken from the operational log itself.
+        dispatch_line = "нет записей об отправке"
+        try:
+            from harness.operational_context import _dispatch_events, _tail, _KEY_FILES
+            records = _dispatch_events(_tail(_KEY_FILES["history"], 1000))
+            if records:
+                dispatch_line = records[-1]
+        except Exception:
+            pass
+
         report = (
             "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n"
             f"👑 <b>Верховный арбитр (CPU):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct')}</code>\n"
@@ -222,6 +233,8 @@ class HarnessTelegramBot:
             "🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n"
             f"🔑 <b>NVIDIA NIM API:</b> {key_res.get('message')} (HTTP {key_res.get('status_code', 0)})\n"
             f"💾 <b>Дисковое пространство:</b> {disk.get('free_gb')} ГБ свободно ({disk.get('percent_used')}% занято)\n"
+            f"📬 <b>Последняя отправка отчётов:</b> <code>{html.escape(dispatch_line[:220])}</code>\n"
+            f"📨 <b>Получатель отчётов:</b> <code>{html.escape(runtime_settings.get_recipient_email('не задан'))}</code>\n"
             f"🕒 <b>Обновлено:</b> {state.get('last_updated', 'N/A')}\n\n"
             "🛡️ <i>Автономный суверенный комплекс полностью отвязан от очередей сторонних сервисов.</i>"
         )
