@@ -92,9 +92,11 @@ def run_harness_cycle():
     verified_fleet = []
 
     try:
+        # The complex is fully decoupled from Kaggle TPU; config may have no tpu section.
+        tpu_cfg = config.get("tpu", {}) or {}
         tpu_loader = TPULoader(
-            model_id=config["tpu"]["model_id"],
-            memory_fraction=config["tpu"]["memory_fraction"]
+            model_id=tpu_cfg.get("model_id", config["local_arbiter"]["model_id"]),
+            memory_fraction=tpu_cfg.get("memory_fraction", 0.95)
         )
         if "TPU_NAME" in os.environ or os.path.exists("/dev/accel0"):
             tpu_loader.load_model()

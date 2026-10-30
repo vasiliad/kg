@@ -17,10 +17,13 @@ import sys
 import json
 import math
 import time
+import threading
 import requests
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
+
+from harness.key_pool import NVIDIAKeyPool
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -38,6 +41,8 @@ class MemoryEngine:
         self.history_file = history_file or (PROJECT_ROOT / "data" / "telegram_history.txt")
         self.vault_file = vault_file or (PROJECT_ROOT / "data" / ".memory_vault.json")
         self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        # Guards vault mutations across bot worker threads and the test suite.
+        self._io_lock = threading.Lock()
         
         self.api_key = nvidia_api_key or os.getenv("NVIDIA_API_KEY", "")
         if not self.api_key:
@@ -54,6 +59,7 @@ class MemoryEngine:
         self.model_name = model_name
         self.backup_model = backup_model
         self.base_url = "https://integrate.api.nvidia.com/v1"
+        self.key_pool = NVIDIAKeyPool(self.api_key)
         self._vault_cache: Optional[List[Dict[str, Any]]] = None
 
     def _load_vault(self) -> List[Dict[str, Any]]:
@@ -78,23 +84,22 @@ class MemoryEngine:
             # Keep vault compact: max 1000 indexed entries
             if len(self._vault_cache) > 1000:
                 self._vault_cache = self._vault_cache[-1000:]
-            with open(self.vault_file, "w", encoding="utf-8") as f:
+            # Atomic replace so a crash mid-write can never corrupt the vault.
+            tmp_path = self.vault_file.with_suffix(self.vault_file.suffix + ".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump({"entries": self._vault_cache}, f, ensure_ascii=False)
+            os.replace(str(tmp_path), str(self.vault_file))
         except Exception as e:
             print(f"[MemoryEngine] Warning saving vault: {e}")
 
     def get_embedding(self, text: str, input_type: str = "passage") -> Optional[List[float]]:
         """
         Retrieves embedding vector via NVIDIA NIM API using Nemotron.
+        Rotates through the key pool on 401/429.
         """
-        if not self.api_key:
+        if not self.key_pool.current():
             return None
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
         # Clean text
         clean_text = text.strip()[:4000] # Cap input chunk
         if not clean_text:
@@ -107,47 +112,61 @@ class MemoryEngine:
                 "input_type": input_type,
                 "encoding_format": "float"
             }
-            try:
-                resp = requests.post(f"{self.base_url}/embeddings", headers=headers, json=payload, timeout=12)
+            for _ in range(max(len(self.key_pool), 1)):
+                headers = {
+                    "Authorization": f"Bearer {self.key_pool.current()}",
+                    "Content-Type": "application/json"
+                }
+                try:
+                    resp = requests.post(f"{self.base_url}/embeddings", headers=headers, json=payload, timeout=12)
+                except Exception:
+                    continue
                 if resp.status_code == 200:
                     data = resp.json()
                     vec = data["data"][0]["embedding"]
                     # Round floats to 5 decimals to minimize file size by 60%
                     return [round(x, 5) for x in vec]
-            except Exception:
-                continue
+                if resp.status_code in (401, 403, 429) and len(self.key_pool) > 1:
+                    self.key_pool.mark_bad()
+                    continue
+                break
 
         return None
 
     def append_message(self, role: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
         Appends a new turn to the plain text file and semantic vault.
+        Reloads the vault from disk before mutating so concurrent writers
+        (bot workers, test suite, backup job) never lose each other's entries.
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         clean_text = text.strip()
         if not clean_text:
             return
 
-        # 1. Plain Text Append (Zero overhead)
-        log_entry = f"[{timestamp}] {role.upper()}: {clean_text}\n\n"
-        try:
-            with open(self.history_file, "a", encoding="utf-8") as f:
-                f.write(log_entry)
-        except Exception as e:
-            print(f"[MemoryEngine] Error writing to history file: {e}")
+        with self._io_lock:
+            # 1. Plain Text Append (Zero overhead)
+            log_entry = f"[{timestamp}] {role.upper()}: {clean_text}\n\n"
+            try:
+                with open(self.history_file, "a", encoding="utf-8") as f:
+                    f.write(log_entry)
+            except Exception as e:
+                print(f"[MemoryEngine] Error writing to history file: {e}")
 
-        # 2. Semantic Embedding & Vault Indexing
-        vec = self.get_embedding(clean_text, input_type="passage")
-        vault = self._load_vault()
-        entry = {
-            "timestamp": timestamp,
-            "role": role,
-            "text": clean_text[:1500], # Keep indexed chunk concise
-            "vector": vec,
-            "metadata": metadata or {}
-        }
-        vault.append(entry)
-        self._save_vault()
+            # 2. Semantic Embedding & Vault Indexing
+            vec = self.get_embedding(clean_text, input_type="passage")
+            # Drop the in-memory cache so the vault is re-read from disk (multi-writer safe).
+            self._vault_cache = None
+            vault = self._load_vault()
+            entry = {
+                "timestamp": timestamp,
+                "role": role,
+                "text": clean_text[:1500], # Keep indexed chunk concise
+                "vector": vec,
+                "metadata": metadata or {}
+            }
+            vault.append(entry)
+            self._save_vault()
 
     def get_recent_turns(self, limit: int = 4) -> str:
         """

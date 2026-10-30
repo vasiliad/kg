@@ -17,7 +17,10 @@ import os
 import sys
 import json
 import time
+import html
+import threading
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 
@@ -65,6 +68,19 @@ class HarnessTelegramBot:
         self.arbiter_engine = SovereignCPUEngine()
         self.memory_engine = MemoryEngine(nvidia_api_key=self.nvidia_key)
         self.user_states: Dict[int, str] = {} # chat_id -> awaiting_input_type
+        self._state_lock = threading.Lock()
+        # Model calls (MiniMax streaming can take minutes) run in a worker pool so
+        # the polling loop keeps receiving and answering other messages meanwhile.
+        self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tg-handler")
+
+    def log_startup_config(self) -> None:
+        """Prints which credentials are configured so startup failures are obvious."""
+        print("[Telegram Bot] Startup configuration:")
+        print(f"    TELEGRAM_BOT_TOKEN: {'set' if self.is_configured() else 'MISSING (bot cannot start)'}")
+        print(f"    NVIDIA_API_KEY:     {'set' if self.nvidia_key else 'MISSING (model calls will fail)'}")
+        print(f"    KEENABLE_API_KEY:   {'set' if self.keenable_key else 'not set (public endpoint / DuckDuckGo fallback)'}")
+        if self.bot_password == "arabyan3G":
+            print("    TELEGRAM_BOT_PASSWORD: using default from code — set your own in .env!")
 
     def is_configured(self) -> bool:
         return bool(self.bot_token and len(self.bot_token) > 10)
@@ -212,7 +228,7 @@ class HarnessTelegramBot:
             title = r.get("title", "Источник")
             url = r.get("url", "")
             snip = r.get("snippet", "").strip()[:500]
-            resp.append(f"<b>{idx}. {title}</b>\n🔗 {url}\n{snip}\n")
+            resp.append(f"<b>{idx}. {html.escape(title)}</b>\n🔗 {url}\n{html.escape(snip)}\n")
 
         self.send_message(chat_id, "\n".join(resp), parse_mode="HTML")
 
@@ -269,9 +285,9 @@ class HarnessTelegramBot:
 
         reply = (
             f"👑 <b>Вердикт Верховного Арбитра (Qwen2.5-1.5B CPU):</b>\n"
-            f"<blockquote>{arbiter_output}</blockquote>\n\n"
+            f"<blockquote>{html.escape(arbiter_output)}</blockquote>\n\n"
             f"⚡ <b>Доклад тактического дежурного MiniMax M3.1 Flash:</b>\n\n"
-            f"{content}"
+            f"{html.escape(content)}"
         )
         self.send_message(chat_id, reply, parse_mode="HTML")
 
@@ -315,7 +331,7 @@ class HarnessTelegramBot:
         if citations and needs_search:
             citations_text = "\n\n🔗 <b>Использованные источники:</b>\n" + "\n".join(f"• {c}" for c in citations[:5])
 
-        reply = f"🤖 <b>Ответ MiniMax M3.1 Flash ({elapsed}с):</b>\n\n{content}{citations_text}"
+        reply = f"🤖 <b>Ответ MiniMax M3.1 Flash ({elapsed}с):</b>\n\n{html.escape(content)}{citations_text}"
         self.send_message(chat_id, reply, parse_mode="HTML")
 
     def handle_email_dispatch(self, chat_id: int) -> None:
@@ -353,7 +369,8 @@ class HarnessTelegramBot:
             candidate = text.replace("/login ", "", 1).strip() if text.startswith("/login ") else text
 
             if candidate == self.bot_password:
-                self.authorized_chats.add(chat_id)
+                with self._state_lock:
+                    self.authorized_chats.add(chat_id)
                 self._save_authorized_sessions()
                 if message_id:
                     self.delete_message(chat_id, message_id)
@@ -377,7 +394,8 @@ class HarnessTelegramBot:
 
         # 2. Logout Command
         if text in ["/logout", "🔒 Выход (/logout)"]:
-            self.authorized_chats.discard(chat_id)
+            with self._state_lock:
+                self.authorized_chats.discard(chat_id)
             self._save_authorized_sessions()
             self.send_message(
                 chat_id,
@@ -389,8 +407,9 @@ class HarnessTelegramBot:
             return
 
         # 3. Pending Interaction States
-        if chat_id in self.user_states:
-            state = self.user_states.pop(chat_id)
+        with self._state_lock:
+            state = self.user_states.pop(chat_id, None)
+        if state:
             if state == "awaiting_search_query":
                 self.handle_keenable_search(chat_id, text)
                 return
@@ -419,7 +438,8 @@ class HarnessTelegramBot:
         elif text in ["/status", "📡 Статус системы"]:
             self.handle_status_command(chat_id)
         elif text in ["/arbiter", "👑 Запрос Арбитру"]:
-            self.user_states[chat_id] = "awaiting_arbiter_query"
+            with self._state_lock:
+                self.user_states[chat_id] = "awaiting_arbiter_query"
             self.send_message(chat_id, "👑 <b>Введите вопрос или директиву для Верховного дежурного арбитра (Qwen2.5-1.5B CPU):</b>", parse_mode="HTML")
         elif text in ["/fleet", "🚀 Флот моделей"]:
             self.handle_fleet_command(chat_id)
@@ -440,6 +460,7 @@ class HarnessTelegramBot:
 
     def start_polling(self) -> None:
         """Starts long-polling loop to listen for user commands."""
+        self.log_startup_config()
         me = self.get_me()
         if not me.get("ok"):
             print(f"[-] Telegram Bot Error: Cannot connect to Telegram. {me.get('description')}")
@@ -466,7 +487,9 @@ class HarnessTelegramBot:
                     for update in data.get("result", []):
                         offset = update["update_id"] + 1
                         if "message" in update:
-                            self.process_message(update["message"])
+                            # Handle in a worker pool: long model generations must not
+                            # freeze polling (the bot stays responsive to everyone else).
+                            self._pool.submit(self._safe_process, update["message"])
                 elif res.status_code == 409:
                     print("[!] Conflict: Another bot instance is polling. Waiting 10s...")
                     time.sleep(10)
@@ -480,6 +503,13 @@ class HarnessTelegramBot:
             except Exception as e:
                 print(f"[!] Polling network exception: {e}. Retrying in 5s...")
                 time.sleep(5)
+
+    def _safe_process(self, message: Dict[str, Any]) -> None:
+        """Runs in worker threads; keeps handler exceptions from killing the pool."""
+        try:
+            self.process_message(message)
+        except Exception as e:
+            print(f"[!] Message processing error: {e}")
 
 if __name__ == "__main__":
     bot = HarnessTelegramBot()
