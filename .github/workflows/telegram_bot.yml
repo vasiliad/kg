@@ -1,0 +1,61 @@
+name: Telegram Bot Daemon (Cloud)
+
+# The bot is a long-polling Telegram client. A hosted runner job cannot live
+# forever, so the bot runs in bounded windows and is cycled by cron. Telegram
+# queues unread updates for up to 24h, so nothing is lost between cycles —
+# the bot picks up exactly where it left off.
+#
+# Public repositories get free GitHub-hosted runners (unlimited minutes).
+
+on:
+  schedule:
+    # Every 30 minutes; the bot lives for 25 minutes, then the job restarts it.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: 'How long the bot should stay alive'
+        required: false
+        default: '25'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-bot-daemon
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Run Bot Daemon (bounded window + state sync)
+        env:
+          DURATION_MINUTES: ${{ inputs.duration_minutes || '25' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
+        run: bash scripts/run_telegram_daemon.sh

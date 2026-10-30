@@ -1,0 +1,60 @@
+name: Cloud Self-Diagnostics
+
+# Probes every external dependency from inside the cloud runtime and writes
+# the verdict into the repository, so the complex can prove (or disprove) its
+# own health without a human looking at a dashboard.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 6 hours, offset by 12 minutes to avoid the heartbeat slot.
+    - cron: '12 */6 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Probe External Dependencies
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
+        run: python harness/diagnostics.py || true
+
+      - name: Publish Diagnostics Report
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add diagnostics_report.json || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(diagnostics): cloud dependency health report [skip ci]"
+            git push origin HEAD:main
+          else
+            echo "No dependency changes detected."
+          fi

@@ -18,6 +18,7 @@ import sys
 import json
 import time
 import html
+import signal
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -57,11 +58,15 @@ class HarnessTelegramBot:
         self.nvidia_key = os.getenv("NVIDIA_API_KEY", "")
         self.keenable_key = os.getenv("KEENABLE_API_KEY", "")
         
-        # Password protection configuration — MUST be set via env/secret, no default
-        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "").strip()
+        # Password protection configuration.
+        # TELEGRAM_BOT_PASSWORD overrides the built-in default (arabyan3G).
+        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "arabyan3G").strip()
         if not self.bot_password:
-            print("[!] WARNING: TELEGRAM_BOT_PASSWORD not set! Bot will reject all connections.")
-        self.sessions_file = PROJECT_ROOT / ".telegram_sessions.json"
+            print("[!] WARNING: TELEGRAM_BOT_PASSWORD is empty! Bot will reject all connections.")
+        # Sessions live in data/ so they can be persisted between GitHub Actions
+        # runs (the runner filesystem is wiped on every job restart).
+        self.sessions_file = PROJECT_ROOT / "data" / ".bot_sessions.json"
+        self.sessions_file.parent.mkdir(parents=True, exist_ok=True)
         self.authorized_chats: Set[int] = self._load_authorized_sessions()
 
         self.state_mgr = StateManager()
@@ -71,9 +76,17 @@ class HarnessTelegramBot:
         self.memory_engine = MemoryEngine(nvidia_api_key=self.nvidia_key)
         self.user_states: Dict[int, str] = {} # chat_id -> awaiting_input_type
         self._state_lock = threading.Lock()
+        self._stop = False
         # Model calls (MiniMax streaming can take minutes) run in a worker pool so
         # the polling loop keeps receiving and answering other messages meanwhile.
         self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tg-handler")
+
+        # Graceful shutdown so sessions/state survive a GitHub Actions job stop.
+        try:
+            signal.signal(signal.SIGTERM, self._handle_signal)
+            signal.signal(signal.SIGINT, self._handle_signal)
+        except (ValueError, AttributeError, OSError):
+            pass  # not in main thread / unsupported platform
 
     def log_startup_config(self) -> None:
         """Prints which credentials are configured so startup failures are obvious."""
@@ -506,6 +519,12 @@ class HarnessTelegramBot:
             # Default: treat any regular message as a task for MiniMax
             self.handle_minimax_task(chat_id, text)
 
+    def _handle_signal(self, signum, frame) -> None:
+        """Graceful shutdown: GitHub Actions sends SIGTERM when the job ends."""
+        print(f"\n[*] Signal {signum} received — shutting down gracefully...")
+        self._stop = True
+        self._save_authorized_sessions()
+
     def start_polling(self) -> None:
         """Starts long-polling loop to listen for user commands."""
         self.log_startup_config()
@@ -523,7 +542,7 @@ class HarnessTelegramBot:
         print("=" * 72)
 
         offset = None
-        while True:
+        while not self._stop:
             try:
                 params = {"timeout": 25}
                 if offset:
