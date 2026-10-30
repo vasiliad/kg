@@ -23,15 +23,21 @@ if str(PROJECT_ROOT) not in sys.path:
 
 NIM_BASE = "https://integrate.api.nvidia.com/v1"
 
-# Model IDs the project believes are live. Verified against the real catalog.
+# Model IDs the project believes are live. The fleet IDs are kept in their
+# original form on purpose: the scanner resolves supplier-side renames
+# against the live catalog, so a renamed model is reported as a rename
+# instead of a missing model.
 PROJECT_MODEL_IDS = [
     "minimaxai/minimax-m3.1-flash",
     "zhipu/glm-5.3-flash",
     "deepseek-ai/deepseek-v4.1-flash",
     "nvidia/550b-ultra",
     "stepfun/step-5-preview",
-    "nvidia/nemotron-3.5-embed-8b",
-    "nvidia/nemotron-3.5-embed-1b",
+]
+
+# Models that must exist under exactly these ids (local embeddings and the
+# sovereign CPU fallback are served locally, not through NIM).
+LOCAL_ONLY_MODEL_IDS = [
     "Qwen/Qwen2.5-1.5B-Instruct",
 ]
 
@@ -65,10 +71,33 @@ def check_nvidia() -> Dict[str, Any]:
             print(f"  First 12: {ids[:12]}")
             missing = [m for m in PROJECT_MODEL_IDS if m not in ids]
             if missing:
-                print(f"  [!] Project model IDs NOT present in the live catalog: {missing}")
-                result["missing_models"] = missing
+                # A renamed model is not a broken configuration: the scanner
+                # resolves it automatically at runtime.
+                try:
+                    from harness.nim_scanner import NIMScanner
+                    resolution = NIMScanner(api_key=os.getenv("NVIDIA_API_KEY", "")).resolve_fleet_ids(
+                        [{"id": mid} for mid in ids]
+                    )
+                    result["id_resolution"] = resolution
+                    renamed = resolution.get("renamed", {})
+                    if renamed:
+                        print("  [!] Supplier-side renames detected (resolved automatically):")
+                        for old, new in renamed.items():
+                            print(f"        {old}  ->  {new}")
+                    still_missing = resolution.get("missing", [])
+                    if still_missing:
+                        print(f"  [!] Model IDs with no live counterpart: {still_missing}")
+                        result["missing_models"] = still_missing
+                    else:
+                        print("  [+] Every fleet model resolves to a live catalog entry.")
+                        result["missing_models"] = []
+                except Exception as e:
+                    print(f"  [!] Project model IDs NOT present in the live catalog: {missing}")
+                    print(f"      (resolver unavailable: {e})")
+                    result["missing_models"] = missing
             else:
                 print("  [+] Every project model ID is present in the live catalog.")
+                result["missing_models"] = []
         elif res.status_code == 401:
             print("  STATUS: BROKEN - key rejected (401 Unauthorized).")
             result["reason"] = "invalid_key"
