@@ -49,3 +49,9 @@ temp/
 *.log.bak
 *.log.old
 .telegram_sessions.json
+
+# Derived semantic memory index.
+# The durable source of truth is data/telegram_history.txt (committed); this
+# vector cache is rebuilt from it on every runner start, so it must never be
+# committed or the repository grows by ~37 KB per remembered message.
+data/.memory_vault.json

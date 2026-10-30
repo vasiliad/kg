@@ -2,6 +2,54 @@ import requests
 import json
 from typing import List, Dict, Any, Optional
 
+# ---------------------------------------------------------------------------
+# Supplier alias map.
+#
+# NVIDIA reorganises its catalogue regularly (e.g. `zhipu/glm-5.3-flash` was
+# republished as `z-ai/glm-5.3-flash`, `nvidia/550b-ultra` became
+# `nvidia/nemotron-3-ultra-550b-a55b`). A hardcoded fleet id would silently
+# stop resolving, so every id the project cares about is declared here with a
+# stable "family" token that is matched against the LIVE catalogue.
+# ---------------------------------------------------------------------------
+MODEL_FAMILIES: Dict[str, List[str]] = {
+    "minimax":  ["minimax", "m3.1"],
+    "glm":      ["glm-5.3", "glm5.3", "z-ai", "zhipu"],
+    "deepseek": ["deepseek-v4.1", "v4.1"],
+    "ultra550": ["550b", "nemotron-3-ultra"],
+    "step5":    ["step-5", "step5"],
+    "embed8b":  ["nemotron-3.5-embed-8b"],
+    "embed1b":  ["nemotron-3.5-embed-1b"],
+}
+
+# Legacy project ids -> family token, used to resolve stale references.
+LEGACY_ID_FAMILY: Dict[str, str] = {
+    "minimaxai/minimax-m3.1-flash": "minimax",
+    "zhipu/glm-5.3-flash": "glm",
+    "z-ai/glm-5.3-flash": "glm",
+    "nvidia/550b-ultra": "ultra550",
+    "nvidia/nemotron-3-ultra-550b-a55b": "ultra550",
+    "stepfun/step-5-preview": "step5",
+    "stepfun-ai/step-5-preview": "step5",
+    "deepseek-ai/deepseek-v4.1-flash": "deepseek",
+    "nvidia/nemotron-3.5-embed-8b": "embed8b",
+    "nvidia/nemotron-3.5-embed-1b": "embed1b",
+}
+
+
+def family_of(model_id: str) -> Optional[str]:
+    """Best-effort family token for a model id (live or legacy)."""
+    if model_id in LEGACY_ID_FAMILY:
+        return LEGACY_ID_FAMILY[model_id]
+    low = model_id.lower()
+    best: Optional[str] = None
+    best_len = 0
+    for family, tokens in MODEL_FAMILIES.items():
+        for tok in tokens:
+            if tok in low and len(tok) > best_len:
+                best, best_len = family, len(tok)
+    return best
+
+
 class NIMScanner:
     """
     Scans and catalogues active models on NVIDIA NIM API (integrate.api.nvidia.com).
@@ -14,6 +62,49 @@ class NIMScanner:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json"
+        }
+
+    def resolve_fleet_ids(self, live_models: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Maps the project's tracked model ids onto the ids that are LIVE right now.
+
+        This is what lets the complex survive supplier-side renames without a
+        human: a stale id (e.g. `nvidia/550b-ultra`) is resolved to its current
+        catalogue equivalent, and ids that disappeared entirely are reported.
+        """
+        live_ids = [m.get("id", "") for m in live_models if m.get("id")]
+        resolved: Dict[str, Optional[str]] = {}
+        renamed: Dict[str, str] = {}
+        missing: List[str] = []
+
+        for legacy in LEGACY_ID_FAMILY:
+            if legacy in live_ids:
+                resolved[legacy] = legacy
+                continue
+            family = LEGACY_ID_FAMILY[legacy]
+            candidates = [lid for lid in live_ids if family_of(lid) == family]
+            if candidates:
+                # Prefer the shortest id: it is usually the canonical one.
+                current = sorted(candidates, key=len)[0]
+                resolved[legacy] = current
+                if current != legacy:
+                    renamed[legacy] = current
+            else:
+                resolved[legacy] = None
+                missing.append(legacy)
+
+        if renamed:
+            print(f"[!] CATALOG ALERT: {len(renamed)} supplier-side renames detected:")
+            for old, new in renamed.items():
+                print(f"      {old}  ->  {new}")
+        if missing:
+            print(f"[!] CATALOG ALERT: {len(missing)} tracked models are no longer offered: {missing}")
+
+        return {
+            "resolved": resolved,
+            "renamed": renamed,
+            "missing": missing,
+            "live_count": len(live_ids),
         }
 
     def fetch_available_models(self) -> List[Dict[str, Any]]:

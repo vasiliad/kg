@@ -78,11 +78,11 @@ def run_harness_cycle():
         print("[!] Key invalid or missing. Using Ultra-Tier baseline models for registry.")
         tracker = BenchmarkTracker()
         active_candidates = tracker.rank_models([
-            {"id": "minimax/minimax-m3.1-flash"},
-            {"id": "zhipu/glm-5.3-flash"},
+            {"id": "minimaxai/minimax-m3.1-flash"},
+            {"id": "z-ai/glm-5.3-flash"},
             {"id": "deepseek-ai/deepseek-v4.1-flash"},
-            {"id": "nvidia/550b-ultra"},
-            {"id": "stepfun/step-5-preview"}
+            {"id": "nvidia/nemotron-3-ultra-550b-a55b"},
+            {"id": "stepfun-ai/step-5-preview"}
         ])
 
     # 3. Local DeepSeek-R1 TPU Brain ReAct Loop

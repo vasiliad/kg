@@ -60,40 +60,50 @@ class MiniMaxExecutor:
         self._last_search_time = time.time()
 
         # 1. Primary: Keenable Search API
-        try:
-            if self.keenable_api_key:
-                k_url = "https://api.keenable.ai/v1/search"
-                k_headers = {
+        #    If the configured key is rejected, retry on the public tier so that
+        #    one stale key never costs the complex its live-search capability.
+        keenable_attempts = []
+        if self.keenable_api_key:
+            keenable_attempts.append((
+                "https://api.keenable.ai/v1/search",
+                {
                     "X-API-Key": self.keenable_api_key,
                     "Content-Type": "application/json",
                     "X-Keenable-Title": "DeepSeek-TPU-Harness"
                 }
-            else:
-                k_url = "https://api.keenable.ai/v1/search/public"
-                k_headers = {
-                    "Content-Type": "application/json",
-                    "X-Keenable-Title": "DeepSeek-TPU-Harness"
-                }
+            ))
+        keenable_attempts.append((
+            "https://api.keenable.ai/v1/search/public",
+            {
+                "Content-Type": "application/json",
+                "X-Keenable-Title": "DeepSeek-TPU-Harness"
+            }
+        ))
 
-            res = requests.post(
-                k_url,
-                headers=k_headers,
-                json={"query": query, "mode": "realtime"},
-                timeout=12
-            )
-            if res.status_code == 200:
-                data = res.json()
-                results = []
-                for item in data.get("results", [])[:num_results]:
-                    results.append({
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "snippet": item.get("snippet", "") or item.get("description", "")
-                    })
-                if results:
-                    return results
-        except Exception:
-            pass
+        for k_url, k_headers in keenable_attempts:
+            try:
+                res = requests.post(
+                    k_url,
+                    headers=k_headers,
+                    json={"query": query, "mode": "realtime"},
+                    timeout=12
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    results = []
+                    for item in data.get("results", [])[:num_results]:
+                        results.append({
+                            "title": item.get("title", ""),
+                            "url": item.get("url", ""),
+                            "snippet": item.get("snippet", "") or item.get("description", "")
+                        })
+                    if results:
+                        return results
+                elif res.status_code in (401, 403):
+                    print(f"[!] Keenable rejected the request ({res.status_code}) on {k_url.split('/')[-2]}; trying next tier.")
+                    continue
+            except Exception:
+                continue
 
         # 2. Fallback: Tavily Search API (key via TAVILY_API_KEY env)
         try:

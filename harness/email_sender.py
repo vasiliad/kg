@@ -41,6 +41,14 @@ class EmailSender:
         """
         Sends a multipart email (HTML + Plain Text fallback) via Gmail SMTP TLS.
         """
+        if not recipient_email or "@" not in recipient_email:
+            msg = (
+                f"[-] EmailSender: no valid recipient configured for email '{subject}'. "
+                "Set DISPATCH_RECIPIENT_EMAIL (GitHub secret) or change it from Telegram (/setemail)."
+            )
+            print(msg)
+            return {"status": "SKIPPED_NO_RECIPIENT", "message": msg}
+
         if not self.is_configured():
             msg = (
                 f"[-] EmailSender: GMAIL_APP_PASSWORD not set. Email '{subject}' to {recipient_email} "

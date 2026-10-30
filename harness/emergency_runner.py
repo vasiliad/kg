@@ -137,7 +137,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
                 "local_arbiter_feedback": f"Autonomous mission completed via {sovereign_mission.get('engine')}. Zero external API dependencies. Operating on GitHub Actions 4 vCPU / 16GB RAM.",
                 "catalog_diff": {"new_count": 0, "removed_count": 0, "status": "EXTERNAL_APIS_OFFLINE"},
                 "active_fleet": sovereign_mission.get("approved_fleet", [
-                    {"id": target_model, "tier": "Sovereign-CPU-SLM", "quality_score": 92.0, "status": "APPROVED", "engine": "cpu_local"}
+                    {"id": target_model, "tier": "Sovereign-CPU-SLM", "quality_score": None, "status": "UNVERIFIED", "engine": "cpu_local", "source": "deterministic_kernel", "score_verified": False}
                 ]),
                 "last_updated": now_iso
             }
@@ -172,7 +172,17 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
 
     print(f"[+] Top {len(ranked_fleet[:5])} candidate models for emergency fleet:")
     for idx, m in enumerate(ranked_fleet[:5], 1):
-        print(f"  {idx}. {m.get('id')} (Tier: {m.get('tier')}, Score: {m.get('quality_score')})")
+        score = m.get("quality_score")
+        score_txt = f"{score}" if score is not None else "UNRANKED"
+        print(f"  {idx}. {m.get('id')} (Tier: {m.get('tier')}, Score: {score_txt})")
+
+    # Step 2b: Resolve tracked ids against the LIVE catalogue so that supplier
+    # side renames are absorbed automatically (no human in the loop needed).
+    id_resolution = scanner.resolve_fleet_ids(all_models)
+    if id_resolution.get("renamed"):
+        print(f"[+] Auto-corrected {len(id_resolution['renamed'])} supplier-side model id(s).")
+    if id_resolution.get("missing"):
+        print(f"[!] {len(id_resolution['missing'])} tracked model(s) retired by the supplier.")
 
     # Step 3: Web Research via Keenable (100% Unpruned)
     print("\n[STEP 3] Fetching latest LLM benchmarks & releases via Keenable...")
@@ -216,12 +226,15 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     print("\n[STEP 5] Updating active_models.json and nim_history.log...")
     now_iso = datetime.now(timezone.utc).isoformat()
     
+    # Fallback fleet: only used when the live catalogue could not be scanned.
+    # Scores come from the seeded registry, so they are explicitly flagged as
+    # unverified instead of being presented as freshly measured benchmarks.
     emergency_fleet = ranked_fleet[:5] if ranked_fleet else [
-        {"id": "minimaxai/minimax-m3.1-flash", "tier": "Ultra-Flash-Reasoning", "quality_score": 99.2, "status": "APPROVED"},
-        {"id": "z-ai/glm-5.3-flash", "tier": "Ultra-Agentic-Code", "quality_score": 98.8, "status": "APPROVED"},
-        {"id": "deepseek-ai/deepseek-v4.1-flash", "tier": "Ultra-Sparse-MTP", "quality_score": 98.5, "status": "APPROVED"},
-        {"id": "stepfun-ai/step-5-preview", "tier": "Ultra-Multimodal-Preview", "quality_score": 96.0, "status": "APPROVED"},
-        {"id": "nvidia/nemotron-3-ultra-550b-a55b", "tier": "Unranked / Experimental", "quality_score": 75.0, "status": "UNRANKED"}
+        {"id": "minimaxai/minimax-m3.1-flash", "tier": "Ultra-Flash-Reasoning", "quality_score": 99.2, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "z-ai/glm-5.3-flash", "tier": "Ultra-Agentic-Code", "quality_score": 98.8, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "deepseek-ai/deepseek-v4.1-flash", "tier": "Ultra-Sparse-MTP", "quality_score": 98.5, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "stepfun-ai/step-5-preview", "tier": "Ultra-Multimodal-Preview", "quality_score": 96.0, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "nvidia/nemotron-3-ultra-550b-a55b", "tier": "Unranked / Experimental", "quality_score": None, "status": "UNRANKED", "source": "none", "score_verified": False}
     ]
 
     new_state = {
@@ -233,6 +246,11 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
         "local_arbiter_feedback": synthesis_content[:500] + "..." if len(synthesis_content) > 500 else synthesis_content,
         "catalog_diff": catalog_diff,
+        "id_resolution": {
+            "renamed": id_resolution.get("renamed", {}),
+            "missing": id_resolution.get("missing", []),
+            "live_count": id_resolution.get("live_count", 0),
+        },
         "active_fleet": emergency_fleet,
         "last_updated": now_iso
     }

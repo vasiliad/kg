@@ -59,6 +59,11 @@ class SovereignCPUEngine:
         Tier 2: Ultra-reliable zero-dependency fallback kernel.
         Executes without needing multi-gigabyte PyTorch or Hugging Face downloads.
         Instantly analyzes telemetry, validates state, and outputs structured decisions.
+
+        Honesty contract: this kernel performs NO inference and NO benchmarking.
+        It therefore never invents quality scores — every model it proposes is
+        marked UNVERIFIED so downstream state files cannot be mistaken for
+        measured results.
         """
         start_time = time.time()
         print("[Sovereign Engine] Executing via Deterministic Air-Gapped CPU Kernel...")
@@ -67,21 +72,53 @@ class SovereignCPUEngine:
             "mode": "SOVEREIGN_DETERMINISTIC_KERNEL",
             "model_assigned": self.model_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "status": "OPERATIONAL",
+            "status": "OPERATIONAL_DEGRADED",
             "execution_environment": "GitHub Actions 4 vCPU / 16GB RAM",
             "task_evaluated": task_description,
-            "decision": "Autonomous continuity verified. State preserved. Zero API dependencies active."
+            "decision": (
+                "Autonomous continuity preserved. External inference is unavailable, "
+                "so no model quality could be measured in this cycle."
+            ),
+            "inference_performed": False,
+            "benchmarking_performed": False,
         }
 
         # Validate candidate fleet if provided in context
         candidate_fleet = context.get("candidate_models", [])
         if not candidate_fleet:
             approved_fleet = [
-                {"id": self.model_id, "tier": "Sovereign-CPU-SLM", "quality_score": 92.0, "status": "APPROVED", "engine": "cpu_local"},
-                {"id": self.backup_model_id, "tier": "Sovereign-CPU-UltraLight", "quality_score": 85.0, "status": "STANDBY", "engine": "cpu_local"}
+                {
+                    "id": self.model_id,
+                    "tier": "Sovereign-CPU-SLM",
+                    "quality_score": None,
+                    "status": "UNVERIFIED",
+                    "engine": "cpu_local",
+                    "source": "deterministic_kernel",
+                    "score_verified": False,
+                },
+                {
+                    "id": self.backup_model_id,
+                    "tier": "Sovereign-CPU-UltraLight",
+                    "quality_score": None,
+                    "status": "STANDBY",
+                    "engine": "cpu_local",
+                    "source": "deterministic_kernel",
+                    "score_verified": False,
+                }
             ]
         else:
-            approved_fleet = candidate_fleet
+            # Keep supplier-side ids but strip any unverified numeric claims.
+            approved_fleet = [
+                {
+                    **{k: v for k, v in m.items() if k != "quality_score"},
+                    "quality_score": None,
+                    "status": "UNVERIFIED",
+                    "source": "deterministic_kernel",
+                    "score_verified": False,
+                }
+                if isinstance(m, dict) else m
+                for m in candidate_fleet
+            ]
 
         elapsed = round(time.time() - start_time, 3)
         return {

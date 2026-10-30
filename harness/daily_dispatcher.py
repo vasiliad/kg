@@ -27,8 +27,14 @@ from harness.disk_guard import DiskGuard
 from harness.state_manager import StateManager
 from harness.api_healthcheck import APIHealthChecker
 from harness.minimax_executor import MiniMaxExecutor
+from harness import runtime_settings
 
-RECIPIENT_EMAIL = os.getenv("DISPATCH_RECIPIENT_EMAIL", "ivanvasiliadi@gmail.com")
+# The recipient is resolved at send time (not import time) so a change made
+# from Telegram is picked up by the scheduled dispatcher.
+def resolve_recipient() -> str:
+    return runtime_settings.get_recipient_email()
+
+RECIPIENT_EMAIL = resolve_recipient()
 SENDER_EMAIL = os.getenv("GMAIL_SENDER", "")
 if not SENDER_EMAIL:
     print("[!] WARNING: GMAIL_SENDER not set! Email dispatch will be skipped.")
@@ -271,7 +277,7 @@ def build_ai_news_digest_email() -> Dict[str, str]:
             </div>
 
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 32px; font-size: 12px; color: #94a3b8; text-align: center;">
-                Синтез выполнен за {elapsed}с • Полные немодифицированные данные Keenable • {SENDER_EMAIL or 'sender-not-configured'} → {RECIPIENT_EMAIL}
+                Синтез выполнен за {elapsed}с • Полные немодифицированные данные Keenable • {SENDER_EMAIL or 'sender-not-configured'} → {resolve_recipient() or 'recipient-not-configured'}
             </div>
         </div>
     </body>
@@ -289,6 +295,14 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
     sender = EmailSender()
     results = {}
 
+    # Resolved at send time so a recipient changed from Telegram is honoured
+    # by the scheduled dispatch, not just by manual checks.
+    recipient = resolve_recipient()
+    if not recipient:
+        print("[!] WARNING: no dispatch recipient configured (DISPATCH_RECIPIENT_EMAIL unset).")
+    else:
+        print(f"[*] Dispatch recipient: {recipient}")
+
     # 1. Email 1: Проверка связи (Health & Incidents)
     if not news_only:
         print("\n--- GENERATING EMAIL 1: Проверка связи ---")
@@ -298,7 +312,7 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
             results["health_report"] = {"status": "DRY_RUN_OK", "subject": health_mail["subject"]}
         else:
             res1 = sender.send_email(
-                recipient_email=RECIPIENT_EMAIL,
+                recipient_email=recipient,
                 subject=health_mail["subject"],
                 html_content=health_mail["html"],
                 plain_text_content=health_mail["plain"]
@@ -315,7 +329,7 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
                 results["news_digest"] = {"status": "DRY_RUN_OK", "subject": news_mail["subject"]}
             else:
                 res2 = sender.send_email(
-                    recipient_email=RECIPIENT_EMAIL,
+                    recipient_email=recipient,
                     subject=news_mail["subject"],
                     html_content=news_mail["html"],
                     plain_text_content=news_mail["plain"]

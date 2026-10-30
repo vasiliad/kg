@@ -22,6 +22,7 @@ git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
 
 STATE_FILES=(
   "data/.bot_sessions.json"
+  "data/.bot_settings.json"
   "data/telegram_history.txt"
   "active_models.json"
   "nim_history.log"

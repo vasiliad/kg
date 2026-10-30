@@ -21,12 +21,15 @@ tactical_nim:
   max_output_tokens: 131072
   rate_limit_rpm: 30
   benchmark_min_score: 80.0
+  # Live catalogue ids verified against /v1/models on 2026-10-30 (85 models).
+  # The scanner resolves supplier-side renames automatically, so a stale id
+  # here is corrected at runtime instead of silently breaking the fleet.
   target_model_keywords:
-    - minimax/minimax-m3.1-flash
-    - zhipu/glm-5.3-flash
+    - minimaxai/minimax-m3.1-flash
+    - z-ai/glm-5.3-flash
     - deepseek-ai/deepseek-v4.1-flash
-    - nvidia/550b-ultra
-    - stepfun/step-5-preview
+    - nvidia/nemotron-3-ultra-550b-a55b
+    - stepfun-ai/step-5-preview
 
 memory_engine:
   enabled: true

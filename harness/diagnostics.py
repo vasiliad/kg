@@ -150,8 +150,7 @@ def check_github_state() -> Dict[str, Any]:
     _hdr("[4] State persistence (repository files)")
     checks = {
         "data/.bot_sessions.json": "authorised chats (bot login survives restarts)",
-        "data/telegram_history.txt": "conversation log",
-        "data/.memory_vault.json": "semantic memory vault",
+        "data/telegram_history.txt": "conversation log (source of truth for memory)",
         "active_models.json": "active fleet state",
     }
     out: Dict[str, Any] = {}
@@ -164,6 +163,17 @@ def check_github_state() -> Dict[str, Any]:
         else:
             print(f"  [-] {rel} - MISSING ({desc})")
             out[rel] = None
+
+    # The semantic index is derived from the conversation log at startup, so its
+    # absence on a fresh runner is expected, not a fault.
+    vault = PROJECT_ROOT / "data" / ".memory_vault.json"
+    if vault.exists():
+        size = vault.stat().st_size
+        print(f"  [+] data/.memory_vault.json - {size} bytes (derived semantic index, rebuilt on demand)")
+        out["data/.memory_vault.json"] = size
+    else:
+        print("  [i] data/.memory_vault.json - absent (derived cache; rebuilt from the log on startup)")
+        out["data/.memory_vault.json"] = None
     return {"ok": True, "files": out}
 
 

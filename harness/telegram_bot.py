@@ -50,6 +50,7 @@ from harness.minimax_executor import MiniMaxExecutor
 from harness.sovereign_cpu_engine import SovereignCPUEngine
 from harness.memory_engine import MemoryEngine
 from harness.tools import AgentToolbox
+from harness import runtime_settings
 
 class HarnessTelegramBot:
     def __init__(self, bot_token: Optional[str] = None):
@@ -59,8 +60,11 @@ class HarnessTelegramBot:
         self.keenable_key = os.getenv("KEENABLE_API_KEY", "")
         
         # Password protection configuration.
-        # TELEGRAM_BOT_PASSWORD overrides the built-in default (arabyan3G).
-        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "arabyan3G").strip()
+        # The passphrase lives only in the GitHub secret TELEGRAM_BOT_PASSWORD
+        # (and optionally .env for local runs). This repository is public, so
+        # no default is embedded in the source: an unset passphrase means the
+        # bot rejects every connection.
+        self.bot_password = os.getenv("TELEGRAM_BOT_PASSWORD", "").strip()
         if not self.bot_password:
             print("[!] WARNING: TELEGRAM_BOT_PASSWORD is empty! Bot will reject all connections.")
         # Sessions live in data/ so they can be persisted between GitHub Actions
@@ -357,7 +361,7 @@ class HarnessTelegramBot:
 
         mail = build_health_report_email()
         sender = EmailSender()
-        recipient = os.getenv("DISPATCH_RECIPIENT_EMAIL", "ivanvasiliadi@gmail.com")
+        recipient = runtime_settings.get_recipient_email()
         res = sender.send_email(
             recipient_email=recipient,
             subject=mail["subject"],
@@ -376,32 +380,14 @@ class HarnessTelegramBot:
         if "@" not in new_email or "." not in new_email.split("@")[-1]:
             self.send_message(chat_id, "[-] Неверный формат email. Пример: user@example.com")
             return
-        
-        # Update .env file (persists across restarts)
-        env_path = PROJECT_ROOT / ".env"
+
         try:
-            lines = []
-            if env_path.exists():
-                with open(env_path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-            
-            # Update or add DISPATCH_RECIPIENT_EMAIL
-            found = False
-            for i, line in enumerate(lines):
-                if line.startswith("DISPATCH_RECIPIENT_EMAIL="):
-                    lines[i] = f"DISPATCH_RECIPIENT_EMAIL={new_email}\n"
-                    found = True
-                    break
-            if not found:
-                lines.append(f"DISPATCH_RECIPIENT_EMAIL={new_email}\n")
-            
-            with open(env_path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-            
-            # Also update current process env
-            os.environ["DISPATCH_RECIPIENT_EMAIL"] = new_email
-            
-            self.send_message(chat_id, f"✅ Email для отчётов обновлён: <b>{new_email}</b>\n\nСледующая ежедневная рассылка (12:00 НСК) и ручная проверка почты пойдут на этот адрес.", parse_mode="HTML")
+            # Persisted outside .env: GitHub secrets are frozen at job start and
+            # .env is gitignored, so either would lose the change on the next
+            # runner restart. The daemon commits this file back to the repo.
+            runtime_settings.set_setting("DISPATCH_RECIPIENT_EMAIL", new_email)
+
+            self.send_message(chat_id, f"✅ Email для отчётов обновлён: <b>{new_email}</b>\n\nСледующая ежедневная рассылка (12:00 НСК) и ручная проверка почты пойдут на этот адрес. Изменение сохранено и переживёт перезапуск.", parse_mode="HTML")
             print(f"[+] Dispatch recipient email changed to: {new_email}")
         except Exception as e:
             self.send_message(chat_id, f"[-] Ошибка сохранения: {e}")
@@ -478,6 +464,7 @@ class HarnessTelegramBot:
 
         # 4. Standard Commands & Buttons
         if text in ["/start", "/help", "ℹ️ Справка"]:
+            recipient = runtime_settings.get_recipient_email("configured-recipient")
             welcome = (
                 "👋 <b>Добро пожаловать в Интерактивный Штаб Автономного Комплекса!</b>\n\n"
                 "Вы можете управлять дежурными моделями, запрашивать исследования и мониторить систему прямо отсюда.\n\n"
@@ -486,9 +473,9 @@ class HarnessTelegramBot:
                 "• <b>👑 Запрос Арбитру</b> — прямое обращение к Верховному арбитру (Qwen2.5-1.5B CPU).\n"
                 "• <b>🚀 Флот моделей</b> — список 5 утвержденных моделей NIM.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
-"• <b>📧 Проверка почты</b> — отправка отчета здоровья на {os.getenv('DISPATCH_RECIPIENT_EMAIL', 'configured-recipient')}.\n"
-"• <b>📝 Сменить email</b> — изменить получателя ежедневных отчётов.\n"
-"• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
+                f"• <b>📧 Проверка почты</b> — отправка отчета здоровья на {recipient}.\n"
+                "• <b>📝 Сменить email</b> — изменить получателя ежедневных отчётов.\n"
+                "• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
                 "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурные модели сразу приступят к решению с вечной памятью!</i>"
             )
             self.send_message(chat_id, welcome, parse_mode="HTML")
@@ -504,7 +491,7 @@ class HarnessTelegramBot:
             self.handle_email_dispatch(chat_id)
         elif text in ["/setemail", "📝 Сменить email"]:
             self.user_states[chat_id] = "awaiting_email_change"
-            current = os.getenv("DISPATCH_RECIPIENT_EMAIL", "ivanvasiliadi@gmail.com")
+            current = runtime_settings.get_recipient_email("не задан")
             self.send_message(chat_id, f"📝 <b>Текущий email для отчётов:</b> <code>{current}</code>\n\nВведите новый email-адрес получателя:", parse_mode="HTML")
         elif text in ["/search", "🌐 Поиск Keenable"]:
             self.user_states[chat_id] = "awaiting_search_query"
@@ -538,6 +525,14 @@ class HarnessTelegramBot:
         print("=" * 72)
         print(f"🤖 TELEGRAM BOT ACTIVATED: @{bot_username}")
         print(f"[*] Password protection: ACTIVE (Passphrase set)")
+
+        # The runner filesystem is wiped between jobs, so the semantic index is
+        # re-derived from the durable conversation log before serving messages.
+        try:
+            self.memory_engine.ensure_vault()
+        except Exception as e:
+            print(f"[!] Memory index warmup skipped: {e}")
+
         print(f"[*] Polling Telegram updates... Press Ctrl+C to terminate.")
         print("=" * 72)
 

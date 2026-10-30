@@ -31,8 +31,23 @@ class APIHealthChecker:
                 return {"valid": False, "status_code": 401, "message": "ROTATION ALERT: Key revoked or expired (401 Unauthorized)!"}
             elif res.status_code == 403:
                 return {"valid": False, "status_code": 403, "message": "FORBIDDEN: Key lacks permissions for this endpoint (403 Forbidden)."}
+            elif res.status_code == 451:
+                return {
+                    "valid": False,
+                    "status_code": 451,
+                    "message": (
+                        "REGION BLOCKED (451): the key is fine but NVIDIA refuses this runner's region. "
+                        "Move the workload to another region - the key does NOT need rotation."
+                    ),
+                    "rotation_required": False,
+                }
             else:
-                return {"valid": False, "status_code": res.status_code, "message": f"Unexpected response: {res.text}"}
+                return {
+                    "valid": False,
+                    "status_code": res.status_code,
+                    "message": f"Unexpected response: {res.text}",
+                    "rotation_required": True,
+                }
         except Exception as e:
             return {"valid": False, "status_code": 0, "message": f"Connection error: {e}"}
 
