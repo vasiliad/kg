@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-30T06:52:37.220189+00:00",
+  "timestamp": "2026-10-30T07:50:51.507105+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -109,8 +109,8 @@
     "files": {
       "data/.bot_sessions.json": null,
       "data/telegram_history.txt": 5098,
-      "data/.memory_vault.json": 697515,
-      "active_models.json": 1941
+      "active_models.json": 1941,
+      "data/.memory_vault.json": null
     }
   },
   "credentials": {
