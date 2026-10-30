@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-30T07:50:51.507105+00:00",
+  "timestamp": "2026-10-30T17:58:53.232917+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -89,12 +89,28 @@
       "z-ai/glm-5.3-flash",
       "zyphra/zamba2-7b-instruct"
     ],
-    "missing_models": [
-      "zhipu/glm-5.3-flash",
-      "nvidia/550b-ultra",
-      "stepfun/step-5-preview",
-      "Qwen/Qwen2.5-1.5B-Instruct"
-    ]
+    "id_resolution": {
+      "resolved": {
+        "minimaxai/minimax-m3.1-flash": "minimaxai/minimax-m3.1-flash",
+        "zhipu/glm-5.3-flash": "z-ai/glm-5.3-flash",
+        "z-ai/glm-5.3-flash": "z-ai/glm-5.3-flash",
+        "nvidia/550b-ultra": "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3-ultra-550b-a55b": "nvidia/nemotron-3-ultra-550b-a55b",
+        "stepfun/step-5-preview": "stepfun-ai/step-5-preview",
+        "stepfun-ai/step-5-preview": "stepfun-ai/step-5-preview",
+        "deepseek-ai/deepseek-v4.1-flash": "deepseek-ai/deepseek-v4.1-flash",
+        "nvidia/nemotron-3.5-embed-8b": "nvidia/nemotron-3.5-embed-8b",
+        "nvidia/nemotron-3.5-embed-1b": "nvidia/nemotron-3.5-embed-1b"
+      },
+      "renamed": {
+        "zhipu/glm-5.3-flash": "z-ai/glm-5.3-flash",
+        "nvidia/550b-ultra": "nvidia/nemotron-3-ultra-550b-a55b",
+        "stepfun/step-5-preview": "stepfun-ai/step-5-preview"
+      },
+      "missing": [],
+      "live_count": 85
+    },
+    "missing_models": []
   },
   "keenable": {
     "ok": false,
@@ -107,9 +123,9 @@
   "state": {
     "ok": true,
     "files": {
-      "data/.bot_sessions.json": null,
-      "data/telegram_history.txt": 5098,
-      "active_models.json": 1941,
+      "data/.bot_sessions.json": 45,
+      "data/telegram_history.txt": 7603,
+      "active_models.json": 6957,
       "data/.memory_vault.json": null
     }
   },
