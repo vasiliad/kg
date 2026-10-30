@@ -25,6 +25,7 @@ STATE_FILES=(
   "data/.bot_settings.json"
   "data/telegram_history.txt"
   "active_models.json"
+  "data/fleet_report.json"
   "nim_history.log"
 )
 

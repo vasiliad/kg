@@ -23,6 +23,7 @@ CONFLICT_FILES=(
   "data/telegram_history.txt"
   "data/.bot_sessions.json"
   "data/.bot_settings.json"
+  "data/fleet_report.json"
 )
 
 git config --global user.name "vasiliad"

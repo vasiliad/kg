@@ -16,7 +16,10 @@ VERIFICATION_TASKS: List[Dict[str, Any]] = [
             "What is the exact probability that both balls are of different colors? "
             "Show your step-by-step arithmetic and give the final reduced fraction."
         ),
-        "expected_keywords": ["fraction", "probability", "33/66", "19/22", "different colors"]
+        "expected_keywords": ["47/66", "probability", "different colors"]
+        # Math check (the old seed listed 33/66 and 19/22 — both WRONG):
+        # total pairs C(12,2)=66; different-colour pairs 3*4+3*5+4*5=47
+        # -> the only correct reduced fraction is 47/66.
     },
     {
         "name": "code_architecture",

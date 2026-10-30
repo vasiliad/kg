@@ -21,15 +21,26 @@ tactical_nim:
   max_output_tokens: 131072
   rate_limit_rpm: 30
   benchmark_min_score: 80.0
-  # Live catalogue ids verified against /v1/models on 2026-10-30 (85 models).
-  # The scanner resolves supplier-side renames automatically, so a stale id
-  # here is corrected at runtime instead of silently breaking the fleet.
+  # SEED ONLY: the starting point the tuner verifies first. The duty roster
+  # itself is chosen by live measurement (harness/fleet_tuner.py), not here.
   target_model_keywords:
     - minimaxai/minimax-m3.1-flash
     - z-ai/glm-5.3-flash
     - deepseek-ai/deepseek-v4.1-flash
     - nvidia/nemotron-3-ultra-550b-a55b
     - stepfun-ai/step-5-preview
+
+fleet_tuner:
+  # Autonomous duty-team selection policy. Model ids are NOT listed here on
+  # purpose: the tuner discovers them in the live catalogue and measures them
+  # (math / code / JSON probes + latency + parameter sweep). These knobs cap
+  # the probe budget and define the approval thresholds.
+  max_candidates: 14        # pinged each cycle (30 RPM budget)
+  quality_candidates: 6     # get the full objective probe set
+  min_score: 55.0           # below this a model is not duty-eligible
+  fast_latency_cap_sec: 12.0
+  max_fleet_size: 5
+  param_sweep: true         # sampling parameters chosen by measurement
 
 memory_engine:
   enabled: true

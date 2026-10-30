@@ -63,7 +63,15 @@ class EmailSender:
         # Build message
         msg = MIMEMultipart("alternative")
         msg["Subject"] = Header(subject, "utf-8")
-        msg["From"] = f"DeepSeek Autonomous Harness <{self.sender_email}>"
+        # The signature is a runtime setting (data/.bot_settings.json), so the
+        # operator can change it from Telegram without touching the code and
+        # without a redeploy. Env GMAIL_SENDER_NAME overrides the default.
+        try:
+            from harness import runtime_settings
+            sender_name = runtime_settings.get_sender_name()
+        except Exception:
+            sender_name = os.getenv("GMAIL_SENDER_NAME", "Автономный комплекс KG")
+        msg["From"] = f"{sender_name} <{self.sender_email}>"
         msg["To"] = recipient_email
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid()

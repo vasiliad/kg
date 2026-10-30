@@ -177,7 +177,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             if not dry_run:
                 try:
                     _ensure_git_identity()
-                    subprocess.run(["git", "add", "active_models.json", "nim_history.log", "config.yaml"], check=False)
+                    subprocess.run(["git", "add", "active_models.json", "data/fleet_report.json", "nim_history.log", "config.yaml"], check=False)
                     subprocess.run(["git", "commit", "-m", f"chore(sovereign): migrate to CPU SLM {target_model} [Total API Blackout]"], check=False)
                     _push_state()
                 except Exception as e:
@@ -214,6 +214,42 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     if id_resolution.get("missing"):
         print(f"[!] {len(id_resolution['missing'])} tracked model(s) retired by the supplier.")
 
+    # Step 2c: The MEASURED duty fleet outranks the static seed. A tuner
+    # report younger than 24h is used as-is; a stale or missing one triggers
+    # a quick in-cycle re-tune. If both fail, the seeded fleet below remains
+    # the fallback — degraded, but never empty.
+    measured_fleet: List[Dict[str, Any]] = []
+    try:
+        from harness.fleet_tuner import FleetTuner
+        report_path = PROJECT_ROOT / "data" / "fleet_report.json"
+        fresh = False
+        if report_path.exists():
+            age_hours = (time.time() - report_path.stat().st_mtime) / 3600.0
+            fresh = age_hours < 24.0
+        current_state = state_mgr.load_local_state()
+        if fresh and current_state.get("fleet_source") == "live_probe" and current_state.get("active_fleet"):
+            measured_fleet = current_state["active_fleet"]
+            print(f"[+] Using the measured duty fleet ({len(measured_fleet)} models, report <24h old).")
+        else:
+            print("[+] Measured fleet missing or stale - running a quick live re-tune...")
+            tune_report = FleetTuner(api_key=nvidia_key, quick=True).run()
+            measured_fleet = tune_report.get("fleet") or []
+            print(f"[+] Quick re-tune produced {len(measured_fleet)} measured duty model(s).")
+    except Exception as e:
+        print(f"[!] Fleet tuner unavailable in this cycle: {e}")
+
+    # Fallback fleet: only used when neither the measured fleet nor the live
+    # ranking is available. Scores come from the seeded registry, so they are
+    # explicitly flagged as unverified instead of presented as measurements.
+    emergency_fleet = measured_fleet or (ranked_fleet[:5] if ranked_fleet else [
+        {"id": "minimaxai/minimax-m3.1-flash", "tier": "Ultra-Flash-Reasoning", "quality_score": 99.2, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "z-ai/glm-5.3-flash", "tier": "Ultra-Agentic-Code", "quality_score": 98.8, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "deepseek-ai/deepseek-v4.1-flash", "tier": "Ultra-Sparse-MTP", "quality_score": 98.5, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "stepfun-ai/step-5-preview", "tier": "Ultra-Multimodal-Preview", "quality_score": 96.0, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+        {"id": "nvidia/nemotron-3-ultra-550b-a55b", "tier": "Unranked / Experimental", "quality_score": None, "status": "UNRANKED", "source": "none", "score_verified": False}
+    ])
+    fleet_origin = "live_probe" if measured_fleet else ("static_seed" if ranked_fleet else "none")
+
     # Step 3: Web Research via Keenable (100% Unpruned)
     print("\n[STEP 3] Fetching latest LLM benchmarks & releases via Keenable...")
     executor = MiniMaxExecutor(nvidia_api_key=nvidia_key, keenable_api_key=keenable_key)
@@ -223,19 +259,31 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     task_prompt = (
         "You are acting as the Emergency Lead Systems Architect for the DeepSeek-TPU-NIM ecosystem.\n"
         "The primary TPU orchestrator is currently offline or queued. You are executing on emergency CPU fallback.\n"
+        "IMPORTANT: the duty roster has ALREADY been selected by live measurement "
+        "(ping latency + objective math/code/JSON probes). Do NOT invent models, do NOT "
+        "re-rank the fleet and do NOT assign scores of your own.\n"
         "Your task:\n"
-        "1. Analyze the catalog diff and current candidate fleet provided in context.\n"
-        "2. Validate which 5 models must be approved for the active fleet.\n"
-        "3. Specify exact recommended parameters (temperature, top_p, max_tokens) for each.\n"
-        "4. Issue an executive summary of system status and any required successor recommendations.\n"
+        "1. Analyze the catalog diff and the measured fleet provided in context.\n"
+        "2. Flag operational risks: retired ids, failed probes, single-vendor concentration.\n"
+        "3. Recommend successor actions if the measured fleet looks thin.\n"
+        "4. Issue an executive summary of system status.\n"
         "Format your answer with clear markdown headings."
     )
-    
+
     context_data = {
         "emergency_mode": True,
         "trigger_reason": reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "catalog_diff": catalog_diff,
+        "measured_fleet": [
+            {
+                "id": (m.get("id") if isinstance(m, dict) else str(m)),
+                "tier": (m.get("tier") if isinstance(m, dict) else ""),
+                "score": (m.get("quality_score") if isinstance(m, dict) else None),
+                "verified": (m.get("score_verified") if isinstance(m, dict) else False),
+            }
+            for m in emergency_fleet[:6]
+        ] if emergency_fleet else ranked_fleet[:5],
         "candidate_models": ranked_fleet[:5]
     }
 
@@ -255,17 +303,6 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     # Step 5: Update Active Models State
     print("\n[STEP 5] Updating active_models.json and nim_history.log...")
     now_iso = datetime.now(timezone.utc).isoformat()
-    
-    # Fallback fleet: only used when the live catalogue could not be scanned.
-    # Scores come from the seeded registry, so they are explicitly flagged as
-    # unverified instead of being presented as freshly measured benchmarks.
-    emergency_fleet = ranked_fleet[:5] if ranked_fleet else [
-        {"id": "minimaxai/minimax-m3.1-flash", "tier": "Ultra-Flash-Reasoning", "quality_score": 99.2, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "z-ai/glm-5.3-flash", "tier": "Ultra-Agentic-Code", "quality_score": 98.8, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "deepseek-ai/deepseek-v4.1-flash", "tier": "Ultra-Sparse-MTP", "quality_score": 98.5, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "stepfun-ai/step-5-preview", "tier": "Ultra-Multimodal-Preview", "quality_score": 96.0, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "nvidia/nemotron-3-ultra-550b-a55b", "tier": "Unranked / Experimental", "quality_score": None, "status": "UNRANKED", "source": "none", "score_verified": False}
-    ]
 
     new_state = {
         "timestamp": now_iso,
@@ -282,6 +319,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             "live_count": id_resolution.get("live_count", 0),
         },
         "active_fleet": emergency_fleet,
+        "fleet_source": fleet_origin,
         # Full catalogue snapshot: the next cycle diffs against this, so
         # "new models" means "appeared since the last scan" rather than
         # "not part of the selected fleet".
@@ -304,7 +342,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         print("\n[STEP 6] Syncing emergency updates to Git...")
         try:
             _ensure_git_identity()
-            subprocess.run(["git", "add", "active_models.json", "nim_history.log", "config.yaml"], check=False)
+            subprocess.run(["git", "add", "active_models.json", "data/fleet_report.json", "nim_history.log", "config.yaml"], check=False)
             commit_res = subprocess.run(
                 ["git", "commit", "-m", f"chore(emergency): autonomous fallback heartbeat update [{now_iso}]"],
                 capture_output=True,

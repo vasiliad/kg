@@ -154,13 +154,20 @@ class MiniMaxExecutor:
         enable_search: bool = True,
         max_tokens: int = 131072,
         temperature: float = 0.6,
-        top_p: float = 0.95
+        top_p: float = 0.95,
+        model_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Executes delegated task via streaming to prevent timeouts.
         Captures dual-stream: internal reasoning_content and final content.
         Supports full long-context budget from 128k (131,072) up to 256k (262,144).
+
+        `model_id` routes the call to any duty-team member measured by the
+        fleet tuner; the default stays the tactical executor MiniMax M3.1
+        Flash. A non-default model gets a neutral duty role instead of the
+        MiniMax identity block.
         """
+        target_model = (model_id or self.model_id).strip()
         start_time = time.time()
         citations = []
 
@@ -182,9 +189,15 @@ class MiniMaxExecutor:
                 search_text = "\n\n".join(full_items)
                 enriched_context += f"\n\n--- LIVE WEB FACTS (KEENABLE) ---\n{search_text}"
 
+        identity_block = (
+            f"You are {target_model}, a duty executor model of the Autonomous Complex "
+            "called by the keeper (the local CPU chief model).\n"
+            if target_model != self.model_id
+            else "You are MiniMax M3.1 Flash, the high-speed tactical execution agent in the Autonomous Complex.\n"
+        )
         system_prompt = (
-            "You are MiniMax M3.1 Flash, the high-speed tactical execution agent in the Autonomous Complex.\n\n"
-            "OPERATIONAL RUNTIME SPECIFICATIONS & SYSTEM MANIFEST:\n"
+            identity_block +
+            "\nOPERATIONAL RUNTIME SPECIFICATIONS & SYSTEM MANIFEST:\n"
             "- Architecture: Sovereign Dual-Tier Complex (100% independent, zero reliance on external compute queues).\n"
             "- Total Context Window: 256,000 tokens (Hard empirical ceiling: 262,144 tokens).\n"
             "- Generation Output Budget: Up to 128,000 tokens (131,072 tokens).\n"
@@ -218,7 +231,7 @@ class MiniMaxExecutor:
         effective_max_tokens = max(min(int(max_tokens), hard_ceiling), 2560)
 
         payload = {
-            "model": self.model_id,
+            "model": target_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
@@ -257,7 +270,7 @@ class MiniMaxExecutor:
                 code = resp.status_code if resp is not None else 0
                 return {
                     "status": "FAILED",
-                    "model": self.model_id,
+                    "model": target_model,
                     "error": f"HTTP {code}: {err}",
                     "elapsed_sec": round(time.time() - start_time, 2)
                 }
@@ -293,7 +306,7 @@ class MiniMaxExecutor:
 
             return {
                 "status": "SUCCESS",
-                "model": self.model_id,
+                "model": target_model,
                 "task": task_prompt,
                 "reasoning_trace": reasoning_str,
                 "content": content_str,
@@ -303,7 +316,7 @@ class MiniMaxExecutor:
         except Exception as e:
             return {
                 "status": "FAILED",
-                "model": self.model_id,
+                "model": target_model,
                 "task": task_prompt,
                 "error": str(e),
                 "elapsed_sec": round(time.time() - start_time, 2)

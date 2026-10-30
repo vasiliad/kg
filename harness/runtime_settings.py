@@ -24,6 +24,11 @@ from typing import Any, Dict, Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_FILE = PROJECT_ROOT / "data" / ".bot_settings.json"
 
+# The display name that appears in the "From:" field of every outgoing report.
+# It is a runtime setting, not a constant: the operator can change the
+# signature from Telegram, and the change has to survive runner recycling.
+DEFAULT_SENDER_NAME = "Автономный комплекс KG"
+
 
 def _read() -> Dict[str, Any]:
     """Reads the persisted runtime settings (never raises)."""
@@ -75,3 +80,21 @@ def all_settings() -> Dict[str, Any]:
 def get_recipient_email(default: str = "") -> str:
     """The address that daily reports are delivered to."""
     return get_setting("DISPATCH_RECIPIENT_EMAIL", default) or default
+
+
+def get_sender_name(default: str = DEFAULT_SENDER_NAME) -> str:
+    """The display name shown in the "From:" field of outgoing reports."""
+    return get_setting("GMAIL_SENDER_NAME", default) or default
+
+
+def set_sender_name(name: str) -> str:
+    """Persists a new sender signature (survives runner recycling)."""
+    clean = " ".join((name or "").split()).strip()
+    if not clean:
+        raise ValueError("Пустая подпись отправителя")
+    # Strip characters that would break the RFC 5322 header.
+    clean = clean.replace("<", "").replace(">", "").replace("\n", " ").replace("\r", " ")
+    if len(clean) > 60:
+        clean = clean[:60].strip()
+    set_setting("GMAIL_SENDER_NAME", clean)
+    return clean

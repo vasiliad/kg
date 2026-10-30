@@ -36,6 +36,7 @@ def resolve_recipient() -> str:
 
 RECIPIENT_EMAIL = resolve_recipient()
 SENDER_EMAIL = os.getenv("GMAIL_SENDER", "")
+SENDER_NAME = runtime_settings.get_sender_name()
 if not SENDER_EMAIL:
     print("[!] WARNING: GMAIL_SENDER not set! Email dispatch will be skipped.")
 
@@ -125,10 +126,19 @@ def build_health_report_email() -> Dict[str, str]:
     for idx, m in enumerate(active_fleet[:5], 1):
         m_id = m.get("id", "Unknown") if isinstance(m, dict) else str(m)
         tier = m.get("tier", "Standard") if isinstance(m, dict) else ""
-        score = m.get("quality_score", 95.0) if isinstance(m, dict) else ""
+        roles = m.get("roles") if isinstance(m, dict) else None
+        role_txt = f" | роли: {', '.join(roles)}" if roles else ""
+        # Honesty contract: a measured score says so; a seed score is marked
+        # unverified; a missing score is UNRANKED — never a fabricated number.
+        if isinstance(m, dict) and m.get("score_verified") and m.get("quality_score") is not None:
+            score_txt = f"{m['quality_score']} (живой замер)"
+        elif isinstance(m, dict) and m.get("quality_score") is not None:
+            score_txt = f"{m['quality_score']} (статический сид, не проверено)"
+        else:
+            score_txt = "UNRANKED"
         fleet_rows += f"""
         <li style="margin-bottom: 6px; font-size: 13px; color: #1e293b;">
-            <b>{idx}. {m_id}</b> <span style="color: #64748b;">({tier} | Оценка: {score})</span>
+            <b>{idx}. {m_id}</b> <span style="color: #64748b;">({tier}{role_txt} | Оценка: {score_txt})</span>
         </li>
         """
 
@@ -188,7 +198,7 @@ def build_health_report_email() -> Dict[str, str]:
             </div>
 
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 32px; font-size: 12px; color: #94a3b8; text-align: center;">
-                Автономный комплекс DeepSeek-TPU-NIM • Ежедневная рассылка 12:00 НСК • {SENDER_EMAIL or 'sender-not-configured'}
+                Автономный комплекс KG • Ежедневная рассылка 12:00 НСК • {SENDER_NAME} • {SENDER_EMAIL or 'sender-not-configured'}
             </div>
         </div>
     </body>
@@ -277,7 +287,7 @@ def build_ai_news_digest_email() -> Dict[str, str]:
             </div>
 
             <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 32px; font-size: 12px; color: #94a3b8; text-align: center;">
-                Синтез выполнен за {elapsed}с • Полные немодифицированные данные Keenable • {SENDER_EMAIL or 'sender-not-configured'} → {resolve_recipient() or 'recipient-not-configured'}
+                Синтез выполнен за {elapsed}с • Полные немодифицированные данные Keenable • {SENDER_NAME} <{SENDER_EMAIL or 'sender-not-configured'}> → {resolve_recipient() or 'recipient-not-configured'}
             </div>
         </div>
     </body>

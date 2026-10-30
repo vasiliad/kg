@@ -44,4 +44,8 @@ jobs:
           # The sovereign neural tier downloads multiple GB; the deterministic
           # kernel is the fast, dependency-free path exercised in CI.
           SOVEREIGN_FORCE_DETERMINISTIC: '1'
-        run: python tests/test_eternal_memory_suite.py
+        run: |
+          echo "=== Resilience & Honesty stress suite (offline) ==="
+          python tests/test_resilience_suite.py
+          echo "=== Eternal memory & runtime suite (live providers) ==="
+          python tests/test_eternal_memory_suite.py

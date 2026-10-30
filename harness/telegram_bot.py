@@ -159,10 +159,10 @@ class HarnessTelegramBot:
         """Builds interactive reply keyboard with quick-access buttons."""
         return {
             "keyboard": [
-                [{"text": "📡 Статус системы"}, {"text": "🚀 Флот моделей"}],
-                [{"text": "👑 Запрос Арбитру"}, {"text": "🌐 Поиск Keenable"}],
-                [{"text": "📧 Проверка почты"}, {"text": "📝 Сменить email"}],
-                [{"text": "🔒 Выход (/logout)"}]
+                [{"text": "📡 Статус системы"}, {"text": "🧑‍💼 Состав команды"}],
+                [{"text": "🔄 Обновить флот"}, {"text": "👑 Запрос Арбитру"}],
+                [{"text": "🌐 Поиск Keenable"}, {"text": "📧 Проверка почты"}],
+                [{"text": "📝 Сменить email"}, {"text": "🔒 Выход (/logout)"}]
             ],
             "resize_keyboard": True,
             "is_persistent": True
@@ -229,7 +229,8 @@ class HarnessTelegramBot:
         report = (
             "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n"
             f"👑 <b>Верховный арбитр (CPU):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct')}</code>\n"
-            "⚡ <b>Тактический исполнитель:</b> <code>MiniMax M3.1 Flash (256k окно / 128k ответ)</code>\n"
+            f"🧑‍💼 <b>Дежурная команда:</b> {len(state.get('active_fleet', []) or [])} моделей, источник: <code>{state.get('fleet_source', 'статический сид')}</code>\n"
+            "⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n"
             "🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n"
             f"🔑 <b>NVIDIA NIM API:</b> {key_res.get('message')} (HTTP {key_res.get('status_code', 0)})\n"
             f"💾 <b>Дисковое пространство:</b> {disk.get('free_gb')} ГБ свободно ({disk.get('percent_used')}% занято)\n"
@@ -241,20 +242,51 @@ class HarnessTelegramBot:
         self.send_message(chat_id, report, parse_mode="HTML")
 
     def handle_fleet_command(self, chat_id: int) -> None:
-        """Handles /fleet command."""
+        """Handles the team roster command — who serves and why."""
         self.send_chat_action(chat_id, "typing")
-        state = self.state_mgr.load_local_state()
-        fleet = state.get("active_fleet", [])
+        from harness.duty_team import DutyTeam
+        self.send_message(chat_id, DutyTeam().format_roster(), parse_mode="HTML")
 
-        lines = ["🚀 <b>АКТИВНЫЙ БОЕВОЙ ФЛОТ МОДЕЛЕЙ:</b>\n"]
-        for idx, m in enumerate(fleet[:5], 1):
-            m_id = m.get("id", "Unknown") if isinstance(m, dict) else str(m)
-            tier = m.get("tier", "Standard") if isinstance(m, dict) else ""
-            score = m.get("quality_score", "N/A") if isinstance(m, dict) else ""
-            status = m.get("status", "ACTIVE") if isinstance(m, dict) else ""
-            lines.append(f"<b>{idx}. {m_id}</b>\n   • Категория: <code>{tier}</code>\n   • Рейтинг качества: <b>{score}</b> | Статус: {status}\n")
-
-        self.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
+    def handle_fleet_refresh(self, chat_id: int) -> None:
+        """
+        Runs the autonomous fleet tuner in-process: live probes of the NIM
+        catalogue, measured scores, parameter sweep, new duty roster. Takes
+        several minutes; the handler thread keeps polling responsive.
+        """
+        self.send_message(
+            chat_id,
+            "🔄 <i>Запускаю живой замер каталога NIM: пинг кандидатов, объективные "
+            "проверки (математика / код / JSON), свип параметров. Это займёт "
+            "несколько минут — доложу по готовности.</i>",
+            parse_mode="HTML",
+        )
+        try:
+            from harness.fleet_tuner import FleetTuner
+            tuner = FleetTuner(api_key=self.nvidia_key)
+            report = tuner.run()
+            fleet = report.get("fleet") or []
+            if fleet:
+                lines = ["✅ <b>ФЛОТ ПЕРЕОБРАН ПО ЖИВОМУ ЗАМЕРУ</b>\n"]
+                for e in fleet:
+                    roles = ", ".join(e.get("roles", [])) or e.get("tier", "")
+                    lat = (e.get("measured") or {}).get("latency_sec")
+                    lat_txt = f", {lat}с" if lat else ""
+                    lines.append(
+                        f"• <b>{e['id']}</b> — {roles}\n"
+                        f"   балл <b>{e['quality_score']}</b> (замер{lat_txt}), статус: {e.get('status')}"
+                    )
+                lines.append("\nХранитель теперь распределяет задачи по этому составу.")
+                self.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
+            else:
+                reason = report.get("status", "неизвестно")
+                self.send_message(
+                    chat_id,
+                    f"[-] Замер не дал утверждённого состава (причина: {reason}). "
+                    "Предыдущий флот сохранён без изменений — команда продолжает работу.",
+                    parse_mode="HTML",
+                )
+        except Exception as e:
+            self.send_message(chat_id, f"[-] Ошибка замера флота: {html.escape(str(e))}\nПредыдущий флот сохранён.")
 
     def handle_keenable_search(self, chat_id: int, query: str) -> None:
         """Handles /search command."""
@@ -335,7 +367,13 @@ class HarnessTelegramBot:
         self.send_message(chat_id, reply, parse_mode="HTML")
 
     def handle_minimax_task(self, chat_id: int, prompt: str, enable_search: bool = False) -> None:
-        """Delegates tasks to MiniMax M3.1 Flash with eternal memory recall and CoT."""
+        """
+        Free-form task handling, the architecture the operator asked for:
+        the keeper (local CPU chief) plans the dispatch, two or three duty
+        models from the measured fleet answer in parallel, the keeper
+        synthesises the verdict. Every reply states WHO answered and on what
+        measured evidence.
+        """
         # 1. Check if user is asking the Arbiter / Boss / Supervisor
         clean_prompt = prompt.lower().strip()
         arbiter_triggers = ["начальник", "начальнику", "начальника", "арбитр", "арбитру", "арбитра", "шеф", "босс", "/arbiter"]
@@ -343,7 +381,7 @@ class HarnessTelegramBot:
             return self.handle_arbiter_query(chat_id, prompt)
 
         self.send_chat_action(chat_id, "typing")
-        self.send_message(chat_id, "🧠 <i>Передаю задачу боевой модели MiniMax M3.1 Flash...</i>", parse_mode="HTML")
+        self.send_message(chat_id, "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>", parse_mode="HTML")
 
         # 2. Append user prompt to eternal memory log
         self.memory_engine.append_message("user", prompt, {"chat_id": chat_id})
@@ -352,39 +390,116 @@ class HarnessTelegramBot:
         search_prefixes = ["найди в интернете:", "найди в интернете ", "поиск в интернете:", "/search "]
         needs_search = enable_search or any(clean_prompt.startswith(p) for p in search_prefixes)
 
-        # 4. Build semantic memory envelope from Nemotron vault + recent turns
+        # 4. Verified system facts + semantic memory envelope
         memory_envelope = self.memory_engine.build_memory_envelope(prompt)
-
-        # 4b. Attach the verified system facts (operational log, active fleet,
-        # last diagnostics). Without them the model answers questions about
-        # what the complex actually did from the chat log alone, which is how
-        # it ended up inventing an operator role that does not exist.
         operational = operational_context.build_operational_context(
             query=prompt,
             event_memory=self.event_memory,
         )
+        task_context = f"{operational}\n\n{memory_envelope}"
 
-        start_t = time.time()
-        res = self.executor.execute_task(
-            task_prompt=prompt,
-            context=f"{operational}\n\n{memory_envelope}",
-            enable_search=needs_search,
-            max_tokens=32768,
-            temperature=0.6
-        )
-        elapsed = res.get("elapsed_sec", round(time.time() - start_t, 1))
-        content = res.get("content", "Модель не сформировала ответ.")
-        citations = res.get("citations", [])
+        # 5. The keeper's dispatch plan over the measured duty roster.
+        from harness.duty_team import DutyTeam
+        plan = DutyTeam().dispatch(prompt, max_calls=3)
+        calls = plan.get("calls") or []
 
-        # 5. Append model output to eternal memory log
-        self.memory_engine.append_message("minimax", content, {"chat_id": chat_id})
+        answers: List[Dict[str, Any]] = []
+        if calls:
+            def run_call(idx: int, call: Dict[str, Any]) -> Dict[str, Any]:
+                params = call.get("params") or {}
+                res = self.executor.execute_task(
+                    task_prompt=prompt,
+                    context=task_context,
+                    enable_search=(needs_search and idx == 0),
+                    max_tokens=16384 if idx == 0 else 8192,
+                    temperature=float(params.get("temperature", 0.6)),
+                    top_p=float(params.get("top_p", 0.9)),
+                    model_id=call["id"],
+                )
+                return {
+                    "model": call["id"],
+                    "role": call.get("primary_role", ""),
+                    "score": call.get("score"),
+                    "verified": call.get("verified"),
+                    "ok": res.get("status") == "SUCCESS" and bool(res.get("content")),
+                    "status": res.get("status"),
+                    "elapsed": res.get("elapsed_sec"),
+                    "content": res.get("content", ""),
+                }
 
-        citations_text = ""
-        if citations and needs_search:
-            citations_text = "\n\n🔗 <b>Использованные источники:</b>\n" + "\n".join(f"• {c}" for c in citations[:5])
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(3, len(calls)), thread_name_prefix="duty") as pool:
+                futures = [pool.submit(run_call, i, c) for i, c in enumerate(calls)]
+                for fut in futures:
+                    try:
+                        answers.append(fut.result())
+                    except Exception as e:
+                        answers.append({"model": "?", "ok": False, "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
 
-        reply = f"🤖 <b>Ответ MiniMax M3.1 Flash ({elapsed}с):</b>\n\n{html.escape(content)}{citations_text}"
-        self.send_message(chat_id, reply, parse_mode="HTML")
+        # 6. The keeper's synthesis: the local chief reads the duty answers
+        #    and issues the verdict — with zero network dependency.
+        keeper_verdict = ""
+        try:
+            succeeded = [a for a in answers if a.get("ok")]
+            keeper_context = {
+                "task": prompt,
+                "dispatch_rationale": plan.get("rationale", ""),
+                "duty_answers": [
+                    {"model": a["model"], "role": a.get("role", ""), "answer": a["content"][:1200]}
+                    for a in succeeded
+                ],
+                "duty_failures": [a["model"] for a in answers if not a.get("ok")],
+            }
+            arb_res = self.arbiter_engine.execute_sovereign_mission(
+                task_description="Сведи ответы дежурных моделей в краткий вердикт для командира.",
+                context=keeper_context,
+            )
+            keeper_verdict = (
+                arb_res.get("output")
+                or (arb_res.get("report") or {}).get("decision")
+                or ""
+            )
+        except Exception as e:
+            print(f"[!] Keeper synthesis skipped: {e}")
+
+        # 7. Persist duty answers into eternal memory (the event protocol).
+        for a in answers:
+            if a.get("ok"):
+                self.memory_engine.append_message(
+                    "duty", f"[{a['model']}] {a['content'][:800]}", {"chat_id": chat_id}
+                )
+
+        # 8. Compose the honest reply: who answered, on what evidence.
+        ok_answers = [a for a in answers if a.get("ok")]
+        if ok_answers:
+            parts = [f"🧑‍💼 <b>Хранитель:</b> <i>{html.escape(plan.get('rationale', ''))}</i>\n"]
+            for idx, a in enumerate(ok_answers):
+                role_txt = a.get("role") or "дежурный"
+                score_txt = f"{a['score']}" if a.get("score") is not None else "UNRANKED"
+                mark = "✅ замер" if a.get("verified") else "⚠️ сид"
+                header = "⚡ Основной ответ" if idx == 0 else "🔁 Альтернативное мнение"
+                body = a["content"] if idx == 0 else a["content"][:900] + ("…" if len(a["content"]) > 900 else "")
+                parts.append(
+                    f"\n{header} — <b>{html.escape(a['model'])}</b> "
+                    f"({role_txt}, балл {score_txt} {mark}, {a.get('elapsed', '?')}с):\n"
+                    f"{html.escape(body)}"
+                )
+            if keeper_verdict:
+                parts.append(
+                    f"\n👑 <b>Вердикт хранителя (локальный CPU, без сети):</b>\n"
+                    f"<blockquote>{html.escape(keeper_verdict[:700])}</blockquote>"
+                )
+            self.send_message(chat_id, "\n".join(parts), parse_mode="HTML")
+        else:
+            failed = ", ".join(a.get("model", "?") for a in answers) or "нет измеренных дежурных"
+            self.send_message(
+                chat_id,
+                "[-] <b>Ни одна дежурная модель не ответила.</b>\n"
+                f"Попытки: {html.escape(failed)}\n\n"
+                "Хранитель в строю, но сетевые модели недоступны или не измерены. "
+                "Нажмите «🔄 Обновить флот» — замер выберет работающие модели из живого каталога.",
+                parse_mode="HTML",
+            )
 
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""
@@ -405,6 +520,21 @@ class HarnessTelegramBot:
             self.send_message(chat_id, f"✅ Письмо «Проверка связи» успешно отправлено на <b>{recipient}</b>!", parse_mode="HTML")
         else:
             self.send_message(chat_id, f"[-] Ошибка отправки: {res.get('error') or res.get('message')}")
+
+    def handle_sender_change(self, chat_id: int, new_name: str) -> None:
+        """Updates the display name shown in the From: field of outgoing reports."""
+        try:
+            applied = runtime_settings.set_sender_name(new_name)
+            self.send_message(
+                chat_id,
+                f"✍️ <b>Подпись отправителя обновлена:</b> <code>{html.escape(applied)}</code>\n\n"
+                "Изменение сохранено и переживёт перезапуск раннера. "
+                "Следующие письма придут с этой подписью.",
+                parse_mode="HTML",
+            )
+            print(f"[+] Sender signature changed to: {applied}")
+        except Exception as e:
+            self.send_message(chat_id, f"[-] Ошибка сохранения подписи: {e}")
 
     def handle_email_change(self, chat_id: int, new_email: str) -> None:
         """Updates the recipient email for daily dispatches."""
@@ -494,6 +624,9 @@ class HarnessTelegramBot:
             elif state == "awaiting_email_change":
                 self.handle_email_change(chat_id, text)
                 return
+            elif state == "awaiting_sender_change":
+                self.handle_sender_change(chat_id, text)
+                return
 
         # 4. Standard Commands & Buttons
         if text in ["/start", "/help", "ℹ️ Справка"]:
@@ -503,11 +636,13 @@ class HarnessTelegramBot:
                 "Вы можете управлять дежурными моделями, запрашивать исследования и мониторить систему прямо отсюда.\n\n"
                 "📌 <b>Быстрые команды:</b>\n"
                 "• <b>📡 Статус системы</b> — проверка ключей, диска, режимов и квот.\n"
+                "• <b>🧑‍💼 Состав команды</b> — хранитель и дежурные модели с измеренными баллами.\n"
+                "• <b>🔄 Обновить флот</b> — живой замер каталога NIM и переотбор дежурных.\n"
                 "• <b>👑 Запрос Арбитру</b> — прямое обращение к Верховному арбитру (Qwen2.5-1.5B CPU).\n"
-                "• <b>🚀 Флот моделей</b> — список 5 утвержденных моделей NIM.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
                 f"• <b>📧 Проверка почты</b> — отправка отчета здоровья на {recipient}.\n"
                 "• <b>📝 Сменить email</b> — изменить получателя ежедневных отчётов.\n"
+                "• <b>✍️ Подпись отправителя</b> (/setsender) — изменить имя отправителя писем.\n"
                 "• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
                 "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурные модели сразу приступят к решению с вечной памятью!</i>"
             )
@@ -518,14 +653,20 @@ class HarnessTelegramBot:
             with self._state_lock:
                 self.user_states[chat_id] = "awaiting_arbiter_query"
             self.send_message(chat_id, "👑 <b>Введите вопрос или директиву для Верховного дежурного арбитра (Qwen2.5-1.5B CPU):</b>", parse_mode="HTML")
-        elif text in ["/fleet", "🚀 Флот моделей"]:
+        elif text in ["/fleet", "/team", "🧑‍💼 Состав команды"]:
             self.handle_fleet_command(chat_id)
+        elif text in ["/retune", "🔄 Обновить флот"]:
+            self.handle_fleet_refresh(chat_id)
         elif text in ["/email", "📧 Проверка почты"]:
             self.handle_email_dispatch(chat_id)
         elif text in ["/setemail", "📝 Сменить email"]:
             self.user_states[chat_id] = "awaiting_email_change"
             current = runtime_settings.get_recipient_email("не задан")
             self.send_message(chat_id, f"📝 <b>Текущий email для отчётов:</b> <code>{current}</code>\n\nВведите новый email-адрес получателя:", parse_mode="HTML")
+        elif text in ["/setsender", "✍️ Подпись отправителя"]:
+            self.user_states[chat_id] = "awaiting_sender_change"
+            current = runtime_settings.get_sender_name()
+            self.send_message(chat_id, f"✍️ <b>Текущая подпись отправителя:</b> <code>{html.escape(current)}</code>\n\nВведите новую подпись отправителя:", parse_mode="HTML")
         elif text in ["/search", "🌐 Поиск Keenable"]:
             self.user_states[chat_id] = "awaiting_search_query"
             self.send_message(chat_id, "🔍 Введите поисковый запрос для поиска через Keenable:")
