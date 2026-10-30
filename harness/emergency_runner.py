@@ -64,6 +64,16 @@ def should_trigger_emergency(config: Dict[str, Any], force: bool = False) -> (bo
     return False, "Sovereign complex is operational and state is up to date"
 
 
+def _ensure_git_identity() -> None:
+    """
+    A GitHub runner has no committer identity configured, so an unguarded
+    `git commit` fails with "Author identity unknown" — and with check=False
+    that failure is silent, meaning the state would never be persisted.
+    """
+    subprocess.run(["git", "config", "user.name", "vasiliad"], check=False)
+    subprocess.run(["git", "config", "user.email", "vasiliadi@users.noreply.github.com"], check=False)
+
+
 def _push_state() -> None:
     """
     Pushes the committed state through the shared race-safe sync helper.
@@ -166,6 +176,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             # 4. Commit and push
             if not dry_run:
                 try:
+                    _ensure_git_identity()
                     subprocess.run(["git", "add", "active_models.json", "nim_history.log", "config.yaml"], check=False)
                     subprocess.run(["git", "commit", "-m", f"chore(sovereign): migrate to CPU SLM {target_model} [Total API Blackout]"], check=False)
                     _push_state()
@@ -292,6 +303,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         # Step 6: Git Auto-Commit and Push
         print("\n[STEP 6] Syncing emergency updates to Git...")
         try:
+            _ensure_git_identity()
             subprocess.run(["git", "add", "active_models.json", "nim_history.log", "config.yaml"], check=False)
             commit_res = subprocess.run(
                 ["git", "commit", "-m", f"chore(emergency): autonomous fallback heartbeat update [{now_iso}]"],
@@ -299,7 +311,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
                 text=True,
                 check=False
             )
-            print(f"[*] Git commit: {commit_res.stdout.strip()}")
+            print(f"[*] Git commit: {commit_res.stdout.strip() or commit_res.stderr.strip()}")
             _push_state()
         except Exception as e:
             print(f"[!] Warning during git push: {e}")
