@@ -63,6 +63,25 @@ def should_trigger_emergency(config: Dict[str, Any], force: bool = False) -> (bo
 
     return False, "Sovereign complex is operational and state is up to date"
 
+
+def _push_state() -> None:
+    """
+    Pushes the committed state through the shared race-safe sync helper.
+
+    A plain `git push` is rejected whenever another cloud job (the bot
+    daemon, the diagnostics) pushed to main while this cycle was running.
+    The helper rebases and retries instead of losing the state.
+    """
+    sync_script = PROJECT_ROOT / "scripts" / "sync_state.sh"
+    try:
+        if sync_script.exists():
+            subprocess.run(["bash", str(sync_script)], check=False)
+        else:
+            subprocess.run(["git", "push", "origin", "main"], check=False)
+    except Exception as e:
+        print(f"[!] Warning during state push: {e}")
+
+
 def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> Dict[str, Any]:
     print("=" * 72)
     print("🚨 EMERGENCY SURVIVAL PROTOCOL: CPU/GITHUB AUTONOMOUS ORCHESTRATOR 🚨")
@@ -149,7 +168,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
                 try:
                     subprocess.run(["git", "add", "active_models.json", "nim_history.log", "config.yaml"], check=False)
                     subprocess.run(["git", "commit", "-m", f"chore(sovereign): migrate to CPU SLM {target_model} [Total API Blackout]"], check=False)
-                    subprocess.run(["git", "push", "origin", "main"], check=False)
+                    _push_state()
                 except Exception as e:
                     print(f"[!] Warning syncing sovereign state: {e}")
                 
@@ -252,6 +271,12 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             "live_count": id_resolution.get("live_count", 0),
         },
         "active_fleet": emergency_fleet,
+        # Full catalogue snapshot: the next cycle diffs against this, so
+        # "new models" means "appeared since the last scan" rather than
+        # "not part of the selected fleet".
+        "catalog_snapshot": sorted(
+            m.get("id") for m in all_models if isinstance(m, dict) and m.get("id")
+        ) if all_models else [],
         "last_updated": now_iso
     }
 
@@ -275,8 +300,7 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
                 check=False
             )
             print(f"[*] Git commit: {commit_res.stdout.strip()}")
-            push_res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True, check=False)
-            print(f"[*] Git push: {push_res.stdout.strip()} {push_res.stderr.strip()}")
+            _push_state()
         except Exception as e:
             print(f"[!] Warning during git push: {e}")
 

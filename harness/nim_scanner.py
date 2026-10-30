@@ -35,6 +35,14 @@ LEGACY_ID_FAMILY: Dict[str, str] = {
     "nvidia/nemotron-3.5-embed-1b": "embed1b",
 }
 
+# Models served locally (HuggingFace weights on the sovereign CPU tier).
+# They are not NIM catalogue entries, so they must never be reported as
+# "removed by the supplier".
+LOCAL_ONLY_MODEL_IDS: set = {
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+}
+
 
 def family_of(model_id: str) -> Optional[str]:
     """Best-effort family token for a model id (live or legacy)."""
@@ -138,15 +146,35 @@ class NIMScanner:
         - newly_added: models deployed since last scan
         - removed: models deprecated/taken down (e.g. full glm-5.3)
         - flagship_newcomers: new models with high-capability architecture markers
+
+        The comparison baseline is the full catalogue snapshot saved by the
+        previous cycle, so "new" means "appeared since the last scan" instead
+        of "not part of the selected fleet". Models that are served locally
+        (the sovereign CPU tier) are excluded: they are not NIM catalogue
+        entries and were never at risk of being retired by the supplier.
         """
         current_ids = {m.get("id") for m in current_models if m.get("id")}
         previous_ids = set()
-        
+
         try:
             with open(previous_state_path, "r", encoding="utf-8") as f:
                 state = json.load(f)
-                active_fleet = state.get("active_fleet", [])
-                previous_ids = {m.get("id") for m in active_fleet if isinstance(m, dict) and m.get("id")}
+                snapshot = state.get("catalog_snapshot") or []
+                if snapshot:
+                    previous_ids = {str(m) for m in snapshot}
+                else:
+                    active_fleet = state.get("active_fleet", [])
+                    previous_ids = {m.get("id") for m in active_fleet if isinstance(m, dict) and m.get("id")}
+        except Exception:
+            pass
+
+        previous_ids -= LOCAL_ONLY_MODEL_IDS
+
+        # A renamed id is not a retired model: the resolver maps it onto its
+        # live counterpart, so it must not be reported as removed.
+        try:
+            resolution = self.resolve_fleet_ids(current_models)
+            previous_ids -= set(resolution.get("renamed", {}).keys())
         except Exception:
             pass
 
