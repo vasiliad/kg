@@ -50,8 +50,10 @@ temp/
 *.log.old
 .telegram_sessions.json
 
-# Derived semantic memory index.
-# The durable source of truth is data/telegram_history.txt (committed); this
-# vector cache is rebuilt from it on every runner start, so it must never be
-# committed or the repository grows by ~37 KB per remembered message.
+# Derived semantic memory indexes.
+# The durable source of truth is data/telegram_history.txt (conversation) and
+# nim_history.log (events), both committed. These vector caches are rebuilt
+# from them on every runner start, so they must never be committed or the
+# repository grows by ~37 KB per remembered message.
 data/.memory_vault.json
+data/.event_vault.json

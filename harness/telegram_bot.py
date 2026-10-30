@@ -51,6 +51,7 @@ from harness.sovereign_cpu_engine import SovereignCPUEngine
 from harness.memory_engine import MemoryEngine
 from harness.tools import AgentToolbox
 from harness import runtime_settings
+from harness import operational_context
 
 class HarnessTelegramBot:
     def __init__(self, bot_token: Optional[str] = None):
@@ -78,6 +79,16 @@ class HarnessTelegramBot:
         self.executor = MiniMaxExecutor(nvidia_api_key=self.nvidia_key, keenable_api_key=self.keenable_key)
         self.arbiter_engine = SovereignCPUEngine()
         self.memory_engine = MemoryEngine(nvidia_api_key=self.nvidia_key)
+        # Event memory: the operational log (nim_history.log) indexed with the
+        # same protocol as the conversation, so the bot can recall what the
+        # complex actually did (dispatches, key checks, fleet changes) by
+        # meaning and not only by reading the log tail.
+        self.event_memory = MemoryEngine(
+            history_file=PROJECT_ROOT / "nim_history.log",
+            vault_file=PROJECT_ROOT / "data" / ".event_vault.json",
+            nvidia_api_key=self.nvidia_key,
+            log_format="events",
+        )
         self.user_states: Dict[int, str] = {} # chat_id -> awaiting_input_type
         self._state_lock = threading.Lock()
         self._stop = False
@@ -331,10 +342,19 @@ class HarnessTelegramBot:
         # 4. Build semantic memory envelope from Nemotron vault + recent turns
         memory_envelope = self.memory_engine.build_memory_envelope(prompt)
 
+        # 4b. Attach the verified system facts (operational log, active fleet,
+        # last diagnostics). Without them the model answers questions about
+        # what the complex actually did from the chat log alone, which is how
+        # it ended up inventing an operator role that does not exist.
+        operational = operational_context.build_operational_context(
+            query=prompt,
+            event_memory=self.event_memory,
+        )
+
         start_t = time.time()
         res = self.executor.execute_task(
             task_prompt=prompt,
-            context=memory_envelope,
+            context=f"{operational}\n\n{memory_envelope}",
             enable_search=needs_search,
             max_tokens=32768,
             temperature=0.6
@@ -526,12 +546,16 @@ class HarnessTelegramBot:
         print(f"🤖 TELEGRAM BOT ACTIVATED: @{bot_username}")
         print(f"[*] Password protection: ACTIVE (Passphrase set)")
 
-        # The runner filesystem is wiped between jobs, so the semantic index is
-        # re-derived from the durable conversation log before serving messages.
+        # The runner filesystem is wiped between jobs, so the semantic indexes
+        # are re-derived from the durable logs before serving messages.
         try:
             self.memory_engine.ensure_vault()
         except Exception as e:
             print(f"[!] Memory index warmup skipped: {e}")
+        try:
+            self.event_memory.ensure_vault(max_entries=300)
+        except Exception as e:
+            print(f"[!] Event index warmup skipped: {e}")
 
         print(f"[*] Polling Telegram updates... Press Ctrl+C to terminate.")
         print("=" * 72)

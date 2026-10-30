@@ -18,11 +18,12 @@ on:
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   dispatch-emails:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -52,5 +53,21 @@ jobs:
           elif [ "${{ inputs.news_only }}" = "true" ]; then
             FLAGS="--news-only"
           fi
-          
+
           python harness/daily_dispatcher.py $FLAGS
+
+      - name: Persist Dispatch Outcome
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add nim_history.log || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(dispatch): record report dispatch outcome [skip ci]"
+            echo "Dispatch outcome committed."
+          else
+            echo "No dispatch log changes."
+          fi
+
+          # Shared helper: rebases and retries, because the bot daemon, the
+          # heartbeat and the diagnostics push to the same branch concurrently.
+          bash scripts/sync_state.sh

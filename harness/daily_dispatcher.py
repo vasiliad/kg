@@ -286,6 +286,31 @@ def build_ai_news_digest_email() -> Dict[str, str]:
 
     return {"subject": subject, "html": html, "plain": content_markdown}
 
+def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
+    """
+    Records the outcome of a report dispatch in the operational log.
+
+    Without this record nobody — including the Command Center itself — can
+    answer whether the daily reports were actually sent. The wording is
+    natural language on purpose: the log is searched both semantically and
+    lexically, so "отчёты отправлены?" must match the record literally.
+    """
+    status = (result or {}).get("status", "UNKNOWN")
+    error = (result or {}).get("error") or (result or {}).get("message") or ""
+    detail = f" | причина={str(error)[:180]}" if error else ""
+    if status == "DELIVERED":
+        headline = "ОТЧЁТЫ ОТПРАВЛЕНЫ"
+    else:
+        headline = "ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ"
+    try:
+        StateManager().append_history_log(
+            f"{headline} | тип={label} | получатель={recipient or 'не задан'} | статус={status}{detail}"
+        )
+        print(f"[*] Dispatch logged: {label} -> {status} (recipient={recipient or 'unset'})")
+    except Exception as e:
+        print(f"[!] Could not log dispatch outcome: {e}")
+
+
 def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_only: bool = False) -> Dict[str, Any]:
     print("=" * 72)
     print("📬 STARTING DAILY 12:00 NOVT DISPATCH PIPELINE")
@@ -318,6 +343,7 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
                 plain_text_content=health_mail["plain"]
             )
             results["health_report"] = res1
+            _log_dispatch("Проверка связи", recipient, res1)
 
     # 2. Email 2: Ежедневный дайджест ИИ
     if not health_only:
@@ -335,9 +361,11 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
                     plain_text_content=news_mail["plain"]
                 )
                 results["news_digest"] = res2
+                _log_dispatch("Ежедневный дайджест ИИ", recipient, res2)
         except Exception as e:
             print(f"[-] Error generating news digest: {e}")
             results["news_digest"] = {"status": "ERROR", "error": str(e)}
+            _log_dispatch("Ежедневный дайджест ИИ", recipient, results["news_digest"])
 
     print("\n" + "=" * 72)
     print("✅ DAILY DISPATCH PIPELINE COMPLETE.")

@@ -47,8 +47,19 @@ class MemoryEngine:
         vault_file: Optional[Path] = None,
         nvidia_api_key: Optional[str] = None,
         model_name: str = "nvidia/nemotron-3.5-embed-8b",
-        backup_model: str = "nvidia/nemotron-3.5-embed-1b"
+        backup_model: str = "nvidia/nemotron-3.5-embed-1b",
+        log_format: str = "conversation"
     ):
+        """
+        log_format selects the durable log protocol:
+          - "conversation": blocks of "[timestamp] ROLE: text", separated by a
+            blank line (data/telegram_history.txt).
+          - "events": one "[timestamp] message" per line (nim_history.log).
+        Both formats feed the same semantic index and the same hybrid
+        retrieval, so operational events are remembered exactly like the
+        conversation is.
+        """
+        self.log_format = log_format if log_format in ("conversation", "events") else "conversation"
         self.history_file = history_file or (PROJECT_ROOT / "data" / "telegram_history.txt")
         self.vault_file = vault_file or (PROJECT_ROOT / "data" / ".memory_vault.json")
         self.history_file.parent.mkdir(parents=True, exist_ok=True)
@@ -264,9 +275,9 @@ class MemoryEngine:
 
     def _parse_history_blocks(self) -> List[Dict[str, Any]]:
         """
-        Parses the plain-text conversation log back into structured turns.
-        The log is the durable source of truth for memory; the semantic index
-        is a derived cache rebuilt from it.
+        Parses the durable plain-text log back into structured entries.
+        The log is the source of truth for memory; the semantic index is a
+        derived cache rebuilt from it.
         """
         if not self.history_file.exists():
             return []
@@ -277,21 +288,37 @@ class MemoryEngine:
         except Exception:
             return []
 
+        if self.log_format == "events":
+            raw_blocks = content.splitlines()
+        else:
+            raw_blocks = content.split("\n\n")
+
         blocks: List[Dict[str, Any]] = []
-        for raw in content.split("\n\n"):
+        for raw in raw_blocks:
             block = raw.strip()
             if not block:
                 continue
-            match = re.match(r"^\[(?P<ts>[^\]]+)\]\s+(?P<role>[A-Za-z_]+)\s*:\s*(?P<text>.*)$",
-                             block, re.DOTALL)
+            match = re.match(r"^\[(?P<ts>[^\]]+)\]\s*(?P<rest>.*)$", block, re.DOTALL)
             if not match:
                 continue
-            text = match.group("text").strip()
+            rest = match.group("rest").strip()
+            if not rest:
+                continue
+
+            if self.log_format == "events":
+                role, text = "event", rest
+            else:
+                role_match = re.match(r"^(?P<role>[A-Za-z_]+)\s*:\s*(?P<text>.*)$", rest, re.DOTALL)
+                if not role_match:
+                    continue
+                role = role_match.group("role").lower()
+                text = role_match.group("text").strip()
+
             if not text:
                 continue
             blocks.append({
                 "timestamp": match.group("ts"),
-                "role": match.group("role").lower(),
+                "role": role,
                 "text": text
             })
         return blocks
@@ -369,7 +396,10 @@ class MemoryEngine:
 
         with self._io_lock:
             # 1. Plain Text Append (Zero overhead)
-            log_entry = f"[{timestamp}] {role.upper()}: {clean_text}\n\n"
+            if self.log_format == "events":
+                log_entry = f"[{timestamp}] {clean_text}\n"
+            else:
+                log_entry = f"[{timestamp}] {role.upper()}: {clean_text}\n\n"
             try:
                 with open(self.history_file, "a", encoding="utf-8") as f:
                     f.write(log_entry)
