@@ -133,10 +133,14 @@ def test_4_telegram_bot_integrity():
     assert "📡 Статус системы" in button_texts, "Keyboard must include System Status button!"
     print(f"[+] Reply keyboard verified with {len(button_texts)} buttons: {button_texts}")
 
-    # Test state manager state
+    # Test state manager state. The arbiter field must be present and
+    # non-empty; WHICH model holds it is mode-dependent (the sovereign CPU
+    # keeper in normal operation, the MiniMax surrogate in emergency mode),
+    # so a brand assertion here would be brittle.
     state = bot.state_mgr.load_local_state()
-    assert "Qwen" in state.get("local_arbiter", ""), "Local arbiter in state must be Qwen2.5-1.5B!"
-    print(f"[+] Active state verified: Arbiter = {state.get('local_arbiter')}")
+    arbiter = state.get("local_arbiter", "")
+    assert arbiter, "A local arbiter must always be recorded in state!"
+    print(f"[+] Active state verified: Arbiter = {arbiter}")
     print("[+] Test 4 Passed: Telegram Bot integrity verified.")
 
 def test_5_disk_guard_and_file_safety():
