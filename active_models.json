@@ -28,21 +28,63 @@
   },
   "active_fleet": [
     {
-      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
       "owned_by": "nvidia",
       "tier": "Дежурный основной",
       "roles": [
         "duty_primary"
       ],
-      "quality_score": 95.09,
+      "quality_score": 97.25,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-10-30T18:31:13+00:00",
+      "score_as_of": "2026-10-30T19:03:04+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 2.12,
+        "latency_sec": 1.17,
         "ok_rate": 1.0,
-        "speed_score": 0.996,
+        "speed_score": 1.0,
+        "task_scores": {
+          "instruction": 0.5,
+          "reasoning": 1.0,
+          "code": 1.0,
+          "json": 1.0
+        },
+        "task_verdicts": {
+          "instruction": "mixed",
+          "reasoning": "correct",
+          "code": "compiles 5/5",
+          "json": "keys 4/4"
+        }
+      },
+      "recommended_params": {
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "max_tokens": 4096
+      },
+      "param_sweep": {
+        "task": "json",
+        "variant": "recommended",
+        "score": 1.0,
+        "latency_sec": 1.35
+      },
+      "seed_prior": null
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "owned_by": "nvidia",
+      "tier": "Дежурный быстрый",
+      "roles": [
+        "duty_fast"
+      ],
+      "quality_score": 92.46,
+      "score_source": "live_probe",
+      "score_verified": true,
+      "score_as_of": "2026-10-30T19:03:04+00:00",
+      "status": "APPROVED",
+      "measured": {
+        "latency_sec": 5.27,
+        "ok_rate": 1.0,
+        "speed_score": 0.891,
         "task_scores": {
           "instruction": 1.0,
           "reasoning": 0.75,
@@ -65,7 +107,7 @@
         "task": "json",
         "variant": "recommended",
         "score": 1.0,
-        "latency_sec": 2.88
+        "latency_sec": 1.36
       },
       "seed_prior": {
         "tier": "Ultra-Massive-Flagship",
@@ -75,19 +117,61 @@
     {
       "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       "owned_by": "nvidia",
-      "tier": "Дежурный быстрый",
+      "tier": "Дежурный кодер",
       "roles": [
-        "duty_fast"
+        "duty_code"
       ],
       "quality_score": 92.44,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-10-30T18:31:13+00:00",
+      "score_as_of": "2026-10-30T19:03:04+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 0.84,
+        "latency_sec": 1.24,
         "ok_rate": 1.0,
         "speed_score": 1.0,
+        "task_scores": {
+          "instruction": 0.5,
+          "reasoning": 0.75,
+          "code": 1.0,
+          "json": 1.0
+        },
+        "task_verdicts": {
+          "instruction": "mixed",
+          "reasoning": "partial",
+          "code": "compiles 5/5",
+          "json": "keys 4/4"
+        }
+      },
+      "recommended_params": {
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "max_tokens": 4096
+      },
+      "param_sweep": {
+        "task": "json",
+        "variant": "recommended",
+        "score": 1.0,
+        "latency_sec": 1.78
+      },
+      "seed_prior": null
+    },
+    {
+      "id": "minimaxai/minimax-m3.1-flash",
+      "owned_by": "minimaxai",
+      "tier": "Дежурный флагман",
+      "roles": [
+        "duty_flagship"
+      ],
+      "quality_score": 88.28,
+      "score_source": "live_probe",
+      "score_verified": true,
+      "score_as_of": "2026-10-30T19:03:04+00:00",
+      "status": "APPROVED",
+      "measured": {
+        "latency_sec": 6.99,
+        "ok_rate": 1.0,
+        "speed_score": 0.834,
         "task_scores": {
           "instruction": 0.5,
           "reasoning": 0.75,
@@ -110,95 +194,56 @@
         "task": "json",
         "variant": "deterministic",
         "score": 1.0,
-        "latency_sec": 1.64
+        "latency_sec": 6.63
       },
-      "seed_prior": null
+      "seed_prior": {
+        "tier": "Ultra-Flash-Reasoning",
+        "arena_elo": 1410
+      }
     },
     {
-      "id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
-      "owned_by": "nvidia",
-      "tier": "Дежурный кодер",
+      "id": "deepseek-ai/deepseek-v4.1-flash",
+      "owned_by": "deepseek-ai",
+      "tier": "Дежурный резерв",
       "roles": [
-        "duty_code"
+        "duty_fallback"
       ],
-      "quality_score": 73.0,
+      "quality_score": 87.37,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-10-30T18:31:13+00:00",
+      "score_as_of": "2026-10-30T19:03:04+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 0.72,
-        "ok_rate": 0.75,
-        "speed_score": 1.0,
-        "task_scores": {
-          "instruction": 0.5,
-          "reasoning": 1.0,
-          "code": 0.0,
-          "json": 1.0
-        },
-        "task_verdicts": {
-          "instruction": "mixed",
-          "reasoning": "correct",
-          "code": "no_code",
-          "json": "keys 4/4"
-        }
-      },
-      "recommended_params": {
-        "temperature": 0.6,
-        "top_p": 0.9,
-        "max_tokens": 4096
-      },
-      "param_sweep": {
-        "task": "json",
-        "variant": "recommended",
-        "score": 1.0,
-        "latency_sec": 13.74
-      },
-      "seed_prior": null
-    },
-    {
-      "id": "minimaxai/minimax-m3.1-flash",
-      "owned_by": "minimaxai",
-      "tier": "Дежурный флагман",
-      "roles": [
-        "duty_flagship"
-      ],
-      "quality_score": 63.42,
-      "score_source": "live_probe",
-      "score_verified": true,
-      "score_as_of": "2026-10-30T18:31:13+00:00",
-      "status": "APPROVED",
-      "measured": {
-        "latency_sec": 7.72,
-        "ok_rate": 0.75,
-        "speed_score": 0.809,
+        "latency_sec": 8.08,
+        "ok_rate": 1.0,
+        "speed_score": 0.797,
         "task_scores": {
           "instruction": 0.5,
           "reasoning": 0.75,
-          "code": 0.0,
+          "code": 1.0,
           "json": 1.0
         },
         "task_verdicts": {
           "instruction": "mixed",
           "reasoning": "partial",
-          "code": "no_code",
+          "code": "compiles 5/5",
           "json": "keys 4/4"
         }
       },
       "recommended_params": {
-        "temperature": 0.6,
-        "top_p": 0.95,
+        "temperature": 0.2,
+        "top_p": 0.9,
         "max_tokens": 4096
       },
       "param_sweep": {
         "task": "json",
-        "variant": "recommended",
+        "variant": "deterministic",
         "score": 1.0,
-        "latency_sec": 5.83
+        "latency_sec": 3.05
       },
       "seed_prior": {
-        "tier": "Ultra-Flash-Reasoning",
-        "arena_elo": 1410
+        "tier": "Ultra-Sparse-MTP",
+        "arena_elo": 1400
       }
     }
   ],
@@ -289,64 +334,69 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-10-30T18:31:13.669426+00:00Z",
+  "last_updated": "2026-10-30T19:03:04.554318+00:00Z",
   "fleet_source": "live_probe",
   "fleet_decision": {
-    "tuned_at": "2026-10-30 18:22:12 UTC",
+    "tuned_at": "2026-10-30 18:53:19 UTC",
     "method": "live_probe",
     "roles": {
-      "nvidia/nemotron-3-ultra-550b-a55b": [
+      "nvidia/nemotron-3.5-super-vl-120b-a12b": [
         "duty_primary"
       ],
-      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
+      "nvidia/nemotron-3-ultra-550b-a55b": [
         "duty_fast"
       ],
-      "nvidia/nemotron-3.5-super-vl-120b-a12b": [
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
         "duty_code"
       ],
       "minimaxai/minimax-m3.1-flash": [
         "duty_flagship"
+      ],
+      "deepseek-ai/deepseek-v4.1-flash": [
+        "duty_fallback"
       ]
     },
     "log": [
-      "Tuning cycle started at 2026-10-30 18:22:12 UTC (quick=False)",
-      "Candidate pool: kept top 14 of 60 chat-like models by prior.",
-      "Candidate pool (14): ['nvidia/nemotron-3-ultra-550b-a55b', 'minimaxai/minimax-m3.1-flash', 'deepseek-ai/deepseek-v4.1-flash', 'z-ai/glm-5.3-flash', 'stepfun-ai/step-5-preview', 'nvidia/llama-3.1-nemotron-ultra-253b-v1', 'nvidia/nemotron-3-super-120b-a12b', 'nvidia/nemotron-3.5-super-vl-120b-a12b', 'nvidia/llama-3.1-nemotron-51b-instruct', 'nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', 'nvidia/nemotron-4-340b-instruct', 'ai21labs/jamba-1.5-large-instruct', 'mistralai/mistral-large-2-instruct']",
-      "Stage A: pinging 14 candidates...",
-      "  ping nvidia/nemotron-3-ultra-550b-a55b: OK (2.12s)",
-      "  ping minimaxai/minimax-m3.1-flash: OK (7.72s)",
-      "  ping deepseek-ai/deepseek-v4.1-flash: TIMEOUT (45.0s)",
-      "  ping z-ai/glm-5.3-flash: TIMEOUT (45.0s)",
-      "  ping stepfun-ai/step-5-preview: TIMEOUT (45.0s)",
-      "  ping nvidia/llama-3.1-nemotron-ultra-253b-v1: HTTP_404 (0.08s)",
+      "  ping nvidia/nemotron-3-nano-omni-30b-a3b-reasoning: OK (1.24s)",
+      "  ping deepseek-ai/deepseek-v4.1-flash: OK (8.08s)",
+      "  ping z-ai/glm-5.3-flash: OK (8.56s)",
+      "  ping nvidia/llama-3.1-nemotron-ultra-253b-v1: HTTP_404 (0.11s)",
       "  ping nvidia/nemotron-3-super-120b-a12b: HTTP_404 (0.09s)",
-      "  ping nvidia/nemotron-3.5-super-vl-120b-a12b: OK (0.72s)",
-      "  ping nvidia/llama-3.1-nemotron-51b-instruct: HTTP_404 (0.08s)",
-      "  ping nvidia/llama-3.1-nemotron-70b-instruct: HTTP_404 (0.06s)",
-      "  ping nvidia/nemotron-3-nano-omni-30b-a3b-reasoning: OK (0.84s)",
-      "  ping nvidia/nemotron-4-340b-instruct: HTTP_404 (0.06s)",
-      "  ping ai21labs/jamba-1.5-large-instruct: HTTP_404 (0.16s)",
-      "  ping mistralai/mistral-large-2-instruct: HTTP_404 (0.06s)",
+      "  ping stepfun-ai/step-5-preview: STREAM_ERROR:ConnectionError (45.17s)",
+      "  ping nvidia/llama-3.1-nemotron-51b-instruct: HTTP_404 (0.12s)",
+      "  ping nvidia/llama-3.1-nemotron-70b-instruct: HTTP_404 (0.22s)",
+      "  ping nvidia/nemotron-4-340b-instruct: HTTP_404 (0.11s)",
+      "  ping ai21labs/jamba-1.5-large-instruct: HTTP_404 (0.12s)",
+      "  ping mistralai/mistral-large-2-instruct: HTTP_404 (0.13s)",
       "  probe nvidia/nemotron-3.5-super-vl-120b-a12b/reasoning: correct (score=1.0)",
-      "  probe nvidia/nemotron-3.5-super-vl-120b-a12b/code: no_code (score=0.0)",
+      "  probe nvidia/nemotron-3.5-super-vl-120b-a12b/code: compiles 5/5 (score=1.0)",
       "  probe nvidia/nemotron-3.5-super-vl-120b-a12b/json: keys 4/4 (score=1.0)",
       "  params nvidia/nemotron-3.5-super-vl-120b-a12b: variant=recommended (json score=1.0)",
       "  probe nvidia/nemotron-3-nano-omni-30b-a3b-reasoning/reasoning: partial (score=0.75)",
       "  probe nvidia/nemotron-3-nano-omni-30b-a3b-reasoning/code: compiles 5/5 (score=1.0)",
       "  probe nvidia/nemotron-3-nano-omni-30b-a3b-reasoning/json: keys 4/4 (score=1.0)",
-      "  params nvidia/nemotron-3-nano-omni-30b-a3b-reasoning: variant=deterministic (json score=1.0)",
+      "  params nvidia/nemotron-3-nano-omni-30b-a3b-reasoning: variant=recommended (json score=1.0)",
       "  probe nvidia/nemotron-3-ultra-550b-a55b/reasoning: partial (score=0.75)",
       "  probe nvidia/nemotron-3-ultra-550b-a55b/code: compiles 5/5 (score=1.0)",
       "  probe nvidia/nemotron-3-ultra-550b-a55b/json: keys 4/4 (score=1.0)",
       "  params nvidia/nemotron-3-ultra-550b-a55b: variant=recommended (json score=1.0)",
       "  probe minimaxai/minimax-m3.1-flash/reasoning: partial (score=0.75)",
-      "  probe minimaxai/minimax-m3.1-flash/code: no_code (score=0.0)",
+      "  probe minimaxai/minimax-m3.1-flash/code: compiles 5/5 (score=1.0)",
       "  probe minimaxai/minimax-m3.1-flash/json: keys 4/4 (score=1.0)",
-      "  params minimaxai/minimax-m3.1-flash: variant=recommended (json score=1.0)",
-      "  role: nvidia/nemotron-3-ultra-550b-a55b -> duty_primary | score=95.09 (задачи: {'instruction': 1.0, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 2.12с, ok=1.0)",
-      "  role: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning -> duty_fast | score=92.44 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 0.84с, ok=1.0)",
-      "  role: nvidia/nemotron-3.5-super-vl-120b-a12b -> duty_code | score=73.0 (задачи: {'instruction': 0.5, 'reasoning': 1.0, 'code': 0.0, 'json': 1.0}, задержка 0.72с, ok=0.75)",
-      "  role: minimaxai/minimax-m3.1-flash -> duty_flagship | score=63.42 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 0.0, 'json': 1.0}, задержка 7.72с, ok=0.75)"
+      "  params minimaxai/minimax-m3.1-flash: variant=deterministic (json score=1.0)",
+      "  probe deepseek-ai/deepseek-v4.1-flash/reasoning: partial (score=0.75)",
+      "  probe deepseek-ai/deepseek-v4.1-flash/code: compiles 5/5 (score=1.0)",
+      "  probe deepseek-ai/deepseek-v4.1-flash/json: keys 4/4 (score=1.0)",
+      "  params deepseek-ai/deepseek-v4.1-flash: variant=deterministic (json score=1.0)",
+      "  probe z-ai/glm-5.3-flash/reasoning: partial (score=0.75)",
+      "  probe z-ai/glm-5.3-flash/code: compiles 5/5 (score=1.0)",
+      "  probe z-ai/glm-5.3-flash/json: keys 4/4 (score=1.0)",
+      "  params z-ai/glm-5.3-flash: variant=deterministic (json score=1.0)",
+      "  role: nvidia/nemotron-3.5-super-vl-120b-a12b -> duty_primary | score=97.25 (задачи: {'instruction': 0.5, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0}, задержка 1.17с, ok=1.0)",
+      "  role: nvidia/nemotron-3-ultra-550b-a55b -> duty_fast | score=92.46 (задачи: {'instruction': 1.0, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 5.27с, ok=1.0)",
+      "  role: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning -> duty_code | score=92.44 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 1.24с, ok=1.0)",
+      "  role: minimaxai/minimax-m3.1-flash -> duty_flagship | score=88.28 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 6.99с, ok=1.0)",
+      "  role: deepseek-ai/deepseek-v4.1-flash -> duty_fallback | score=87.37 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 8.08с, ok=1.0)"
     ]
   },
   "fleet_measurements": [
@@ -355,11 +405,45 @@
       "vendor": "nvidia",
       "prior": 26.0,
       "status": "MEASURED",
-      "final_score": 95.09,
-      "latency_sec": 2.12,
+      "final_score": 92.46,
+      "latency_sec": 5.27,
       "task_scores": {
         "instruction": 1.0,
         "reasoning": 0.75,
+        "code": 1.0,
+        "json": 1.0
+      },
+      "roles": [
+        "duty_fast"
+      ]
+    },
+    {
+      "id": "minimaxai/minimax-m3.1-flash",
+      "vendor": "minimaxai",
+      "prior": 22.0,
+      "status": "MEASURED",
+      "final_score": 88.28,
+      "latency_sec": 6.99,
+      "task_scores": {
+        "instruction": 0.5,
+        "reasoning": 0.75,
+        "code": 1.0,
+        "json": 1.0
+      },
+      "roles": [
+        "duty_flagship"
+      ]
+    },
+    {
+      "id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "vendor": "nvidia",
+      "prior": 17.0,
+      "status": "MEASURED",
+      "final_score": 97.25,
+      "latency_sec": 1.17,
+      "task_scores": {
+        "instruction": 0.5,
+        "reasoning": 1.0,
         "code": 1.0,
         "json": 1.0
       },
@@ -368,50 +452,52 @@
       ]
     },
     {
-      "id": "minimaxai/minimax-m3.1-flash",
-      "vendor": "minimaxai",
-      "prior": 22.0,
+      "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "vendor": "nvidia",
+      "prior": 14.0,
       "status": "MEASURED",
-      "final_score": 63.42,
-      "latency_sec": 7.72,
+      "final_score": 92.44,
+      "latency_sec": 1.24,
       "task_scores": {
         "instruction": 0.5,
         "reasoning": 0.75,
-        "code": 0.0,
+        "code": 1.0,
         "json": 1.0
       },
       "roles": [
-        "duty_flagship"
+        "duty_code"
       ]
     },
     {
       "id": "deepseek-ai/deepseek-v4.1-flash",
       "vendor": "deepseek-ai",
-      "prior": 20.0,
-      "status": "FAILED_TIMEOUT",
-      "final_score": null,
-      "latency_sec": 45.0,
-      "task_scores": null,
-      "roles": []
+      "prior": 10.0,
+      "status": "MEASURED",
+      "final_score": 87.37,
+      "latency_sec": 8.08,
+      "task_scores": {
+        "instruction": 0.5,
+        "reasoning": 0.75,
+        "code": 1.0,
+        "json": 1.0
+      },
+      "roles": [
+        "duty_fallback"
+      ]
     },
     {
       "id": "z-ai/glm-5.3-flash",
       "vendor": "z-ai",
-      "prior": 20.0,
-      "status": "FAILED_TIMEOUT",
-      "final_score": null,
-      "latency_sec": 45.0,
-      "task_scores": null,
-      "roles": []
-    },
-    {
-      "id": "stepfun-ai/step-5-preview",
-      "vendor": "stepfun-ai",
-      "prior": 17.0,
-      "status": "FAILED_TIMEOUT",
-      "final_score": null,
-      "latency_sec": 45.0,
-      "task_scores": null,
+      "prior": 10.0,
+      "status": "MEASURED",
+      "final_score": 84.22,
+      "latency_sec": 8.56,
+      "task_scores": {
+        "instruction": 0.0,
+        "reasoning": 0.75,
+        "code": 1.0,
+        "json": 1.0
+      },
       "roles": []
     },
     {
@@ -420,7 +506,7 @@
       "prior": 8.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.08,
+      "latency_sec": 0.11,
       "task_scores": null,
       "roles": []
     },
@@ -435,21 +521,14 @@
       "roles": []
     },
     {
-      "id": "nvidia/nemotron-3.5-super-vl-120b-a12b",
-      "vendor": "nvidia",
+      "id": "stepfun-ai/step-5-preview",
+      "vendor": "stepfun-ai",
       "prior": 7.0,
-      "status": "MEASURED",
-      "final_score": 73.0,
-      "latency_sec": 0.72,
-      "task_scores": {
-        "instruction": 0.5,
-        "reasoning": 1.0,
-        "code": 0.0,
-        "json": 1.0
-      },
-      "roles": [
-        "duty_code"
-      ]
+      "status": "FAILED_STREAM_ERROR:ConnectionError",
+      "final_score": null,
+      "latency_sec": 45.17,
+      "task_scores": null,
+      "roles": []
     },
     {
       "id": "nvidia/llama-3.1-nemotron-51b-instruct",
@@ -457,7 +536,7 @@
       "prior": 4.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.08,
+      "latency_sec": 0.12,
       "task_scores": null,
       "roles": []
     },
@@ -467,26 +546,9 @@
       "prior": 4.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.06,
+      "latency_sec": 0.22,
       "task_scores": null,
       "roles": []
-    },
-    {
-      "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-      "vendor": "nvidia",
-      "prior": 4.0,
-      "status": "MEASURED",
-      "final_score": 92.44,
-      "latency_sec": 0.84,
-      "task_scores": {
-        "instruction": 0.5,
-        "reasoning": 0.75,
-        "code": 1.0,
-        "json": 1.0
-      },
-      "roles": [
-        "duty_fast"
-      ]
     },
     {
       "id": "nvidia/nemotron-4-340b-instruct",
@@ -494,7 +556,7 @@
       "prior": 4.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.06,
+      "latency_sec": 0.11,
       "task_scores": null,
       "roles": []
     },
@@ -504,7 +566,7 @@
       "prior": 3.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.16,
+      "latency_sec": 0.12,
       "task_scores": null,
       "roles": []
     },
@@ -514,7 +576,7 @@
       "prior": 3.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.06,
+      "latency_sec": 0.13,
       "task_scores": null,
       "roles": []
     }
