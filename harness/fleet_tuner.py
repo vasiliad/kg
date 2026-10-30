@@ -216,6 +216,11 @@ class FleetTuner:
             "temperature": temperature,
             "top_p": 0.9,
             "max_tokens": max_tokens,
+            # stream must be in the BODY, not just the HTTP call: without it
+            # NIM returns one plain JSON document, the SSE parser finds no
+            # chunks, and every probe looks "EMPTY" (the second live run's
+            # exact failure mode; the fail-safe kept the fleet meanwhile).
+            "stream": True,
         }
         url = f"{self.base_url}/chat/completions"
         timeout = self.policy["heavy_timeout_sec"] if _heavy(model_id) else self.policy["probe_timeout_sec"]
