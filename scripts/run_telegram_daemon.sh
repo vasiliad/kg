@@ -62,7 +62,9 @@ cleanup() {
 trap cleanup EXIT TERM INT
 
 echo "[daemon] Starting Telegram bot for ${DURATION_MINUTES} minutes..."
-python harness/telegram_bot.py &
+# Unbuffered: the runner's stdout is not a TTY, so Python would otherwise
+# buffer the log until exit and hide the bot's live state.
+python -u harness/telegram_bot.py &
 BOT_PID=$!
 
 ELAPSED=0
