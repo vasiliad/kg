@@ -133,7 +133,8 @@ class HarnessTelegramBot:
             "keyboard": [
                 [{"text": "📡 Статус системы"}, {"text": "🚀 Флот моделей"}],
                 [{"text": "👑 Запрос Арбитру"}, {"text": "🌐 Поиск Keenable"}],
-                [{"text": "📧 Проверка почты"}, {"text": "🔒 Выход (/logout)"}]
+                [{"text": "📧 Проверка почты"}, {"text": "📝 Сменить email"}],
+                [{"text": "🔒 Выход (/logout)"}]
             ],
             "resize_keyboard": True,
             "is_persistent": True
@@ -355,6 +356,43 @@ class HarnessTelegramBot:
         else:
             self.send_message(chat_id, f"[-] Ошибка отправки: {res.get('error') or res.get('message')}")
 
+    def handle_email_change(self, chat_id: int, new_email: str) -> None:
+        """Updates the recipient email for daily dispatches."""
+        new_email = new_email.strip()
+        # Basic email validation
+        if "@" not in new_email or "." not in new_email.split("@")[-1]:
+            self.send_message(chat_id, "[-] Неверный формат email. Пример: user@example.com")
+            return
+        
+        # Update .env file (persists across restarts)
+        env_path = PROJECT_ROOT / ".env"
+        try:
+            lines = []
+            if env_path.exists():
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            
+            # Update or add DISPATCH_RECIPIENT_EMAIL
+            found = False
+            for i, line in enumerate(lines):
+                if line.startswith("DISPATCH_RECIPIENT_EMAIL="):
+                    lines[i] = f"DISPATCH_RECIPIENT_EMAIL={new_email}\n"
+                    found = True
+                    break
+            if not found:
+                lines.append(f"DISPATCH_RECIPIENT_EMAIL={new_email}\n")
+            
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            
+            # Also update current process env
+            os.environ["DISPATCH_RECIPIENT_EMAIL"] = new_email
+            
+            self.send_message(chat_id, f"✅ Email для отчётов обновлён: <b>{new_email}</b>\n\nСледующая ежедневная рассылка (12:00 НСК) и ручная проверка почты пойдут на этот адрес.", parse_mode="HTML")
+            print(f"[+] Dispatch recipient email changed to: {new_email}")
+        except Exception as e:
+            self.send_message(chat_id, f"[-] Ошибка сохранения: {e}")
+
     def process_message(self, message: Dict[str, Any]) -> None:
         """Processes a single incoming message from Telegram with Password Guard."""
         chat_id = message.get("chat", {}).get("id")
@@ -421,6 +459,9 @@ class HarnessTelegramBot:
             elif state == "awaiting_task_prompt":
                 self.handle_minimax_task(chat_id, text)
                 return
+            elif state == "awaiting_email_change":
+                self.handle_email_change(chat_id, text)
+                return
 
         # 4. Standard Commands & Buttons
         if text in ["/start", "/help", "ℹ️ Справка"]:
@@ -432,8 +473,9 @@ class HarnessTelegramBot:
                 "• <b>👑 Запрос Арбитру</b> — прямое обращение к Верховному арбитру (Qwen2.5-1.5B CPU).\n"
                 "• <b>🚀 Флот моделей</b> — список 5 утвержденных моделей NIM.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
-                "• <b>📧 Проверка почты</b> — отправка отчета здоровья на {os.getenv('DISPATCH_RECIPIENT_EMAIL', 'configured-recipient')}.\n"
-                "• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
+"• <b>📧 Проверка почты</b> — отправка отчета здоровья на {os.getenv('DISPATCH_RECIPIENT_EMAIL', 'configured-recipient')}.\n"
+"• <b>📝 Сменить email</b> — изменить получателя ежедневных отчётов.\n"
+"• <b>🔒 Выход (/logout)</b> — заблокировать доступ.\n\n"
                 "💡 <i>Или просто напишите любой вопрос или задачу сообщением — дежурные модели сразу приступят к решению с вечной памятью!</i>"
             )
             self.send_message(chat_id, welcome, parse_mode="HTML")
@@ -447,6 +489,10 @@ class HarnessTelegramBot:
             self.handle_fleet_command(chat_id)
         elif text in ["/email", "📧 Проверка почты"]:
             self.handle_email_dispatch(chat_id)
+        elif text in ["/setemail", "📝 Сменить email"]:
+            self.user_states[chat_id] = "awaiting_email_change"
+            current = os.getenv("DISPATCH_RECIPIENT_EMAIL", "ivanvasiliadi@gmail.com")
+            self.send_message(chat_id, f"📝 <b>Текущий email для отчётов:</b> <code>{current}</code>\n\nВведите новый email-адрес получателя:", parse_mode="HTML")
         elif text in ["/search", "🌐 Поиск Keenable"]:
             self.user_states[chat_id] = "awaiting_search_query"
             self.send_message(chat_id, "🔍 Введите поисковый запрос для поиска через Keenable:")
