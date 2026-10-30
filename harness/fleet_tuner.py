@@ -204,6 +204,12 @@ class FleetTuner:
     # Stage 2: live measurement
     # ------------------------------------------------------------------
     def _post_chat(self, model_id: str, prompt: str, max_tokens: int, temperature: float) -> Dict[str, Any]:
+        """
+        One streaming chat request. Streaming is mandatory for reasoning
+        models (non-streaming POSTs hang until the socket times out on long
+        CoT — a ground-truth rule already learned by the executor). Measures
+        total latency and time-to-first-token separately.
+        """
         payload = {
             "model": model_id,
             "messages": [{"role": "user", "content": prompt}],
@@ -218,38 +224,70 @@ class FleetTuner:
             nim_pacer.wait_for_slot()
             start = time.time()
             try:
-                res = requests.post(url, headers=self.headers, json=payload, timeout=timeout)
+                res = requests.post(url, headers=self.headers, json=payload, stream=True, timeout=timeout)
             except requests.exceptions.Timeout:
-                return {"ok": False, "status": "TIMEOUT", "latency_sec": float(timeout), "text": ""}
+                return {"ok": False, "status": "TIMEOUT", "latency_sec": float(timeout), "ttft_sec": float(timeout), "text": ""}
             except Exception as e:
-                return {"ok": False, "status": f"NETWORK_ERROR:{type(e).__name__}", "latency_sec": round(time.time() - start, 2), "text": ""}
+                return {"ok": False, "status": f"NETWORK_ERROR:{type(e).__name__}", "latency_sec": round(time.time() - start, 2), "ttft_sec": 0.0, "text": ""}
             latency = round(time.time() - start, 2)
 
             if res.status_code == 429 and attempt == 1:
                 time.sleep(6)
                 continue
             if res.status_code == 401:
-                return {"ok": False, "status": "AUTH_401", "latency_sec": latency, "text": ""}
+                return {"ok": False, "status": "AUTH_401", "latency_sec": latency, "ttft_sec": 0.0, "text": ""}
             if res.status_code != 200:
-                return {"ok": False, "status": f"HTTP_{res.status_code}", "latency_sec": latency, "text": ""}
+                return {"ok": False, "status": f"HTTP_{res.status_code}", "latency_sec": latency, "ttft_sec": 0.0, "text": ""}
 
+            content, reasoning = [], []
+            first_at = None
             try:
-                body = res.json()
-                msg = (body.get("choices") or [{}])[0].get("message", {}) or {}
-                text = (msg.get("content") or "").strip()
-                if not text:
-                    # reasoning models may spend the whole budget thinking;
-                    # their visible trace is still a valid probe artefact
-                    text = (msg.get("reasoning_content") or "").strip()
-                return {"ok": bool(text), "status": "OK" if text else "EMPTY", "latency_sec": latency, "text": text}
-            except Exception:
-                return {"ok": False, "status": "BAD_JSON", "latency_sec": latency, "text": ""}
+                for line in res.iter_lines():
+                    if not line:
+                        continue
+                    line_str = line.decode("utf-8").strip()
+                    if not line_str.startswith("data: "):
+                        continue
+                    data_body = line_str[6:]
+                    if data_body == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_body)
+                        delta = (chunk.get("choices") or [{}])[0].get("delta", {}) or {}
+                        c = delta.get("content")
+                        r = delta.get("reasoning_content")
+                        if (c or r) and first_at is None:
+                            first_at = time.time() - start
+                        if c:
+                            content.append(c)
+                        if r:
+                            reasoning.append(r)
+                    except Exception:
+                        continue
+            except Exception as e:
+                return {"ok": False, "status": f"STREAM_ERROR:{type(e).__name__}", "latency_sec": round(time.time() - start, 2), "ttft_sec": 0.0, "text": ""}
 
-        return {"ok": False, "status": "RATE_LIMITED", "latency_sec": timeout, "text": ""}
+            total = round(time.time() - start, 2)
+            text = ("".join(content)).strip() or ("".join(reasoning)).strip()
+            return {
+                "ok": bool(text),
+                "status": "OK" if text else "EMPTY",
+                "latency_sec": total,
+                "ttft_sec": round(first_at, 2) if first_at else total,
+                "text": text,
+            }
+
+        return {"ok": False, "status": "RATE_LIMITED", "latency_sec": timeout, "ttft_sec": 0.0, "text": ""}
 
     def ping_probe(self, model_id: str) -> Dict[str, Any]:
         """Cheap probe: reachable? latency? answers in Russian at all?"""
-        res = self._post_chat(model_id, fleet_probes.PING_PROMPT, max_tokens=96, temperature=0.2)
+        res = self._post_chat(model_id, fleet_probes.PING_PROMPT, max_tokens=128, temperature=0.2)
+        if not res["ok"] and res["status"] == "EMPTY":
+            # Reasoning models may spend the whole ping budget on CoT. One
+            # adaptive retry with a 4x budget prevents a false negative.
+            retry = self._post_chat(model_id, fleet_probes.PING_PROMPT, max_tokens=512, temperature=0.2)
+            if retry["ok"]:
+                res = {**retry, "adaptive_retry": True}
         score, verdict = fleet_probes.score_probe("instruction", res.get("text", ""))
         res["instruction_score"] = score
         res["instruction_verdict"] = verdict
@@ -257,11 +295,23 @@ class FleetTuner:
 
     def quality_probe(self, model_id: str, task_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         task = fleet_probes.PROBE_TASKS[task_name]
+        max_tokens = int(task["max_tokens"])
         res = self._post_chat(
             model_id, task["prompt"],
-            max_tokens=int(task["max_tokens"]),
+            max_tokens=max_tokens,
             temperature=float(params.get("temperature", 0.2)),
         )
+        if not res["ok"] and res["status"] == "EMPTY":
+            # Deep-CoT models exhaust a small budget while thinking (MiniMax
+            # ground rule: >= 2560 tokens). One 4x-budget retry keeps the
+            # measurement fair instead of punishing the reasoning style.
+            retry = self._post_chat(
+                model_id, task["prompt"],
+                max_tokens=min(max_tokens * 4, 8192),
+                temperature=float(params.get("temperature", 0.2)),
+            )
+            if retry["ok"]:
+                res = {**retry, "adaptive_retry": True}
         score, verdict = fleet_probes.score_probe(task_name, res.get("text", ""))
         res["task"] = task_name
         res["score"] = score
@@ -421,7 +471,11 @@ class FleetTuner:
         fast_pool = [m for m in eligible if m["ping"]["latency_sec"] <= self.policy["fast_latency_cap_sec"]]
         take(best(fast_pool, lambda m: m["final_score"]), "duty_fast")
 
-        take(best(eligible, lambda m: m["task_scores"].get("code", 0.0)), "duty_code")
+        # A specialised role requires measured competence in it: a model that
+        # scored 0 on the code probe must not be appointed "duty_code" just
+        # because everyone else is already in the fleet.
+        code_pool = [m for m in eligible if m["task_scores"].get("code", 0.0) >= 0.5]
+        take(best(code_pool, lambda m: m["task_scores"].get("code", 0.0)), "duty_code")
 
         flagship = [m for m in eligible if _heavy(m["id"]) or (m.get("seed_prior") or {}).get("tier", "").startswith("Ultra")]
         take(best(flagship, lambda m: m["final_score"]), "duty_flagship")
