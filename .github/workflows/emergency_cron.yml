@@ -59,19 +59,18 @@ jobs:
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
           git add active_models.json nim_history.log config.yaml || true
-          
+
           if ! git diff --staged --quiet; then
             git commit -m "chore(heartbeat): autonomous state sync [skip ci]"
             git push origin main
             echo "Heartbeat changes committed and pushed."
           else
-            echo "No state changes detected in this cycle."
+            # Empty commit keeps the repository active so GitHub never
+            # auto-disables the scheduled workflows. This replaces the
+            # third-party keepalive action, whose repository is blocked by
+            # GitHub ("Repository access blocked") and therefore broke every
+            # run of this workflow before a single step could execute.
+            git commit --allow-empty -m "chore(keepalive): automated repository heartbeat ping [skip ci]"
+            git push origin main
+            echo "Keepalive ping committed and pushed."
           fi
-
-      - name: Prevent GitHub Workflow Inactivity Auto-Disable
-        uses: gautamkrishnar/keepalive-workflow@v2
-        with:
-          gh_token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-          commit_message: "chore(keepalive): automated repository heartbeat ping"
-          committer_username: "vasiliad"
-          committer_email: "vasiliadi@users.noreply.github.com"
