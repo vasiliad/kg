@@ -38,9 +38,9 @@ sync_state() {
   git add -- "${args[@]}" 2>/dev/null || true
   if ! git diff --staged --quiet 2>/dev/null; then
     if git commit -m "chore(bot): persist session and memory state [skip ci]" >/dev/null 2>&1; then
-      git push origin HEAD:main >/dev/null 2>&1 \
-        && echo "[daemon] state committed and pushed." \
-        || echo "[daemon] WARNING: state commit succeeded but push failed."
+      # Shared helper: rebases and retries, because the heartbeat and the
+      # diagnostics job push to the same branch concurrently.
+      bash "${GITHUB_WORKSPACE:-$(pwd)}/scripts/sync_state.sh" 2>&1 | sed 's/^/[daemon] /'
     fi
   fi
 }

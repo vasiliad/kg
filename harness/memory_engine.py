@@ -414,32 +414,43 @@ class MemoryEngine:
     def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
         return vector_codec.cosine(vec_a, vec_b)
 
+    @staticmethod
+    def _tokenize(text: str) -> set:
+        """Word tokens (unicode-aware, so Cyrillic works) of a piece of text."""
+        return set(re.findall(r"[\w-]+", text.lower()))
+
     def search_memories(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """
-        Semantically searches the vault for relevant past memories.
-        Falls back to keyword overlap if embeddings are unavailable.
+        Searches the vault for relevant past memories.
+
+        Hybrid retrieval: semantic cosine similarity when the embedding
+        provider is reachable, lexical token overlap always. Either signal on
+        its own can surface a memory, so recall survives a provider outage, a
+        supplier-side change of the embedding model, or a dimension change
+        that would otherwise make every vector comparison meaningless.
         """
         vault = self._load_vault()
         if not vault:
             return []
 
         q_vec = self.get_embedding(query, input_type="query")
+        q_tokens = self._tokenize(query)
         scored_entries = []
 
-        if q_vec:
-            # High-precision vector cosine similarity
-            for entry in vault:
+        for entry in vault:
+            semantic = 0.0
+            if q_vec:
                 e_vec = self._entry_vector(entry)
                 if e_vec:
-                    score = self._cosine_similarity(q_vec, e_vec)
-                    scored_entries.append((score, entry))
-        else:
-            # Fallback: token overlap score
-            q_tokens = set(query.lower().split())
-            for entry in vault:
-                e_tokens = set(entry.get("text", "").lower().split())
-                overlap = len(q_tokens.intersection(e_tokens))
-                score = overlap / max(len(q_tokens), 1)
+                    semantic = self._cosine_similarity(q_vec, e_vec)
+
+            lexical = 0.0
+            if q_tokens:
+                e_tokens = self._tokenize(entry.get("text", ""))
+                lexical = len(q_tokens.intersection(e_tokens)) / len(q_tokens)
+
+            score = max(semantic, lexical) if q_vec else lexical
+            if score > 0.0:
                 scored_entries.append((score, entry))
 
         # Sort descending by score

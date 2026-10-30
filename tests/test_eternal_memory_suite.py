@@ -57,6 +57,15 @@ def test_1_memory_engine_and_nemotron():
     matches = engine.search_memories("лимит токенов генерации и окно", top_k=2)
     elapsed = round(time.time() - start_t, 2)
     print(f"[+] Nemotron-3.5-Embed semantic search completed in {elapsed}s. Found {len(matches)} matches.")
+
+    # Diagnostics: show the raw similarity so a provider-side change in the
+    # embedding model is visible instead of silently degrading recall.
+    probe = engine.get_embedding("лимит токенов генерации и окно", input_type="query")
+    for entry in engine._load_vault():
+        e_vec = engine._entry_vector(entry)
+        score = engine._cosine_similarity(probe, e_vec) if (probe and e_vec) else 0.0
+        print(f"    cosine={score:.4f} dims={len(probe or [])}/{len(e_vec or [])} :: {entry.get('text', '')[:70]}")
+
     assert len(matches) > 0, "Nemotron search must return matching memories!"
     top_match = matches[0]
     print(f"    Top Match: [{top_match.get('role')}]: {top_match.get('text')[:100]}...")
