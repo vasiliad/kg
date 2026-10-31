@@ -145,3 +145,31 @@
 
 Я могу сейчас выполнить проверку расположения бакета (например, запустить запрос `bucket_location` или `get_bucket_config`) и сообщить вам точный путь — сообщите, если хотите, чтобы я это сделал.
 
+[2026-10-31 17:52:44 UTC] USER: Привет
+
+[2026-10-31 17:52:44 UTC] USER: Привет
+
+[2026-10-31 17:52:45 UTC] USER: Кто дежурный?
+
+[2026-10-31 17:52:49 UTC] DUTY: [nvidia/nemotron-3-ultra-550b-a55b] Привет. Я — Telegram Command Center. Чем могу помочь?
+
+[2026-10-31 17:52:51 UTC] DUTY: [nvidia/nemotron-3-ultra-550b-a55b] Привет. Я — Telegram Command Center. Чем могу помочь?
+
+[2026-10-31 17:52:52 UTC] USER: 📡 Статус системы
+
+[2026-10-31 17:52:53 UTC] ARBITER: RULING: Autonomous continuity preserved. External inference is unavailable, so no model quality could be measured in this cycle.
+
+[2026-10-31 17:53:38 UTC] DUTY: [minimaxai/minimax-m3.1-flash] **Текущий дежурный состав** — по снимку состояния на **2026-10-31 17:52:46 UTC** (последняя пересборка флота: **2026-10-31 13:06:47 UTC**, метод — живой замер, кандидатов 12, измерено 4):
+
+| Роль | Модель | Score | Статус |
+|---|---|---|---|
+| Дежурный основной | `nvidia/nemotron-3-ultra-550b-a55b` | 93.97 | APPROVED / verified |
+| Дежурный быстрый | `minimaxai/minimax-m3.1-flash` | 89.45 | APPROVED / verified |
+| Дежурный кодер | `mistralai/mistral-large-4-1t-a52b` | 75.0 | APPROVED / verified |
+| Дежурный флагман | `stepfun-ai/step-5-preview` | 62.7 | APPROVED / verified |
+
+То есть **дежурный основной сейчас — NVIDIA Nemotron 3 Ultra 550B A55B** (93.97).
+
+Дополнительно по фактам снимка:
+- Аварийный прогон: **2026-10-31 11:39:37 UTC** — `EMERGENCY RUN SUCCESS`, Diff +0/−0, флот 4 модели (
+
