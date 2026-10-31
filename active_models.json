@@ -34,15 +34,15 @@
       "roles": [
         "duty_primary"
       ],
-      "quality_score": 99.72,
+      "quality_score": 97.64,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-10-31T04:44:08+00:00",
+      "score_as_of": "2026-10-31T05:17:45+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 2.34,
+        "latency_sec": 4.83,
         "ok_rate": 1.0,
-        "speed_score": 0.989,
+        "speed_score": 0.906,
         "task_scores": {
           "instruction": 1.0,
           "reasoning": 1.0,
@@ -57,79 +57,34 @@
         }
       },
       "recommended_params": {
-        "temperature": 0.2,
+        "temperature": 0.6,
         "top_p": 0.9,
         "max_tokens": 4096
       },
       "param_sweep": {
         "task": "json",
-        "variant": "deterministic",
+        "variant": "recommended",
         "score": 1.0,
-        "latency_sec": 17.18
+        "latency_sec": 53.58
       },
       "seed_prior": null
     },
     {
-      "id": "nvidia/nemotron-3-ultra-550b-a55b",
-      "owned_by": "nvidia",
+      "id": "minimaxai/minimax-m3.1-flash",
+      "owned_by": "minimaxai",
       "tier": "Дежурный быстрый",
       "roles": [
         "duty_fast"
       ],
-      "quality_score": 95.19,
+      "quality_score": 90.46,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-10-31T04:44:08+00:00",
+      "score_as_of": "2026-10-31T05:17:45+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 0.61,
+        "latency_sec": 4.37,
         "ok_rate": 1.0,
-        "speed_score": 1.0,
-        "task_scores": {
-          "instruction": 1.0,
-          "reasoning": 0.75,
-          "code": 1.0,
-          "json": 1.0
-        },
-        "task_verdicts": {
-          "instruction": "russian",
-          "reasoning": "partial",
-          "code": "compiles 5/5",
-          "json": "keys 4/4"
-        }
-      },
-      "recommended_params": {
-        "temperature": 0.2,
-        "top_p": 0.9,
-        "max_tokens": 4096
-      },
-      "param_sweep": {
-        "task": "json",
-        "variant": "deterministic",
-        "score": 1.0,
-        "latency_sec": 0.77
-      },
-      "seed_prior": {
-        "tier": "Ultra-Massive-Flagship",
-        "arena_elo": 1390
-      }
-    },
-    {
-      "id": "minimaxai/minimax-m3.1-flash",
-      "owned_by": "minimaxai",
-      "tier": "Дежурный кодер",
-      "roles": [
-        "duty_code"
-      ],
-      "quality_score": 87.42,
-      "score_source": "live_probe",
-      "score_verified": true,
-      "score_as_of": "2026-10-31T04:44:08+00:00",
-      "status": "APPROVED",
-      "measured": {
-        "latency_sec": 8.02,
-        "ok_rate": 1.0,
-        "speed_score": 0.799,
+        "speed_score": 0.921,
         "task_scores": {
           "instruction": 0.5,
           "reasoning": 0.75,
@@ -152,11 +107,56 @@
         "task": "json",
         "variant": "deterministic",
         "score": 1.0,
-        "latency_sec": 4.99
+        "latency_sec": 7.2
       },
       "seed_prior": {
         "tier": "Ultra-Flash-Reasoning",
         "arena_elo": 1410
+      }
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "owned_by": "nvidia",
+      "tier": "Дежурный кодер",
+      "roles": [
+        "duty_code"
+      ],
+      "quality_score": 87.17,
+      "score_source": "live_probe",
+      "score_verified": true,
+      "score_as_of": "2026-10-31T05:17:45+00:00",
+      "status": "APPROVED",
+      "measured": {
+        "latency_sec": 11.62,
+        "ok_rate": 1.0,
+        "speed_score": 0.679,
+        "task_scores": {
+          "instruction": 1.0,
+          "reasoning": 0.75,
+          "code": 1.0,
+          "json": 1.0
+        },
+        "task_verdicts": {
+          "instruction": "russian",
+          "reasoning": "partial",
+          "code": "compiles 5/5",
+          "json": "keys 4/4"
+        }
+      },
+      "recommended_params": {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "max_tokens": 4096
+      },
+      "param_sweep": {
+        "task": "json",
+        "variant": "deterministic",
+        "score": 1.0,
+        "latency_sec": 1.06
+      },
+      "seed_prior": {
+        "tier": "Ultra-Massive-Flagship",
+        "arena_elo": 1390
       }
     }
   ],
@@ -247,50 +247,53 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-10-31T04:44:08.348844+00:00Z",
+  "last_updated": "2026-10-31T05:17:45.390905+00:00Z",
   "fleet_source": "live_probe",
   "fleet_decision": {
-    "tuned_at": "2026-10-31 04:37:37 UTC",
+    "tuned_at": "2026-10-31 05:09:02 UTC",
     "method": "live_probe",
     "roles": {
       "mistralai/mistral-large-4-1t-a52b": [
         "duty_primary"
       ],
-      "nvidia/nemotron-3-ultra-550b-a55b": [
+      "minimaxai/minimax-m3.1-flash": [
         "duty_fast"
       ],
-      "minimaxai/minimax-m3.1-flash": [
+      "nvidia/nemotron-3-ultra-550b-a55b": [
         "duty_code"
       ]
     },
     "log": [
-      "Tuning cycle started at 2026-10-31 04:37:37 UTC (quick=False)",
-      "Guaranteed probe slots: ['adept/fuyu-8b', 'bigcode/starcoder2-15b', 'deepseek-ai/deepseek-coder-6.7b-instruct', 'google/codegemma-1.1-7b']",
-      "Candidate pool (7): ['nvidia/nemotron-3-ultra-550b-a55b', 'minimaxai/minimax-m3.1-flash', 'mistralai/mistral-large-4-1t-a52b', 'nvidia/llama-3.1-nemotron-ultra-253b-v1', 'deepseek-ai/deepseek-v4.1-flash', 'nvidia/nemotron-4-340b-instruct', 'ai21labs/jamba-1.5-large-instruct']",
-      "Excluded, size unresolved (fail-closed): ['microsoft/phi-3.5-moe-instruct', 'mistralai/mistral-large', 'mistralai/mistral-large-2-instruct', 'moonshotai/kimi-k2.6', 'nvidia/vila', 'poolside/laguna-xs-2.1', 'stepfun-ai/step-5-preview', 'z-ai/glm-5.3-flash'] - pin a size in data/model_sizes.json to admit one of them.",
-      "Stage A: pinging 7 candidates...",
-      "  ping nvidia/nemotron-3-ultra-550b-a55b: OK (0.61s)",
-      "  ping minimaxai/minimax-m3.1-flash: OK (8.02s)",
-      "  ping mistralai/mistral-large-4-1t-a52b: OK (2.34s)",
-      "  ping nvidia/llama-3.1-nemotron-ultra-253b-v1: HTTP_404 (0.08s)",
+      "Tuning cycle started at 2026-10-31 05:09:02 UTC (quick=False)",
+      "Guaranteed probe slots: ['01-ai/yi-large', 'adept/fuyu-8b', 'bigcode/starcoder2-15b', 'databricks/dbrx-instruct']",
+      "Candidate pool (10): ['nvidia/nemotron-3-ultra-550b-a55b', 'minimaxai/minimax-m3.1-flash', 'mistralai/mistral-large-4-1t-a52b', 'nvidia/llama-3.1-nemotron-ultra-253b-v1', 'deepseek-ai/deepseek-v4.1-flash', 'nvidia/nemotron-4-340b-instruct', 'ai21labs/jamba-1.5-large-instruct', 'mistralai/mistral-large-2-instruct', 'mistralai/mistral-large', 'moonshotai/kimi-k2.6']",
+      "Excluded, size unresolved (fail-closed): ['stepfun-ai/step-5-preview', 'z-ai/glm-5.3-flash'] - pin a size in data/model_sizes.json to admit one of them.",
+      "Stage A: pinging 10 candidates...",
+      "  ping nvidia/nemotron-3-ultra-550b-a55b: OK (11.62s)",
+      "  ping minimaxai/minimax-m3.1-flash: OK (4.37s)",
+      "  ping mistralai/mistral-large-4-1t-a52b: OK (4.83s)",
+      "  ping nvidia/llama-3.1-nemotron-ultra-253b-v1: HTTP_404 (0.14s)",
       "  ping deepseek-ai/deepseek-v4.1-flash: TIMEOUT (45.0s)",
-      "  ping nvidia/nemotron-4-340b-instruct: HTTP_404 (0.1s)",
-      "  ping ai21labs/jamba-1.5-large-instruct: HTTP_404 (0.09s)",
-      "  probe nvidia/nemotron-3-ultra-550b-a55b/reasoning: partial (score=0.75)",
-      "  probe nvidia/nemotron-3-ultra-550b-a55b/code: compiles 5/5 (score=1.0)",
-      "  probe nvidia/nemotron-3-ultra-550b-a55b/json: keys 4/4 (score=1.0)",
-      "  params nvidia/nemotron-3-ultra-550b-a55b: variant=deterministic (json score=1.0)",
-      "  probe mistralai/mistral-large-4-1t-a52b/reasoning: correct (score=1.0)",
-      "  probe mistralai/mistral-large-4-1t-a52b/code: compiles 5/5 (score=1.0)",
-      "  probe mistralai/mistral-large-4-1t-a52b/json: keys 4/4 (score=1.0)",
-      "  params mistralai/mistral-large-4-1t-a52b: variant=deterministic (json score=1.0)",
+      "  ping nvidia/nemotron-4-340b-instruct: HTTP_404 (0.17s)",
+      "  ping ai21labs/jamba-1.5-large-instruct: HTTP_404 (0.14s)",
+      "  ping mistralai/mistral-large-2-instruct: HTTP_404 (0.19s)",
+      "  ping mistralai/mistral-large: HTTP_404 (0.15s)",
+      "  ping moonshotai/kimi-k2.6: HTTP_404 (0.15s)",
       "  probe minimaxai/minimax-m3.1-flash/reasoning: partial (score=0.75)",
       "  probe minimaxai/minimax-m3.1-flash/code: compiles 5/5 (score=1.0)",
       "  probe minimaxai/minimax-m3.1-flash/json: keys 4/4 (score=1.0)",
       "  params minimaxai/minimax-m3.1-flash: variant=deterministic (json score=1.0)",
-      "  role: mistralai/mistral-large-4-1t-a52b -> duty_primary | score=99.72 (задачи: {'instruction': 1.0, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0}, задержка 2.34с, ok=1.0)",
-      "  role: nvidia/nemotron-3-ultra-550b-a55b -> duty_fast | score=95.19 (задачи: {'instruction': 1.0, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 0.61с, ok=1.0)",
-      "  role: minimaxai/minimax-m3.1-flash -> duty_code | score=87.42 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 8.02с, ok=1.0)"
+      "  probe mistralai/mistral-large-4-1t-a52b/reasoning: correct (score=1.0)",
+      "  probe mistralai/mistral-large-4-1t-a52b/code: compiles 5/5 (score=1.0)",
+      "  probe mistralai/mistral-large-4-1t-a52b/json: keys 4/4 (score=1.0)",
+      "  params mistralai/mistral-large-4-1t-a52b: variant=recommended (json score=1.0)",
+      "  probe nvidia/nemotron-3-ultra-550b-a55b/reasoning: partial (score=0.75)",
+      "  probe nvidia/nemotron-3-ultra-550b-a55b/code: compiles 5/5 (score=1.0)",
+      "  probe nvidia/nemotron-3-ultra-550b-a55b/json: keys 4/4 (score=1.0)",
+      "  params nvidia/nemotron-3-ultra-550b-a55b: variant=deterministic (json score=1.0)",
+      "  role: mistralai/mistral-large-4-1t-a52b -> duty_primary | score=97.64 (задачи: {'instruction': 1.0, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0}, задержка 4.83с, ok=1.0)",
+      "  role: minimaxai/minimax-m3.1-flash -> duty_fast | score=90.46 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 4.37с, ok=1.0)",
+      "  role: nvidia/nemotron-3-ultra-550b-a55b -> duty_code | score=87.17 (задачи: {'instruction': 1.0, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0}, задержка 11.62с, ok=1.0)"
     ]
   },
   "fleet_measurements": [
@@ -299,27 +302,10 @@
       "vendor": "nvidia",
       "prior": 31.5,
       "status": "MEASURED",
-      "final_score": 95.19,
-      "latency_sec": 0.61,
+      "final_score": 87.17,
+      "latency_sec": 11.62,
       "task_scores": {
         "instruction": 1.0,
-        "reasoning": 0.75,
-        "code": 1.0,
-        "json": 1.0
-      },
-      "roles": [
-        "duty_fast"
-      ]
-    },
-    {
-      "id": "minimaxai/minimax-m3.1-flash",
-      "vendor": "minimaxai",
-      "prior": 22.0,
-      "status": "MEASURED",
-      "final_score": 87.42,
-      "latency_sec": 8.02,
-      "task_scores": {
-        "instruction": 0.5,
         "reasoning": 0.75,
         "code": 1.0,
         "json": 1.0
@@ -329,12 +315,29 @@
       ]
     },
     {
+      "id": "minimaxai/minimax-m3.1-flash",
+      "vendor": "minimaxai",
+      "prior": 22.0,
+      "status": "MEASURED",
+      "final_score": 90.46,
+      "latency_sec": 4.37,
+      "task_scores": {
+        "instruction": 0.5,
+        "reasoning": 0.75,
+        "code": 1.0,
+        "json": 1.0
+      },
+      "roles": [
+        "duty_fast"
+      ]
+    },
+    {
       "id": "mistralai/mistral-large-4-1t-a52b",
       "vendor": "mistralai",
       "prior": 18.0,
       "status": "MEASURED",
-      "final_score": 99.72,
-      "latency_sec": 2.34,
+      "final_score": 97.64,
+      "latency_sec": 4.83,
       "task_scores": {
         "instruction": 1.0,
         "reasoning": 1.0,
@@ -351,7 +354,7 @@
       "prior": 10.53,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.08,
+      "latency_sec": 0.14,
       "task_scores": null,
       "roles": []
     },
@@ -371,7 +374,7 @@
       "prior": 7.4,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.1,
+      "latency_sec": 0.17,
       "task_scores": null,
       "roles": []
     },
@@ -381,7 +384,37 @@
       "prior": 3.0,
       "status": "FAILED_HTTP_404",
       "final_score": null,
-      "latency_sec": 0.09,
+      "latency_sec": 0.14,
+      "task_scores": null,
+      "roles": []
+    },
+    {
+      "id": "mistralai/mistral-large-2-instruct",
+      "vendor": "mistralai",
+      "prior": 3.0,
+      "status": "FAILED_HTTP_404",
+      "final_score": null,
+      "latency_sec": 0.19,
+      "task_scores": null,
+      "roles": []
+    },
+    {
+      "id": "mistralai/mistral-large",
+      "vendor": "mistralai",
+      "prior": 2.0,
+      "status": "FAILED_HTTP_404",
+      "final_score": null,
+      "latency_sec": 0.15,
+      "task_scores": null,
+      "roles": []
+    },
+    {
+      "id": "moonshotai/kimi-k2.6",
+      "vendor": "moonshotai",
+      "prior": 0.0,
+      "status": "FAILED_HTTP_404",
+      "final_score": null,
+      "latency_sec": 0.15,
       "task_scores": null,
       "roles": []
     }

@@ -23,9 +23,33 @@
     "params_b": 15.0,
     "source": "docs"
   },
+  "microsoft/phi-3.5-moe-instruct": {
+    "params_b": 6.6,
+    "source": "docs"
+  },
   "minimaxai/minimax-m3.1-flash": {
     "params_b": 230.0,
     "source": "catalog"
+  },
+  "mistralai/mistral-large": {
+    "params_b": 1000.0,
+    "source": "docs"
+  },
+  "mistralai/mistral-large-2-instruct": {
+    "params_b": 1000.0,
+    "source": "docs"
+  },
+  "moonshotai/kimi-k2.6": {
+    "params_b": 1000.0,
+    "source": "docs"
+  },
+  "nvidia/vila": {
+    "params_b": 7.0,
+    "source": "docs"
+  },
+  "poolside/laguna-xs-2.1": {
+    "params_b": 118.0,
+    "source": "docs"
   },
   "vendor/undocumented-instruct": {
     "params_b": 1000.0,
