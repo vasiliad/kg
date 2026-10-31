@@ -85,7 +85,7 @@ jobs:
               echo "[chain] a window is already queued — not dispatching a duplicate."
               exit 0
             fi
-            if gh workflow run telegram_bot.yml --ref "${{ github.ref_name }}" \
+            if gh workflow run telegram_bot.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" \
                  -f duration_minutes="${{ inputs.duration_minutes || '50' }}"; then
               echo "[chain] next window dispatched (attempt ${attempt})."
               exit 0

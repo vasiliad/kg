@@ -39,7 +39,7 @@ jobs:
           echo "[watchdog] active=${active} queued=${queued}"
           if [ "$active" -eq 0 ] && [ "$queued" -eq 0 ]; then
             echo "[watchdog] no live bot window — dispatching a new one."
-            gh workflow run telegram_bot.yml --ref "${{ github.ref_name }}" -f duration_minutes=50 \
+            gh workflow run telegram_bot.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f duration_minutes=50 \
               || echo "[watchdog] WARNING: dispatch failed; will retry on the next tick."
           else
             echo "[watchdog] the bot is alive — nothing to do."
