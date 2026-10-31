@@ -1,0 +1,60 @@
+name: Bot Self-Test Conversation
+
+# The complex interrogates its own Telegram bot through the REAL message
+# processing path (password gate -> keeper dispatch -> duty calls -> reply
+# composition), with only the Telegram transport stubbed. The transcript is
+# committed so the operator can read exactly how the bot answered.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily, offset from the other cycles.
+    - cron: '52 3 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Run the Conversation Battery
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
+          LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          SOVEREIGN_FORCE_DETERMINISTIC: '1'
+        run: python harness/bot_selftest.py
+
+      - name: Commit & Push the Transcript
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add data/bot_selftest_report.json nim_history.log || true
+          if ! git diff --staged --quiet; then
+            git commit -m "test(bot): self-test conversation transcript [skip ci]"
+          else
+            git commit --allow-empty -m "chore(bot): self-test cycle, no transcript change [skip ci]"
+          fi
+          bash scripts/sync_state.sh
