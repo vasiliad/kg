@@ -45,6 +45,7 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
+          LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
         run: |

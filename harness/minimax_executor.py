@@ -69,6 +69,15 @@ class MiniMaxExecutor:
         except Exception:
             pass
 
+        # 0.5 LangSearch — second tier (operator's key, ~1M tokens/day).
+        try:
+            from harness.langsearch import get_langsearch_client
+            lang_results = get_langsearch_client().search(query, num_results=num_results)
+            if lang_results:
+                return lang_results
+        except Exception:
+            pass
+
         # 1. Primary: Keenable Search API
         #    If the configured key is rejected, retry on the public tier so that
         #    one stale key never costs the complex its live-search capability.

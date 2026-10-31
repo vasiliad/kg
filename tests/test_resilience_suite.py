@@ -470,6 +470,25 @@ def test_14_sync_helper_rebases_and_retries():
     print("[+] Test 14 Passed: concurrent-job push race is handled by design.")
 
 
+def test_14e_langsearch_parses_standard_shape():
+    print("\n" + "=" * 60)
+    print("TEST 14e: LangSearch client — response parsing and fail-closed stubs")
+    print("=" * 60)
+    from harness.langsearch import LangSearchClient
+    client = LangSearchClient(api_key="")  # unconfigured
+    assert not client.is_configured and client.search("anything") == [], \
+        "an unconfigured client must be a silent no-op"
+    fake = {"code": 200, "data": {"webPages": {"value": [
+        {"name": "T1", "url": "https://a", "snippet": "s1"},
+        {"name": "T2", "url": "https://b", "text": "full text mode"},
+    ]}}}
+    parsed = LangSearchClient._parse(fake, 5)
+    assert parsed[0] == {"title": "T1", "url": "https://a", "snippet": "s1"}
+    assert parsed[1]["snippet"] == "full text mode", "text mode must map into snippet"
+    assert LangSearchClient._parse({}, 5) == [], "malformed answers parse to empty"
+    print("[+] Test 14e Passed: LangSearch answers map to the standard shape.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -493,6 +512,7 @@ if __name__ == "__main__":
         test_14b_size_floor_keeps_only_big_models,
         test_14c_unknown_size_is_resolved_or_excluded,
         test_14d_tinyfish_pool_rotates_and_fails_over,
+        test_14e_langsearch_parses_standard_shape,
     ]
     failed = []
     for t in tests:
