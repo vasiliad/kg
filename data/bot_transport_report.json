@@ -1,0 +1,28 @@
+{
+  "ran_at": "2026-10-31T08:25:14.302571+00:00",
+  "bot": "immortal911bot",
+  "chat_id": 846947027,
+  "tests": [
+    {
+      "label": "короткое_с_клавиатурой",
+      "ok": true,
+      "detail": "sendMessage ok=True"
+    },
+    {
+      "label": "длинное_сообщение",
+      "ok": true,
+      "detail": "длина 9229 символов, доставлено=True"
+    },
+    {
+      "label": "битый_html_fallback",
+      "ok": true,
+      "detail": "доставлено через fallback=True"
+    },
+    {
+      "label": "живая_карточка_статуса",
+      "ok": true,
+      "detail": "handle_status_command выполнен в реальном чате"
+    }
+  ],
+  "summary": "PASSED"
+}
