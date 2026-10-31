@@ -51,8 +51,16 @@
     "params_b": 118.0,
     "source": "docs"
   },
+  "stepfun-ai/step-5-preview": {
+    "params_b": 600.0,
+    "source": "docs"
+  },
   "vendor/undocumented-instruct": {
     "params_b": 1000.0,
+    "source": "docs"
+  },
+  "z-ai/glm-5.3-flash": {
+    "params_b": 320.0,
     "source": "docs"
   }
 }
