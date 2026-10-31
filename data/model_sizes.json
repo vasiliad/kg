@@ -1,4 +1,28 @@
 {
+  "01-ai/yi-large": {
+    "params_b": 70.0,
+    "source": "docs"
+  },
+  "ai21labs/jamba-1.5-large-instruct": {
+    "params_b": 398.0,
+    "source": "docs"
+  },
+  "databricks/dbrx-instruct": {
+    "params_b": 36.0,
+    "source": "docs"
+  },
+  "deepseek-ai/deepseek-v4.1-flash": {
+    "params_b": 196.0,
+    "source": "docs"
+  },
+  "microsoft/kosmos-2": {
+    "params_b": 25.0,
+    "source": "docs"
+  },
+  "microsoft/phi-3-vision-128k-instruct": {
+    "params_b": 15.0,
+    "source": "docs"
+  },
   "minimaxai/minimax-m3.1-flash": {
     "params_b": 230.0,
     "source": "catalog"
