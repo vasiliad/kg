@@ -39,6 +39,7 @@ duty team, and no score is ever invented.
 """
 
 import os
+import re
 import sys
 import json
 import time
@@ -59,7 +60,7 @@ from harness.state_manager import StateManager
 from harness import fleet_probes
 
 DEFAULT_POLICY = {
-    "max_candidates": 14,        # pinged
+    "max_candidates": 18,        # pinged
     "quality_candidates": 6,     # get the full objective probe set
     "quality_tasks": ["reasoning", "code", "json"],
     "param_sweep": True,         # tune sampling parameters by measurement
@@ -68,6 +69,8 @@ DEFAULT_POLICY = {
     "max_fleet_size": 5,
     "probe_timeout_sec": 45,
     "heavy_timeout_sec": 75,
+    "max_newcomers": 4,          # guaranteed probe slots for catalogue newcomers
+    "rotation_slots": 4,         # never-measured models pulled in per cycle
     "weights": {"quality": 0.55, "speed": 0.25, "reliability": 0.20},
 }
 
@@ -88,6 +91,23 @@ CAPABILITY_PRIOR = {
     "instruct": 1.0, "omni": -2.0, "preview": -1.0,
 }
 HEAVY_MARKERS = ("ultra", "550b", "253b", "340b", "-super-", "1t-")
+
+# Parameter-count bonus: a trillion-parameter newcomer ("mistral-large-4-1t")
+# must outrank a 3B legacy model in the probe queue, otherwise strong releases
+# wait behind incumbent names. Capped so it is a prior, not a verdict.
+SIZE_BONUS_RE = re.compile(r"(\d+(?:\.\d+)?)(tb|t|b)(?=$|[-_a-z])")
+
+
+def _size_bonus(model_id: str) -> float:
+    best = 0.0
+    for m in SIZE_BONUS_RE.finditer((model_id or "").lower()):
+        val = float(m.group(1))
+        unit = m.group(2)
+        # "1t"/"1tb" = 1T params (1000B); "550b" = 550B. Plain version tags
+        # like "v1"/"v0.1" never match (a bare digit needs a unit after it).
+        params_b = val * 1000.0 if unit in ("tb", "t") else val
+        best = max(best, min(6.0, params_b / 100.0))
+    return best
 
 ROLE_LABELS = {
     "duty_primary": "Дежурный основной",
@@ -149,7 +169,7 @@ class FleetTuner:
     # ------------------------------------------------------------------
     def candidate_prior(self, model_id: str, is_current_fleet: bool, is_seed: bool) -> float:
         low = (model_id or "").lower()
-        prior = 0.0
+        prior = _size_bonus(low)
         for marker, weight in CAPABILITY_PRIOR.items():
             if marker in low:
                 prior += weight
@@ -163,25 +183,35 @@ class FleetTuner:
         self,
         live_models: List[Dict[str, Any]],
         previous_fleet_ids: Optional[List[str]] = None,
+        must_probe: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Returns the models worth measuring: everything chat-like that is not
         structurally excluded, ranked by prior, capped to max_candidates.
-        A brand-new supplier model competes here on equal terms with the seed.
+
+        `must_probe` ids bypass the prior ranking entirely — catalogue
+        newcomers and never-measured models get guaranteed slots, so a strong
+        release (e.g. a new trillion-param flagship) can never wait behind
+        incumbent names.
         """
         previous = {str(x) for x in (previous_fleet_ids or [])}
         seed_families = set(self.tracker.quality_baseline.keys())
+        forced: List[str] = []
+        for mid in (must_probe or []):
+            if mid and mid not in forced:
+                forced.append(mid)
 
         pool: List[Dict[str, Any]] = []
-        for m in live_models:
-            mid = m.get("id", "") if isinstance(m, dict) else ""
-            if not mid:
-                continue
+        seen: set = set()
+
+        def add_candidate(mid: str) -> None:
+            if not mid or mid in seen:
+                return
             low = mid.lower()
             if mid in LOCAL_ONLY_MODEL_IDS or low in {x.lower() for x in LOCAL_ONLY_MODEL_IDS}:
-                continue
+                return
             if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
-                continue
+                return
             family = self.tracker.get_model_reputation(mid).get("matched_model")
             is_seed = family in seed_families and family != mid
             prior = self.candidate_prior(mid, mid in previous, is_seed)
@@ -193,11 +223,40 @@ class FleetTuner:
                 "recommended_params": NIMScanner(self.api_key)._get_recommended_params(mid)
                 if self.api_key else {"temperature": 0.6, "top_p": 0.9, "max_tokens": 2048},
             })
+            seen.add(mid)
 
-        pool.sort(key=lambda c: c["prior"], reverse=True)
+        for mid in forced:
+            add_candidate(mid)
+
+        rest: List[Dict[str, Any]] = []
+        for m in live_models:
+            mid = m.get("id", "") if isinstance(m, dict) else ""
+            if mid and mid not in seen:
+                low = mid.lower()
+                if mid in LOCAL_ONLY_MODEL_IDS or low in {x.lower() for x in LOCAL_ONLY_MODEL_IDS}:
+                    continue
+                if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
+                    continue
+                family = self.tracker.get_model_reputation(mid).get("matched_model")
+                is_seed = family in seed_families and family != mid
+                rest.append({
+                    "id": mid, "vendor": vendor_of(mid),
+                    "prior": self.candidate_prior(mid, mid in previous, is_seed),
+                    "heavy": _heavy(mid),
+                    "recommended_params": NIMScanner(self.api_key)._get_recommended_params(mid)
+                    if self.api_key else {"temperature": 0.6, "top_p": 0.9, "max_tokens": 2048},
+                })
+
+        rest.sort(key=lambda c: c["prior"], reverse=True)
         cap = self.policy["max_candidates"]
-        if len(pool) > cap:
-            self.say(f"Candidate pool: kept top {cap} of {len(pool)} chat-like models by prior.")
+        for c in rest[: max(0, cap - len(pool))]:
+            add_candidate(c["id"])
+
+        if len(rest) + len(forced) > cap:
+            self.say(
+                f"Candidate pool: {len(forced)} guaranteed slots (newcomers/rotation) "
+                f"+ top {max(0, cap - len(pool))} of {len(rest)} by prior."
+            )
         return pool[:cap]
 
     # ------------------------------------------------------------------
@@ -591,7 +650,37 @@ class FleetTuner:
                 self.say("Live catalogue unavailable: keeping the previous fleet.")
                 return self._finish(state, None, reason="CATALOG_UNAVAILABLE", dry_run=dry_run)
 
-        candidates = self.build_candidate_pool(live_models, previous_fleet_ids=previous_fleet)
+        # Guaranteed probe slots: (a) catalogue newcomers since the last
+        # snapshot, (b) a rotation through models never measured before, so
+        # the whole chat-like catalogue gets probed over successive cycles.
+        # A strong release (e.g. a fresh trillion-param flagship) therefore
+        # cannot wait behind incumbent names.
+        live_ids = {m.get("id") for m in live_models if isinstance(m, dict) and m.get("id")}
+        try:
+            previous_snapshot = {str(x) for x in (state.get("catalog_snapshot") or [])}
+            measured_before = {
+                m.get("id") for m in (state.get("fleet_measurements") or [])
+                if isinstance(m, dict) and m.get("id")
+            }
+        except Exception:
+            previous_snapshot, measured_before = set(), set()
+
+        def _chat_like(mid: str) -> bool:
+            low = (mid or "").lower()
+            return (mid not in LOCAL_ONLY_MODEL_IDS
+                    and not any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS))
+
+        must_probe: List[str] = [
+            mid for mid in sorted(live_ids - previous_snapshot) if _chat_like(mid)
+        ][: int(self.policy["max_newcomers"])]
+        unmeasured = [
+            mid for mid in sorted(live_ids - measured_before - set(must_probe)) if _chat_like(mid)
+        ]
+        must_probe.extend(unmeasured[: max(0, int(self.policy["rotation_slots"]) - len(must_probe))])
+        if must_probe:
+            self.say(f"Guaranteed probe slots: {must_probe}")
+
+        candidates = self.build_candidate_pool(live_models, previous_fleet_ids=previous_fleet, must_probe=must_probe)
         self.say(f"Candidate pool ({len(candidates)}): {[c['id'] for c in candidates]}")
 
         measurements = self.evaluate(candidates)
