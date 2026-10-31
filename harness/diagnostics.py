@@ -148,6 +148,48 @@ def check_keenable() -> Dict[str, Any]:
         return {"ok": False, "reason": "network_error"}
 
 
+def check_tinyfish() -> Dict[str, Any]:
+    """Probes the TinyFish search pool (tier 0) with one live query."""
+    _hdr("[2b] TinyFish Search pool (api.search.tinyfish.ai)")
+    try:
+        from harness.tinyfish import get_tinyfish_pool
+        pool = get_tinyfish_pool()
+        if not pool.is_configured:
+            print("  STATUS: MISSING - TINYFISH_API_KEYS secret is not set.")
+            return {"ok": False, "reason": "missing_keys", "keys": 0}
+        results = pool.search("NVIDIA NIM inference platform", num_results=3)
+        print(f"  keys in pool: {len(pool)} | results: {len(results)}")
+        if results:
+            print(f"  STATUS: OK - top result: {results[0].get('url', '')[:80]}")
+            return {"ok": True, "keys": len(pool), "results": len(results)}
+        print("  STATUS: BROKEN - the pool returned no results (all keys rejected?).")
+        return {"ok": False, "reason": "no_results", "keys": len(pool)}
+    except Exception as e:
+        print(f"  STATUS: UNREACHABLE - {type(e).__name__}: {e}")
+        return {"ok": False, "reason": "network_error"}
+
+
+def check_langsearch() -> Dict[str, Any]:
+    """Probes the LangSearch client (tier 0.5) with one live query."""
+    _hdr("[2c] LangSearch (api.langsearch.com)")
+    try:
+        from harness.langsearch import get_langsearch_client
+        client = get_langsearch_client()
+        if not client.is_configured:
+            print("  STATUS: MISSING - LANGSEARCH_API_KEY secret is not set.")
+            return {"ok": False, "reason": "missing_key"}
+        results = client.search("NVIDIA NIM inference platform", num_results=3)
+        print(f"  results: {len(results)}")
+        if results:
+            print(f"  STATUS: OK - top result: {results[0].get('url', '')[:80]}")
+            return {"ok": True, "results": len(results)}
+        print("  STATUS: BROKEN - no results returned.")
+        return {"ok": False, "reason": "no_results"}
+    except Exception as e:
+        print(f"  STATUS: UNREACHABLE - {type(e).__name__}: {e}")
+        return {"ok": False, "reason": "network_error"}
+
+
 def check_telegram() -> Dict[str, Any]:
     """Validates the Telegram bot token and confirms the bot identity."""
     _hdr("[3] Telegram Bot API (api.telegram.org)")
@@ -234,6 +276,8 @@ def main() -> int:
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "nvidia": check_nvidia(),
+        "tinyfish": check_tinyfish(),
+        "langsearch": check_langsearch(),
         "keenable": check_keenable(),
         "telegram": check_telegram(),
         "state": check_github_state(),
@@ -243,6 +287,8 @@ def main() -> int:
     _hdr("SUMMARY")
     nvidia = report["nvidia"]
     print(f"  NVIDIA NIM : {'OK' if nvidia.get('ok') else 'DEGRADED (' + str(nvidia.get('reason')) + ')'}")
+    print(f"  TinyFish   : {'OK' if report['tinyfish'].get('ok') else 'DEGRADED (' + str(report['tinyfish'].get('reason')) + ')'}")
+    print(f"  LangSearch : {'OK' if report['langsearch'].get('ok') else 'DEGRADED (' + str(report['langsearch'].get('reason')) + ')'}")
     print(f"  Keenable   : {'OK' if report['keenable'].get('ok') else 'DEGRADED (' + str(report['keenable'].get('reason')) + ')'}")
     print(f"  Telegram   : {'OK' if report['telegram'].get('ok') else 'DEGRADED (' + str(report['telegram'].get('reason')) + ')'}")
     print(f"  Credentials: {'ALL SET' if report['credentials'].get('ok') else 'INCOMPLETE'}")

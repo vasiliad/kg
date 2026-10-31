@@ -43,6 +43,8 @@ jobs:
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           SOVEREIGN_FORCE_DETERMINISTIC: '1'
         run: python harness/bot_selftest.py
 

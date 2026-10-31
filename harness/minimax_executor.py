@@ -65,6 +65,7 @@ class MiniMaxExecutor:
             from harness.tinyfish import get_tinyfish_pool
             tiny_results = get_tinyfish_pool().search(query, num_results=num_results)
             if tiny_results:
+                print(f"[Search] served by TinyFish ({len(tiny_results)} results)")
                 return tiny_results
         except Exception:
             pass
@@ -74,6 +75,7 @@ class MiniMaxExecutor:
             from harness.langsearch import get_langsearch_client
             lang_results = get_langsearch_client().search(query, num_results=num_results)
             if lang_results:
+                print(f"[Search] served by LangSearch ({len(lang_results)} results)")
                 return lang_results
         except Exception:
             pass
