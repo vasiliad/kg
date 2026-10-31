@@ -1,0 +1,10 @@
+{
+  "minimaxai/minimax-m3.1-flash": {
+    "params_b": 230.0,
+    "source": "catalog"
+  },
+  "vendor/undocumented-instruct": {
+    "params_b": 1000.0,
+    "source": "docs"
+  }
+}

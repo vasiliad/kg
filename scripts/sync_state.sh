@@ -24,6 +24,7 @@ CONFLICT_FILES=(
   "data/.bot_sessions.json"
   "data/.bot_settings.json"
   "data/fleet_report.json"
+  "data/model_sizes.json"
 )
 
 git config --global user.name "vasiliad"

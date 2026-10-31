@@ -358,21 +358,71 @@ def test_14b_size_floor_keeps_only_big_models():
     assert parsed_params_b("nvidia/nemotron-3-ultra-550b-a55b") == 550.0
     assert parsed_params_b("minimaxai/minimax-m3.1-flash") is None  # no size token
     tuner = FleetTuner(api_key="test-key")
+    # Hermetic resolver: no network in unit tests (the real one may hit the
+    # docs search, which would make this test flaky).
+    from harness.model_size import SizeResolver as _SR
+    tuner.size_resolver = _SR(overrides={}, searcher=lambda q: [],
+                              cache_path=_tmp_dir() / "sizes.json")
     catalog = [
         {"id": "nvidia/nemotron-3-ultra-550b-a55b"},   # 550B -> in
         {"id": "mistralai/mistral-large-4-1t-a52b"},   # 1T   -> in
         {"id": "nvidia/nemotron-3.5-super-vl-120b-a12b"},  # 120B -> OUT (operator: too small)
         {"id": "google/gemma-2b"},                     # 2B   -> OUT
-        {"id": "minimaxai/minimax-m3.1-flash"},        # unknown size -> probe decides
+        # no size token in the id, but the catalogue metadata resolves it:
+        {"id": "minimaxai/minimax-m3.1-flash", "description": "A 230 billion parameter MoE model."},
+        {"id": "vendor/undocumented-instruct"},        # unresolvable -> OUT (fail-closed)
     ]
     pool_ids = [c["id"] for c in tuner.build_candidate_pool(catalog, previous_fleet_ids=[])]
     assert "nvidia/nemotron-3-ultra-550b-a55b" in pool_ids
     assert "mistralai/mistral-large-4-1t-a52b" in pool_ids
     assert "nvidia/nemotron-3.5-super-vl-120b-a12b" not in pool_ids, "120B must be below the floor"
     assert "google/gemma-2b" not in pool_ids, "2B must be below the floor"
-    assert "minimaxai/minimax-m3.1-flash" in pool_ids, "unknown-size ids stay probe-eligible"
+    assert "minimaxai/minimax-m3.1-flash" in pool_ids, "size resolved from metadata -> eligible"
+    assert "vendor/undocumented-instruct" not in pool_ids, "unresolvable size -> excluded"
     print(f"[+] Pool under a 150B floor: {pool_ids}")
-    print("[+] Test 14b Passed: only big models (or unknown-size) enter the pool.")
+    print("[+] Test 14b Passed: only big models (or resolvable ones) enter the pool.")
+
+
+def test_14c_unknown_size_is_resolved_or_excluded():
+    print("\n" + "=" * 60)
+    print("TEST 14c: No size in the id -> metadata/docs resolve it, else OUT")
+    print("=" * 60)
+    from harness.model_size import (
+        parse_size_from_text, parse_size_from_id, SizeResolver,
+    )
+    # text parsing: prose and "NB parameters" forms; bare "4B tokens" must NOT match
+    assert parse_size_from_text("a 550 billion parameter flagship") == 550.0
+    assert parse_size_from_text("1.2 trillion parameters") == 1200.0
+    assert parse_size_from_text("70B params, 8B active") == 70.0
+    assert parse_size_from_text("supports 4B token context") is None
+    assert parse_size_from_id("mistralai/mistral-large-4-1t-a52b") == 1000.0
+    # resolver precedence: id -> catalog metadata -> cache -> docs; unresolved = None
+    overrides = {}
+    cache = Path(tempfile.mkdtemp(prefix="kg-sizes-")) / "model_sizes.json"
+    r1 = SizeResolver(overrides=overrides, cache_path=cache)
+    assert r1.resolve("x/model-550b-instruct") == 550.0 and r1.sources["x/model-550b-instruct"] == "id"
+    entry = {"id": "vendor/mystery-instruct", "description": "A dense 230B parameter model."}
+    r2 = SizeResolver(overrides=overrides, cache_path=cache)
+    assert r2.resolve("vendor/mystery-instruct", entry) == 230.0
+    r3 = SizeResolver(overrides=None, cache_path=cache)  # a fresh cycle loads the persisted cache
+    assert r3.resolve("vendor/mystery-instruct", {"id": "vendor/mystery-instruct"}) == 230.0
+    # docs search resolves once and caches
+    def fake_search(query):
+        return ["Mystery-Instruct is a 310 billion parameter dense model"]
+    r4 = SizeResolver(overrides=overrides, searcher=fake_search, cache_path=cache)
+    assert r4.resolve("vendor/mystery2") == 310.0
+    # fail-closed: nothing anywhere -> None
+    r5 = SizeResolver(overrides=overrides, searcher=lambda q: [], cache_path=cache)
+    assert r5.resolve("vendor/completely-unknown") is None
+    # the pool must reject an unresolvable model even in guaranteed slots
+    tuner = FleetTuner(api_key="test-key")
+    tuner.size_resolver = r5  # everything unresolved
+    pool_ids = [c["id"] for c in tuner.build_candidate_pool(
+        [{"id": "vendor/completely-unknown"}], previous_fleet_ids=[], must_probe=["vendor/completely-unknown"],
+    )]
+    assert pool_ids == [], "an unresolvable model must NOT enter the pool, even as a newcomer"
+    print("[+] id/metadata/docs/cache precedence verified; unresolvable => excluded")
+    print("[+] Test 14c Passed: the pool cannot accumulate garbage.")
 
 
 def test_14_sync_helper_rebases_and_retries():
@@ -407,6 +457,7 @@ if __name__ == "__main__":
         test_13_workflows_that_push_have_contents_write,
         test_14_sync_helper_rebases_and_retries,
         test_14b_size_floor_keeps_only_big_models,
+        test_14c_unknown_size_is_resolved_or_excluded,
     ]
     failed = []
     for t in tests:

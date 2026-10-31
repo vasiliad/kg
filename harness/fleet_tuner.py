@@ -173,6 +173,29 @@ class FleetTuner:
         self.state_mgr = StateManager()
         self._log: List[str] = []
 
+        # Size resolution (operator rule: no size in the id -> it must come
+        # from the catalogue metadata or the docs; unresolved = excluded).
+        from harness.model_size import SizeResolver, load_overrides
+        self.size_resolver = SizeResolver(overrides=load_overrides(), searcher=self._doc_searcher)
+        self._skipped_small = 0
+        self._skipped_unknown_size: List[str] = []
+        self._offline = False
+
+    def _doc_searcher(self, query: str) -> List[str]:
+        """Documentation lookup through the existing search stack (cached by
+        the resolver; bounded per cycle; silent when offline)."""
+        if self._offline:
+            return []
+        try:
+            from harness.minimax_executor import MiniMaxExecutor
+            executor = MiniMaxExecutor(nvidia_api_key=self.api_key or "")
+            return [
+                (r.get("snippet") or "") + " " + (r.get("title") or "")
+                for r in (executor.search_web(query, num_results=5) or [])
+            ]
+        except Exception:
+            return []
+
     # ------------------------------------------------------------------
     # Logging helpers
     # ------------------------------------------------------------------
@@ -200,6 +223,7 @@ class FleetTuner:
         live_models: List[Dict[str, Any]],
         previous_fleet_ids: Optional[List[str]] = None,
         must_probe: Optional[List[str]] = None,
+        entries_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Returns the models worth measuring: everything chat-like that is not
@@ -220,7 +244,15 @@ class FleetTuner:
         pool: List[Dict[str, Any]] = []
         seen: set = set()
 
-        def add_candidate(mid: str) -> None:
+        def _size_or_none(mid: str, entry: Any) -> Optional[float]:
+            """Size from the id, else from metadata/docs via the resolver.
+            None = cannot be determined -> the model stays OUT (fail-closed)."""
+            size = parsed_params_b(mid)
+            if size:
+                return size
+            return self.size_resolver.resolve(mid, entry)
+
+        def add_candidate(mid: str, entry: Any = None) -> None:
             if not mid or mid in seen:
                 return
             low = mid.lower()
@@ -229,13 +261,17 @@ class FleetTuner:
             if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
                 return
             floor = float(self.policy.get("min_params_b") or 0.0)
-            size = parsed_params_b(mid)
+            size = _size_or_none(mid, entry)
             if size is not None and size < floor:
                 # Hard size floor (operator decision 2026-10-31): anything at
-                # or under ~120B never enters the pool. Ids WITHOUT a size
-                # token stay eligible — they cannot be judged by name, the
-                # probe decides (e.g. minimax/glm/deepseek carry no size).
-                self._skipped_small = getattr(self, "_skipped_small", 0) + 1
+                # or under ~120B never enters the pool.
+                self._skipped_small += 1
+                return
+            if size is None:
+                # The operator was explicit: no size in the id AND unresolved
+                # from metadata/docs means no pool entry — garbage stays out.
+                if mid not in self._skipped_unknown_size:
+                    self._skipped_unknown_size.append(mid)
                 return
             family = self.tracker.get_model_reputation(mid).get("matched_model")
             is_seed = family in seed_families and family != mid
@@ -251,7 +287,7 @@ class FleetTuner:
             seen.add(mid)
 
         for mid in forced:
-            add_candidate(mid)
+            add_candidate(mid, (entries_by_id or {}).get(mid))
 
         rest: List[Dict[str, Any]] = []
         floor = float(self.policy.get("min_params_b") or 0.0)
@@ -263,8 +299,13 @@ class FleetTuner:
                     continue
                 if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
                     continue
-                size = parsed_params_b(mid)
+                size = _size_or_none(mid, m)
                 if size is not None and size < floor:
+                    self._skipped_small += 1
+                    continue
+                if size is None:
+                    if mid not in self._skipped_unknown_size:
+                        self._skipped_unknown_size.append(mid)
                     continue
                 family = self.tracker.get_model_reputation(mid).get("matched_model")
                 is_seed = family in seed_families and family != mid
@@ -659,6 +700,7 @@ class FleetTuner:
 
         state = self.state_mgr.load_local_state()
         previous_fleet = [m.get("id") for m in state.get("active_fleet", []) if isinstance(m, dict) and m.get("id")]
+        self._offline = offline_catalog is not None
 
         if not self.api_key and offline_catalog is None:
             self.say("No NVIDIA_API_KEY: keeping the previous fleet, marking degraded.")
@@ -709,8 +751,21 @@ class FleetTuner:
         if must_probe:
             self.say(f"Guaranteed probe slots: {must_probe}")
 
-        candidates = self.build_candidate_pool(live_models, previous_fleet_ids=previous_fleet, must_probe=must_probe)
+        entries_by_id = {
+            m.get("id"): m for m in live_models
+            if isinstance(m, dict) and m.get("id")
+        }
+
+        candidates = self.build_candidate_pool(
+            live_models, previous_fleet_ids=previous_fleet, must_probe=must_probe,
+            entries_by_id=entries_by_id,
+        )
         self.say(f"Candidate pool ({len(candidates)}): {[c['id'] for c in candidates]}")
+        if self._skipped_unknown_size:
+            self.say(
+                f"Excluded, size unresolved (fail-closed): {self._skipped_unknown_size} "
+                "- pin a size in data/model_sizes.json to admit one of them."
+            )
 
         measurements = self.evaluate(candidates)
         chosen, notes = self.compose_fleet(measurements)
@@ -729,6 +784,12 @@ class FleetTuner:
             "quick": self.quick,
             "policy": self.policy,
             "candidates": [c["id"] for c in candidates],
+            "size_policy": {
+                "min_params_b": self.policy.get("min_params_b"),
+                "skipped_small": self._skipped_small,
+                "skipped_unresolved": self._skipped_unknown_size,
+                "resolutions": dict(self.size_resolver.sources),
+            },
             "measurements": [
                 {
                     "id": m["id"], "vendor": m["vendor"], "prior": m["prior"], "status": m["status"],
