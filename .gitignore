@@ -57,3 +57,9 @@ temp/
 # repository grows by ~37 KB per remembered message.
 data/.memory_vault.json
 data/.event_vault.json
+
+# Temporary MTProto session for the real-user bot test client
+# (scripts/tg_user_test.py). The session grants access to the test Telegram
+# account, so it must NEVER be committed; it is deleted by `logout`.
+data/.tg_user_session*
+data/.tg_code_hash
