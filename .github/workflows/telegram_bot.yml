@@ -55,6 +55,22 @@ jobs:
           pip install --upgrade pip
           pip install pyyaml requests pydantic httpx
 
+      # The bot arms its own safety net. GitHub's cron scheduler is erratic
+      # in this repository — the watchdog's schedule produced no run at all in
+      # two hours — so the backup must not depend on it. This tick is asked to
+      # check AFTER this window would have ended: if the chain step below
+      # handed over to a successor, the tick finds a live bot and does
+      # nothing; if the hand-over failed, the tick finds nothing and revives
+      # the bot. One tick per window, and it never spawns another tick, so
+      # nothing can multiply.
+      - name: Arm the watchdog (checks after this window ends)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run bot_watchdog.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" \
+            -f delay_minutes=55 \
+            || echo "[arm] WARNING: could not arm the watchdog tick; the cron watchdog and the heartbeat still cover this."
+
       - name: Run Bot Daemon (bounded window + state sync)
         env:
           DURATION_MINUTES: ${{ inputs.duration_minutes || '50' }}

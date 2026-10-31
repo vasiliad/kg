@@ -62,7 +62,7 @@ from harness import fleet_probes
 DEFAULT_POLICY = {
     "max_candidates": 18,        # pinged
     "quality_candidates": 6,     # get the full objective probe set
-    "quality_tasks": ["reasoning", "code", "json"],
+    "quality_tasks": ["reasoning", "code", "json", "translation", "toolcall"],
     "param_sweep": True,         # tune sampling parameters by measurement
     "min_score": 55.0,           # below this a model is not duty-eligible
     "min_params_b": 150.0,       # hard floor: models under 150B never enter the pool
@@ -683,6 +683,11 @@ class FleetTuner:
                                  "    sem = asyncio.Semaphore(5)\n    try:\n"
                                  "        async with sem:\n            pass\n"
                                  "    except Exception:\n        pass\n```")}
+            if "грузополучатель" in low:
+                return {"ok": True, "status": "OK", "latency_sec": 3.0, "text": "Consignee"}
+            if "get_weather" in low:
+                return {"ok": True, "status": "OK", "latency_sec": 4.0,
+                        "text": '{"tool": "get_weather", "arguments": {"city": "Новосибирск"}}'}
             if "json" in low or "извлеки" in low:
                 return {"ok": True, "status": "OK", "latency_sec": 4.0,
                         "text": ('{"company": "NVIDIA Corporation", "model": "Nemotron-4 340B",'

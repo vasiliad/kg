@@ -13,9 +13,13 @@ Three task families:
   2. code         - the answer must actually parse as Python
   3. json         - the answer must actually parse as a JSON object
   4. instruction  - answers in Russian (the operator's language)
+  5. translation  - answers in English, for a term with one canonical form
+  6. toolcall     - emits a well-formed tool call with the right argument
 
 The reasoning task is deliberately small: a 12-ball urn gives exactly one
 correct fraction (47/66), so "smart" is distinguishable from "confident".
+The translation and tool-call tasks are cheap on purpose — a short answer
+means a short probe, and the tuner runs on a wall-clock budget.
 """
 
 import ast
@@ -52,10 +56,35 @@ JSON_PROMPT = (
     'Формат: {"company": str, "model": str, "release_date": str, "context_tokens": int}'
 )
 
+# --- Multilingual ---------------------------------------------------------
+# A logistics term with ONE canonical English translation ("consignee").
+# A model that answers in Russian has not shown multilingual ability, but a
+# model that answers in English with a looser synonym still gets partial
+# credit — the probe measures the ability, not the dictionary.
+TRANSLATION_PROMPT = (
+    "Переведи на английский только это слово, ничего не добавляя: "
+    "«грузополучатель»"
+)
+TRANSLATION_KEYWORDS = ("consignee",)
+TRANSLATION_ALTERNATIVES = ("recipient", "receiver")
+
+# --- Tool use -------------------------------------------------------------
+# The model must emit a well-formed tool call: the right tool name and the
+# right argument, in JSON. Both halves are verifiable by construction.
+TOOLCALL_PROMPT = (
+    "Ты вызываешь инструмент `get_weather` для города Новосибирск. "
+    "Ответь ТОЛЬКО JSON без markdown и без пояснений, в формате: "
+    '{"tool": str, "arguments": {"city": str}}'
+)
+TOOLCALL_NAME = "get_weather"
+TOOLCALL_CITIES = ("новосибирск", "novosibirsk")
+
 PROBE_TASKS: Dict[str, Dict[str, Any]] = {
-    "reasoning": {"prompt": REASONING_PROMPT, "max_tokens": 3072, "weight": 0.35},
-    "code": {"prompt": CODE_PROMPT, "max_tokens": 2048, "weight": 0.35},
-    "json": {"prompt": JSON_PROMPT, "max_tokens": 1024, "weight": 0.20},
+    "reasoning": {"prompt": REASONING_PROMPT, "max_tokens": 3072, "weight": 0.30},
+    "code": {"prompt": CODE_PROMPT, "max_tokens": 2048, "weight": 0.30},
+    "json": {"prompt": JSON_PROMPT, "max_tokens": 1024, "weight": 0.15},
+    "translation": {"prompt": TRANSLATION_PROMPT, "max_tokens": 256, "weight": 0.125},
+    "toolcall": {"prompt": TOOLCALL_PROMPT, "max_tokens": 512, "weight": 0.125},
 }
 
 # The instruction check rides on the cheap ping: it is the only place where
@@ -180,11 +209,76 @@ def check_instruction(text: str) -> Tuple[float, str]:
     return 0.0, "not_russian"
 
 
+def _cyrillic_ratio(text: str) -> float:
+    letters = [c for c in (text or "") if c.isalpha()]
+    if not letters:
+        return 0.0
+    cyr = sum(1 for c in letters if ("А" <= c <= "я") or c in "Ёё")
+    return cyr / len(letters)
+
+
+def check_translation(text: str) -> Tuple[float, str]:
+    """
+    Multilingual ability: the model must answer in ENGLISH.
+
+    The word has one canonical translation ("consignee"). A looser synonym
+    still counts as partial credit — the probe measures the ability to leave
+    the operator's language, not the dictionary. But an answer that stays in
+    Russian has shown no multilingual ability at all and scores zero.
+    """
+    if not text or not text.strip():
+        return 0.0, "empty"
+    flat = _flatten(text).lower().replace("-", "").replace("_", " ")
+    if any(kw in flat for kw in TRANSLATION_KEYWORDS):
+        return 1.0, "correct"
+    if any(kw in flat for kw in TRANSLATION_ALTERNATIVES):
+        return 0.4, "loose_synonym"
+    if _cyrillic_ratio(text) > 0.2:
+        return 0.0, "answered_in_russian"
+    return 0.0, "wrong"
+
+
+def check_toolcall(text: str) -> Tuple[float, str]:
+    """
+    Tool use: the model must emit a well-formed call.
+
+    Two halves, each verifiable by construction: the JSON must parse and
+    name the right tool (0.5), and it must carry the right argument (0.5).
+    A model that explains instead of calling scores zero on the first half.
+    """
+    blob = _extract_json(text)
+    if not blob:
+        return 0.0, "no_json"
+    try:
+        data = json.loads(blob)
+    except Exception:
+        return 0.0, "invalid_json"
+    if not isinstance(data, dict):
+        return 0.0, "not_object"
+    score = 0.0
+    tool = str(data.get("tool", "")).strip().lower().replace("-", "_")
+    if tool == TOOLCALL_NAME:
+        score += 0.5
+    args = data.get("arguments")
+    if isinstance(args, dict):
+        city = str(args.get("city", "")).strip().lower()
+        if city in TOOLCALL_CITIES:
+            score += 0.5
+    elif isinstance(args, str):
+        # Some models flatten the arguments into a string instead of an object.
+        if any(c in args.lower() for c in TOOLCALL_CITIES):
+            score += 0.25
+    verdict = "correct" if score >= 0.99 else "partial" if score > 0 else "wrong"
+    return round(score, 3), f"{verdict} tool={tool or 'none'}"
+
+
 CHECKERS = {
     "reasoning": check_reasoning,
     "code": check_code,
     "json": check_json,
     "instruction": check_instruction,
+    "translation": check_translation,
+    "toolcall": check_toolcall,
 }
 
 

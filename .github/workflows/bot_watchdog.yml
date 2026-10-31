@@ -25,18 +25,46 @@ on:
     - cron: '27 * * * *'
     - cron: '47 * * * *'
   workflow_dispatch:
+    inputs:
+      delay_minutes:
+        description: 'Wait this many minutes before checking the chain'
+        required: false
+        default: '0'
+        type: string
 
 permissions:
   actions: write
   contents: read
 
+concurrency:
+  # Ticks with the same delay queue behind each other; an armed tick (which
+  # sleeps for most of an hour) must not starve the immediate cron ticks.
+  group: bot-watchdog-${{ inputs.delay_minutes || '0' }}
+  # Overlapping ticks must queue, not run side by side: two revivers must
+  # never race and start two bot windows.
+  cancel-in-progress: false
+
 jobs:
   revive:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Must cover the longest delay anyone may ask for.
+    timeout-minutes: 65
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # The bot arms this watchdog at the START of its window and asks it to
+      # check AFTER the window is over. A tick that checked immediately would
+      # always see a live bot and learn nothing; a tick that checks after the
+      # window ends sees exactly the situation it exists for — a chain that
+      # did not hand over to a successor.
+      - name: Wait before checking the chain
+        run: |
+          delay="${{ inputs.delay_minutes || '0' }}"
+          if [ "$delay" -gt 0 ] 2>/dev/null; then
+            echo "[watchdog] waiting ${delay} minutes before checking the chain..."
+            sleep $((delay * 60))
+          fi
 
       - name: Revive the bot window if the chain is dead
         env:

@@ -1,9 +1,10 @@
 name: Autonomous Fleet Tuner
 
 # The complex selects and tunes its own duty models: scans the live NIM
-# catalogue, pings candidates, runs objective probes (math / code / JSON),
-# sweeps sampling parameters, and commits the measured roster. The config
-# seed is only the starting point — the measurement is the verdict.
+# catalogue, pings candidates, runs objective probes (math / code / JSON /
+# translation / tool call), sweeps sampling parameters, and commits the
+# measured roster. The config seed is only the starting point — the
+# measurement is the verdict.
 
 on:
   workflow_dispatch:
@@ -18,7 +19,11 @@ permissions:
 jobs:
   tune:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Measured: the tuner takes 9m30s–20m29s per cycle (12 pings + 6 models x
+    # 3 quality probes + a parameter sweep). The multilingual and tool-call
+    # probes add 12 short calls, so the cap was raised from 25 to 40 minutes
+    # to keep the measurement from being cut off mid-flight.
+    timeout-minutes: 40
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

@@ -26,6 +26,8 @@ Suites:
  16. Bot: the daemon keeps itself alive (chained windows + watchdog).
  17. Bot: two independent recovery paths revive a dead chain, and neither
      can start a second chain beside a live one.
+ 18. Fleet: the multilingual and tool-use probes score by construction, and
+     every quality candidate gets the same probe set.
 """
 
 import os
@@ -610,7 +612,92 @@ def test_17_bot_has_two_independent_recovery_paths():
     assert "- cron: '7 * * * *'" in watchdog, "the watchdog must have a dense schedule"
     assert "," not in watchdog.split("schedule:")[1].split("workflow_dispatch:")[0], \
         "the comma-list cron form produced no scheduled run and must not come back"
+
+    # The cron is not trustworthy here, so the bot arms the watchdog itself
+    # and asks it to check AFTER the window would have ended — a tick that
+    # checked immediately would always see a live bot and learn nothing.
+    bot_wf = (PROJECT_ROOT / ".github" / "workflows" / "telegram_bot.yml").read_text(encoding="utf-8")
+    assert "gh workflow run bot_watchdog.yml" in bot_wf, \
+        "the bot must arm its own safety net — cron cannot be trusted"
+    assert "-f delay_minutes=55" in bot_wf, \
+        "the armed tick must check after the window ends, not while the bot is alive"
+    assert "delay_minutes" in watchdog, "the watchdog must accept a delay"
+    assert "sleep $((delay * 60))" in watchdog, "the watchdog must honour the delay"
+    assert "group: bot-watchdog" in watchdog, \
+        "overlapping ticks must queue instead of racing each other"
     print("[+] Test 17 Passed: two independent recovery paths, both fail-safe.")
+
+
+def test_18_multilingual_and_tool_use_probes_are_objective():
+    """
+    The new probes must be verifiable by construction, like the others: the
+    expected answer is parsed or matched, never judged by another model.
+    A probe that cannot be checked objectively is not a probe.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 18: multilingual and tool-use probes score by construction")
+    print("=" * 60)
+
+    # --- multilingual: the model must leave the operator's language --------
+    score, verdict = fleet_probes.score_probe("translation", "Consignee")
+    assert score == 1.0, f"the canonical English term must score 1.0, got {score}"
+    assert verdict == "correct"
+
+    # The keyword wins even when the model also repeats the Russian word:
+    # a model that answers "Consignee (грузополучатель)" HAS shown the ability.
+    score, _ = fleet_probes.score_probe("translation", "Consignee (грузополучатель)")
+    assert score == 1.0, "the correct term must survive a Russian gloss"
+
+    score, verdict = fleet_probes.score_probe("translation", "грузополучатель")
+    assert score == 0.0 and verdict == "answered_in_russian", \
+        "answering in Russian is not multilingual ability"
+
+    score, verdict = fleet_probes.score_probe("translation", "the recipient")
+    assert score == 0.4 and verdict == "loose_synonym", \
+        "a loose synonym earns partial credit, not a full one"
+
+    score, verdict = fleet_probes.score_probe("translation", "")
+    assert score == 0.0 and verdict == "empty", "an empty answer is not a translation"
+
+    # --- tool use: a well-formed call with the right tool and argument ---
+    good = '{"tool": "get_weather", "arguments": {"city": "Новосибирск"}}'
+    score, verdict = fleet_probes.score_probe("toolcall", good)
+    assert score == 1.0, f"a correct tool call must score 1.0, got {score}"
+    assert verdict.startswith("correct"), f"the verdict must name the correct call, got {verdict}"
+
+    # A model that explains instead of calling must not be credited.
+    score, verdict = fleet_probes.score_probe("toolcall", "I would call the weather tool for Novosibirsk.")
+    assert score == 0.0 and verdict == "no_json", \
+        "prose is not a tool call"
+
+    wrong_tool = '{"tool": "get_news", "arguments": {"city": "Новосибирск"}}'
+    score, _ = fleet_probes.score_probe("toolcall", wrong_tool)
+    assert score == 0.5, "the right argument with the wrong tool is half a call"
+
+    wrong_arg = '{"tool": "get_weather", "arguments": {"city": "Paris"}}'
+    score, _ = fleet_probes.score_probe("toolcall", wrong_arg)
+    assert score == 0.5, "the right tool with the wrong argument is half a call"
+
+    score, verdict = fleet_probes.score_probe("toolcall", '{"tool": "get_weather",}')
+    assert score == 0.0 and verdict == "invalid_json", \
+        "malformed JSON must not be credited as a tool call"
+
+    score, verdict = fleet_probes.score_probe("toolcall", "{not json")
+    assert score == 0.0 and verdict == "no_json", \
+        "text without a JSON object is not a tool call"
+
+    # A fenced block is still a tool call.
+    score, _ = fleet_probes.score_probe("toolcall", "```json\n" + good + "\n```")
+    assert score == 1.0, "markdown fences must not hide a correct call"
+
+    # --- the probes are wired into the tuner -------------------------------
+    assert "translation" in fleet_probes.PROBE_TASKS and "toolcall" in fleet_probes.PROBE_TASKS
+    assert DEFAULT_POLICY["quality_tasks"] == ["reasoning", "code", "json", "translation", "toolcall"], \
+        "every quality candidate must get the same probes, or the composite is not comparable"
+    weights = fleet_probes.probe_weights(DEFAULT_POLICY["quality_tasks"] + ["instruction"])
+    assert abs(sum(weights.values()) - 1.0) < 1e-9, "probe weights must sum to 1"
+    assert weights["instruction"] > 0, "the operator's language must keep a share"
+    print("[+] Test 18 Passed: the new probes are objective, cheap and wired in.")
 
 
 if __name__ == "__main__":
@@ -640,6 +727,7 @@ if __name__ == "__main__":
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,
+        test_18_multilingual_and_tool_use_probes_are_objective,
     ]
     failed = []
     for t in tests:
