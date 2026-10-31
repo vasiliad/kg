@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-31T05:27:45.017309+00:00",
+  "timestamp": "2026-10-31T06:17:56.859863+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -112,6 +112,15 @@
     },
     "missing_models": []
   },
+  "tinyfish": {
+    "ok": true,
+    "keys": 8,
+    "results": 3
+  },
+  "langsearch": {
+    "ok": true,
+    "results": 3
+  },
   "keenable": {
     "ok": false,
     "reason": "http_401"
@@ -125,7 +134,7 @@
     "files": {
       "data/.bot_sessions.json": 45,
       "data/telegram_history.txt": 14735,
-      "active_models.json": 14044,
+      "active_models.json": 16309,
       "data/.memory_vault.json": null
     }
   },
