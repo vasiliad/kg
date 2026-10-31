@@ -1,35 +1,43 @@
 name: Telegram Bot Daemon (Cloud)
 
 # The bot is a long-polling Telegram client. A hosted runner job cannot live
-# forever, so the bot runs in bounded windows and is cycled by cron. Telegram
-# queues unread updates for up to 24h, so nothing is lost between cycles —
-# the bot picks up exactly where it left off.
+# forever, so the bot runs in bounded windows — but the windows CHAIN
+# themselves: every run dispatches the next one in its final step, so the bot
+# stays alive indefinitely without depending on GitHub's cron scheduler.
+#
+# Why not cron: on 2026-10-31 the `*/30` schedule silently skipped the 17:00Z
+# and 17:30Z slots (no run was even created), and the bot was unreachable for
+# hours while Telegram kept the operator's messages queued. A chain does not
+# care whether the scheduler is punctual — one successful dispatch is enough.
+#
+# If the chain itself ever breaks, bot_watchdog.yml revives it.
 #
 # Public repositories get free GitHub-hosted runners (unlimited minutes).
 
 on:
-  schedule:
-    # Every 30 minutes; the bot lives for 25 minutes, then the job restarts it.
-    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       duration_minutes:
         description: 'How long the bot should stay alive'
         required: false
-        default: '25'
+        default: '50'
         type: string
 
 permissions:
   contents: write
+  # Required to dispatch the next window of this same workflow.
+  actions: write
 
 concurrency:
   group: telegram-bot-daemon
+  # Never cancel a running bot: the operator's message is being answered.
+  # A queued window simply waits its turn instead of racing the live one.
   cancel-in-progress: false
 
 jobs:
   bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 65
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -49,7 +57,7 @@ jobs:
 
       - name: Run Bot Daemon (bounded window + state sync)
         env:
-          DURATION_MINUTES: ${{ inputs.duration_minutes || '25' }}
+          DURATION_MINUTES: ${{ inputs.duration_minutes || '50' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
@@ -61,3 +69,28 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
         run: bash scripts/run_telegram_daemon.sh
+
+      # `if: always()` — the chain must survive a crashed daemon step too.
+      # The queued-window check keeps exactly one chain alive: if the watchdog
+      # already queued a window, this run does not add a second one.
+      - name: Chain the next window (keeps the bot alive without cron)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          API="repos/${{ github.repository }}/actions/workflows/telegram_bot.yml/runs"
+          for attempt in 1 2 3; do
+            queued=$(gh api "$API?status=queued" --jq '.total_count' 2>/dev/null || echo 0)
+            if [ "$queued" -ne 0 ]; then
+              echo "[chain] a window is already queued — not dispatching a duplicate."
+              exit 0
+            fi
+            if gh workflow run telegram_bot.yml --ref "${{ github.ref_name }}" \
+                 -f duration_minutes="${{ inputs.duration_minutes || '50' }}"; then
+              echo "[chain] next window dispatched (attempt ${attempt})."
+              exit 0
+            fi
+            echo "[chain] dispatch failed (attempt ${attempt}); retrying in 10s..."
+            sleep 10
+          done
+          echo "[chain] WARNING: could not dispatch the next window — the watchdog will revive the bot."

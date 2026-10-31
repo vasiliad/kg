@@ -22,6 +22,8 @@ Suites:
  12. Secrets: no real passphrase embedded in the public source.
  13. CI: every workflow that pushes has contents: write.
  14. Sync: the race-safe push helper actually rebases and retries.
+ 15. Bot: the Telegram cursor survives a restart, holds at gaps, never replays.
+ 16. Bot: the daemon keeps itself alive (chained windows + watchdog).
 """
 
 import os
@@ -489,6 +491,83 @@ def test_14e_langsearch_parses_standard_shape():
     print("[+] Test 14e Passed: LangSearch answers map to the standard shape.")
 
 
+def test_15_telegram_cursor_survives_restart():
+    print("\n" + "=" * 60)
+    print("TEST 15: Telegram cursor — survives a restart, never replays, never skips")
+    print("=" * 60)
+    import threading
+    from harness.telegram_bot import HarnessTelegramBot
+
+    tmp = Path(tempfile.mkdtemp(prefix="cursor-test-"))
+    sessions = tmp / ".bot_sessions.json"
+
+    def bare_bot():
+        # Built without the constructor: no network, no keys, no engines.
+        bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
+        bot.sessions_file = sessions
+        bot.authorized_chats = {846947027}
+        bot.last_update_id = 0
+        bot._pending_update_ids = set()
+        bot._dispatched_max = 0
+        bot._state_lock = threading.RLock()
+        return bot
+
+    bot = bare_bot()
+    # Updates finish out of order (the pool runs handlers in parallel), so an
+    # unfinished update must hold the cursor back — a crash must never drop
+    # the message that is still in flight.
+    bot._mark_update_dispatched(10)
+    bot._mark_update_dispatched(11)
+    bot._mark_update_handled(11)
+    assert bot.last_update_id == 9, "an unfinished update must hold the cursor back"
+    bot._mark_update_handled(10)
+    assert bot.last_update_id == 11, "the cursor must advance over finished updates"
+
+    # Telegram update ids are arbitrary large numbers, not a sequence that
+    # starts at 1 — the cursor must work with any base.
+    bot2 = bare_bot()
+    bot2._mark_update_dispatched(8_765_432)
+    bot2._mark_update_handled(8_765_432)
+    assert bot2.last_update_id == 8_765_432, "the cursor must not assume ids start at 1"
+
+    on_disk = json.loads(sessions.read_text(encoding="utf-8"))
+    assert on_disk["last_update_id"] == 8_765_432, "the cursor must be persisted"
+    assert 846947027 in on_disk["authorized_chats"], "authorized chats must survive too"
+
+    # A cold start must resume from the persisted cursor. This is what stops
+    # the bot from replaying the whole 24-hour backlog after every restart
+    # (the bug that answered old questions again, hours late).
+    fresh = bare_bot()
+    assert fresh._load_last_update_id() == 8_765_432, "the cursor must survive a restart"
+    assert fresh._load_authorized_sessions() == {846947027}
+
+    # A broken session file degrades to an empty state, never to a crash.
+    sessions.write_text("{not json", encoding="utf-8")
+    broken = bare_bot()
+    assert broken._load_last_update_id() == 0, "a broken session file must not crash the bot"
+
+    print("[+] Test 15 Passed: the cursor survives a restart, holds at gaps, and degrades safely.")
+
+
+def test_16_bot_keeps_itself_alive():
+    print("\n" + "=" * 60)
+    print("TEST 16: The bot survives a restart — chained windows plus a watchdog")
+    print("=" * 60)
+    bot_wf = (PROJECT_ROOT / ".github" / "workflows" / "telegram_bot.yml").read_text(encoding="utf-8")
+    watchdog = (PROJECT_ROOT / ".github" / "workflows" / "bot_watchdog.yml").read_text(encoding="utf-8")
+    # The bot may not depend on a punctual cron: on 2026-10-31 the */30
+    # schedule skipped whole slots and the bot was unreachable for hours.
+    assert "workflow_dispatch" in bot_wf, "a bot window must be dispatchable"
+    assert "gh workflow run telegram_bot.yml" in bot_wf, "a window must dispatch its own successor"
+    assert "if: always()" in bot_wf, "the chain must survive a crashed daemon step"
+    assert "actions: write" in bot_wf, "dispatching a workflow requires actions: write"
+    assert "schedule:" in watchdog, "the watchdog needs a schedule"
+    assert "gh workflow run telegram_bot.yml" in watchdog, "the watchdog must revive the bot"
+    assert "status=in_progress" in watchdog and "status=queued" in watchdog, \
+        "the watchdog must never create a second chain next to a live one"
+    print("[+] Test 16 Passed: the bot keeps itself alive without a punctual cron.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -513,6 +592,8 @@ if __name__ == "__main__":
         test_14c_unknown_size_is_resolved_or_excluded,
         test_14d_tinyfish_pool_rotates_and_fails_over,
         test_14e_langsearch_parses_standard_shape,
+        test_15_telegram_cursor_survives_restart,
+        test_16_bot_keeps_itself_alive,
     ]
     failed = []
     for t in tests:

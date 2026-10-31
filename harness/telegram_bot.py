@@ -73,6 +73,17 @@ class HarnessTelegramBot:
         self.sessions_file = PROJECT_ROOT / "data" / ".bot_sessions.json"
         self.sessions_file.parent.mkdir(parents=True, exist_ok=True)
         self.authorized_chats: Set[int] = self._load_authorized_sessions()
+        # Telegram's update cursor. It MUST survive a restart: without it the
+        # bot re-reads every unconfirmed update of the last 24 hours on each
+        # cold start and re-answers old questions — duplicate replies, wasted
+        # NIM quota, and the operator's real message buried under the replay.
+        self.last_update_id: int = self._load_last_update_id()
+        # Updates dispatched to a worker but not finished yet, plus the highest
+        # update id ever seen. The cursor may only pass an update that is
+        # really done — and update ids are arbitrary large numbers, not a
+        # sequence starting at 1.
+        self._pending_update_ids: Set[int] = set()
+        self._dispatched_max: int = self.last_update_id
 
         self.state_mgr = StateManager()
         self.disk_guard = DiskGuard()
@@ -90,7 +101,9 @@ class HarnessTelegramBot:
             log_format="events",
         )
         self.user_states: Dict[int, str] = {} # chat_id -> awaiting_input_type
-        self._state_lock = threading.Lock()
+        # Re-entrant: saving the session file takes the same lock that
+        # advances the update cursor, and both live in one code path.
+        self._state_lock = threading.RLock()
         self._stop = False
         # Model calls (MiniMax streaming can take minutes) run in a worker pool so
         # the polling loop keeps receiving and answering other messages meanwhile.
@@ -114,22 +127,72 @@ class HarnessTelegramBot:
     def is_configured(self) -> bool:
         return bool(self.bot_token and len(self.bot_token) > 10)
 
-    def _load_authorized_sessions(self) -> Set[int]:
+    def _load_sessions(self) -> Dict[str, Any]:
+        """Reads the persisted session state; a broken file yields empty state."""
         if self.sessions_file.exists():
             try:
                 with open(self.sessions_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    return set(data.get("authorized_chats", []))
+                    if isinstance(data, dict):
+                        return data
             except Exception:
                 pass
-        return set()
+        return {}
+
+    def _load_authorized_sessions(self) -> Set[int]:
+        try:
+            return set(self._load_sessions().get("authorized_chats", []))
+        except Exception:
+            return set()
+
+    def _load_last_update_id(self) -> int:
+        try:
+            return int(self._load_sessions().get("last_update_id") or 0)
+        except Exception:
+            return 0
 
     def _save_authorized_sessions(self) -> None:
+        """Persists authorized chats AND the Telegram update cursor together."""
         try:
+            with self._state_lock:
+                payload = {
+                    "authorized_chats": list(self.authorized_chats),
+                    "last_update_id": self.last_update_id,
+                }
             with open(self.sessions_file, "w", encoding="utf-8") as f:
-                json.dump({"authorized_chats": list(self.authorized_chats)}, f, indent=2)
+                json.dump(payload, f, indent=2)
         except Exception:
             pass
+
+    def _mark_update_dispatched(self, update_id: int) -> None:
+        """Records that an update is being handled right now."""
+        if update_id <= 0:
+            return
+        with self._state_lock:
+            self._pending_update_ids.add(update_id)
+            if update_id > self._dispatched_max:
+                self._dispatched_max = update_id
+
+    def _mark_update_handled(self, update_id: int) -> None:
+        """
+        Advances the persisted cursor over the updates that are really done.
+        The cursor may only pass an update that finished; a crash must never
+        swallow the operator's message. Telegram's own confirmation is what
+        actually deletes an update, so a slightly conservative cursor costs one
+        extra scan, never a lost message.
+        """
+        if update_id <= 0:
+            return
+        with self._state_lock:
+            self._pending_update_ids.discard(update_id)
+            if self._pending_update_ids:
+                # The oldest unfinished update holds the cursor back.
+                cursor = min(self._pending_update_ids) - 1
+            else:
+                cursor = max(self.last_update_id, self._dispatched_max)
+            if cursor > self.last_update_id:
+                self.last_update_id = cursor
+                self._save_authorized_sessions()
 
     def get_me(self) -> Dict[str, Any]:
         """Validates bot token against Telegram API."""
@@ -727,7 +790,13 @@ class HarnessTelegramBot:
         print(f"[*] Polling Telegram updates... Press Ctrl+C to terminate.")
         print("=" * 72)
 
-        offset = None
+        # Resume from the persisted cursor: only messages that arrived since
+        # the last handled update are fetched. Without this the bot replays
+        # the whole 24-hour backlog on every cold start — which is exactly
+        # what made it look "silent then bursty": old questions answered
+        # again, hours late, while the fresh one waited in the queue.
+        offset = self.last_update_id or None
+        print(f"[*] Telegram cursor starts at update_id={self.last_update_id}")
         while not self._stop:
             try:
                 params = {"timeout": 25}
@@ -738,11 +807,15 @@ class HarnessTelegramBot:
                 if res.status_code == 200:
                     data = res.json()
                     for update in data.get("result", []):
-                        offset = update["update_id"] + 1
+                        update_id = int(update.get("update_id", 0))
+                        offset = update_id + 1
+                        self._mark_update_dispatched(update_id)
                         if "message" in update:
                             # Handle in a worker pool: long model generations must not
                             # freeze polling (the bot stays responsive to everyone else).
-                            self._pool.submit(self._safe_process, update["message"])
+                            self._pool.submit(self._safe_process, update["message"], update_id)
+                        else:
+                            self._mark_update_handled(update_id)
                 elif res.status_code == 409:
                     print("[!] Conflict: Another bot instance is polling. Waiting 10s...")
                     time.sleep(10)
@@ -757,12 +830,16 @@ class HarnessTelegramBot:
                 print(f"[!] Polling network exception: {e}. Retrying in 5s...")
                 time.sleep(5)
 
-    def _safe_process(self, message: Dict[str, Any]) -> None:
+    def _safe_process(self, message: Dict[str, Any], update_id: int = 0) -> None:
         """Runs in worker threads; keeps handler exceptions from killing the pool."""
         try:
             self.process_message(message)
         except Exception as e:
             print(f"[!] Message processing error: {e}")
+        finally:
+            # The cursor advances only AFTER the handler finished, so a crash
+            # in the middle of an answer can never swallow the message.
+            self._mark_update_handled(update_id)
 
 if __name__ == "__main__":
     bot = HarnessTelegramBot()

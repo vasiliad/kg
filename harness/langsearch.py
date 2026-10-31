@@ -22,7 +22,15 @@ SEARCH_ENDPOINT = "https://api.langsearch.com/v1/web-search"
 
 class LangSearchClient:
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = (api_key or os.getenv("LANGSEARCH_API_KEY", "")).strip()
+        # None means "take the key from the environment"; an explicit empty
+        # string means "this client is deliberately disabled". The distinction
+        # matters: with `api_key or os.getenv(...)` an empty string silently
+        # fell back to the environment, so a caller asking for a disabled
+        # client (and the offline test suite) got a live, key-backed client
+        # that performed a real search instead of a no-op.
+        if api_key is None:
+            api_key = os.getenv("LANGSEARCH_API_KEY", "")
+        self.api_key = (api_key or "").strip()
 
     @property
     def is_configured(self) -> bool:

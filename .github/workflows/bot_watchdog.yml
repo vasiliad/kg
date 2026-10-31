@@ -1,0 +1,46 @@
+name: Bot Watchdog
+
+# Safety net for the Telegram bot.
+#
+# The bot normally lives in a self-chaining sequence of windows
+# (telegram_bot.yml dispatches its own successor). That chain is
+# self-sustaining, but if a link dies the bot would stay silent until a human
+# noticed. This watchdog revives it.
+#
+# It dispatches a new window ONLY when no bot window is running and none is
+# waiting — so it can never create a second chain next to a live one.
+#
+# The schedule is deliberately dense (every 13 minutes) and deliberately
+# off-round: GitHub's cron scheduler skips slots under load, and on
+# 2026-10-31 it skipped the bot's `*/30` slots entirely. A dense, odd-minute
+# schedule survives that far better than a round one.
+
+on:
+  schedule:
+    - cron: '7,20,33,46,59 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  revive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Revive the bot window if the chain is dead
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          API="repos/${{ github.repository }}/actions/workflows/telegram_bot.yml/runs"
+          active=$(gh api "$API?status=in_progress" --jq '.total_count' 2>/dev/null || echo 0)
+          queued=$(gh api "$API?status=queued" --jq '.total_count' 2>/dev/null || echo 0)
+          echo "[watchdog] active=${active} queued=${queued}"
+          if [ "$active" -eq 0 ] && [ "$queued" -eq 0 ]; then
+            echo "[watchdog] no live bot window — dispatching a new one."
+            gh workflow run telegram_bot.yml --ref "${{ github.ref_name }}" -f duration_minutes=50 \
+              || echo "[watchdog] WARNING: dispatch failed; will retry on the next tick."
+          else
+            echo "[watchdog] the bot is alive — nothing to do."
+          fi
