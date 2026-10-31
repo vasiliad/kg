@@ -37,6 +37,7 @@ jobs:
       - name: Probe External Dependencies
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}

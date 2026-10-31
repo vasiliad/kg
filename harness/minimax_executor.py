@@ -59,6 +59,16 @@ class MiniMaxExecutor:
             time.sleep(0.1 - elapsed)
         self._last_search_time = time.time()
 
+        # 0. TinyFish Search — primary tier: an 8-key rotating pool with
+        # generous limits (keys live only in the TINYFISH_API_KEYS secret).
+        try:
+            from harness.tinyfish import get_tinyfish_pool
+            tiny_results = get_tinyfish_pool().search(query, num_results=num_results)
+            if tiny_results:
+                return tiny_results
+        except Exception:
+            pass
+
         # 1. Primary: Keenable Search API
         #    If the configured key is rejected, retry on the public tier so that
         #    one stale key never costs the complex its live-search capability.

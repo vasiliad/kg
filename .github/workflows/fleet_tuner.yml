@@ -39,6 +39,7 @@ jobs:
       - name: Measure the Live Catalogue and Re-select the Duty Team
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
         run: python harness/fleet_tuner.py
 
       - name: Commit & Push Tuned Fleet

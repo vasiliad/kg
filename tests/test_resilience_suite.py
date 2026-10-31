@@ -309,7 +309,7 @@ def test_12_no_secrets_in_public_source():
     print("=" * 60)
     # The check must not contain the secret itself, so it is assembled here
     # from parts — otherwise this very file would be the one leak it hunts.
-    forbidden = ["".join(["arabyan", "3G"])]
+    forbidden = ["".join(["arabyan", "3G"]), "".join(["sk", "-tinyfish-"])]
     extensions = {".py", ".sh", ".yml", ".yaml", ".md", ".json", ".txt"}
     scan_roots = ["harness", "scripts", "tests", ".github", "config.yaml"]
     hits = []
@@ -425,6 +425,40 @@ def test_14c_unknown_size_is_resolved_or_excluded():
     print("[+] Test 14c Passed: the pool cannot accumulate garbage.")
 
 
+def test_14d_tinyfish_pool_rotates_and_fails_over():
+    print("\n" + "=" * 60)
+    print("TEST 14d: TinyFish key pool — rotation, failover, no keys in source")
+    print("=" * 60)
+    from harness.tinyfish import TinyFishSearchPool, SEARCH_ENDPOINT
+    pool = TinyFishSearchPool(keys=["".join(["sk-tinyfish", "-", "A"]), "B", "C"])
+    assert len(pool) == 3 and pool.is_configured
+    # round-robin order
+    seq = [pool._next_key(), pool._next_key(), pool._next_key(), pool._next_key()]
+    assert seq[0] != seq[1] != seq[2] and seq[3] == seq[0], f"rotation broken: {seq}"
+    # a rejected key is skipped on subsequent calls
+    pool.mark_bad(seq[0])
+    nxt = pool._next_key()
+    assert nxt != seq[0], "a marked-bad key must not be handed out"
+    # empty env -> unusable but never raises
+    empty = TinyFishSearchPool(keys=[])
+    assert empty.search("anything") == [] and not empty.is_configured
+    # response parsing (hermetic): standard shape
+    class FakeRes:
+        status_code = 200
+        def json(self):
+            return {"results": [
+                {"title": "T1", "url": "https://a", "snippet": "s1"},
+                {"title": "T2", "url": "https://b", "snippet": "s2"},
+            ]}
+    parsed = TinyFishSearchPool._parse(FakeRes(), 5)
+    assert parsed[0] == {"title": "T1", "url": "https://a", "snippet": "s1"}
+    # a real network call is NOT attempted here — the search() path with a
+    # live key is exercised in the cloud; this suite stays offline.
+    assert SEARCH_ENDPOINT.startswith("https://")
+    print(f"[+] Pool of {len(pool)} keys rotates; bad keys are skipped; parsing is standard-shaped")
+    print("[+] Test 14d Passed: search survives a dead key, and no key can leak into source.")
+
+
 def test_14_sync_helper_rebases_and_retries():
     print("\n" + "=" * 60)
     print("TEST 14: Race-safe push helper exists and actually retries")
@@ -458,6 +492,7 @@ if __name__ == "__main__":
         test_14_sync_helper_rebases_and_retries,
         test_14b_size_floor_keeps_only_big_models,
         test_14c_unknown_size_is_resolved_or_excluded,
+        test_14d_tinyfish_pool_rotates_and_fails_over,
     ]
     failed = []
     for t in tests:

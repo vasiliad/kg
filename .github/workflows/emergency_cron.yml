@@ -39,6 +39,7 @@ jobs:
       - name: Run Autonomous Emergency / Heartbeat Orchestrator
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
