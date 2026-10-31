@@ -65,6 +65,7 @@ DEFAULT_POLICY = {
     "quality_tasks": ["reasoning", "code", "json"],
     "param_sweep": True,         # tune sampling parameters by measurement
     "min_score": 55.0,           # below this a model is not duty-eligible
+    "min_params_b": 150.0,       # hard floor: models under 150B never enter the pool
     "fast_latency_cap_sec": 12.0,
     "max_fleet_size": 5,
     "probe_timeout_sec": 45,
@@ -96,6 +97,21 @@ HEAVY_MARKERS = ("ultra", "550b", "253b", "340b", "-super-", "1t-")
 # must outrank a 3B legacy model in the probe queue, otherwise strong releases
 # wait behind incumbent names. Capped so it is a prior, not a verdict.
 SIZE_BONUS_RE = re.compile(r"(\d+(?:\.\d+)?)(tb|t|b)(?=$|[-_a-z])")
+
+
+def parsed_params_b(model_id: str) -> Optional[float]:
+    """
+    Total parameter count encoded in the model id, in billions.
+    "mistral-large-4-1t-a52b" -> 1000 (the TOTAL, not the 52B active part),
+    "nemotron-3-ultra-550b-a55b" -> 550. None when the id carries no size.
+    """
+    best: Optional[float] = None
+    for m in SIZE_BONUS_RE.finditer((model_id or "").lower()):
+        val = float(m.group(1))
+        unit = m.group(2)
+        params_b = val * 1000.0 if unit in ("tb", "t") else val
+        best = params_b if best is None else max(best, params_b)
+    return best
 
 
 def _size_bonus(model_id: str) -> float:
@@ -212,6 +228,15 @@ class FleetTuner:
                 return
             if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
                 return
+            floor = float(self.policy.get("min_params_b") or 0.0)
+            size = parsed_params_b(mid)
+            if size is not None and size < floor:
+                # Hard size floor (operator decision 2026-10-31): anything at
+                # or under ~120B never enters the pool. Ids WITHOUT a size
+                # token stay eligible — they cannot be judged by name, the
+                # probe decides (e.g. minimax/glm/deepseek carry no size).
+                self._skipped_small = getattr(self, "_skipped_small", 0) + 1
+                return
             family = self.tracker.get_model_reputation(mid).get("matched_model")
             is_seed = family in seed_families and family != mid
             prior = self.candidate_prior(mid, mid in previous, is_seed)
@@ -229,6 +254,7 @@ class FleetTuner:
             add_candidate(mid)
 
         rest: List[Dict[str, Any]] = []
+        floor = float(self.policy.get("min_params_b") or 0.0)
         for m in live_models:
             mid = m.get("id", "") if isinstance(m, dict) else ""
             if mid and mid not in seen:
@@ -236,6 +262,9 @@ class FleetTuner:
                 if mid in LOCAL_ONLY_MODEL_IDS or low in {x.lower() for x in LOCAL_ONLY_MODEL_IDS}:
                     continue
                 if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
+                    continue
+                size = parsed_params_b(mid)
+                if size is not None and size < floor:
                     continue
                 family = self.tracker.get_model_reputation(mid).get("matched_model")
                 is_seed = family in seed_families and family != mid

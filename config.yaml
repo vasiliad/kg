@@ -38,6 +38,7 @@ fleet_tuner:
   max_candidates: 14        # pinged each cycle (30 RPM budget)
   quality_candidates: 6     # get the full objective probe set
   min_score: 55.0           # below this a model is not duty-eligible
+  min_params_b: 150.0       # hard floor: models under 150B never enter the pool
   fast_latency_cap_sec: 12.0
   max_fleet_size: 5
   param_sweep: true         # sampling parameters chosen by measurement

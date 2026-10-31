@@ -348,6 +348,33 @@ def test_13_workflows_that_push_have_contents_write():
     print("[+] Test 13 Passed: all pushing workflows hold contents: write.")
 
 
+def test_14b_size_floor_keeps_only_big_models():
+    print("\n" + "=" * 60)
+    print("TEST 14b: Hard parameter floor — 120B-and-under never enter the pool")
+    print("=" * 60)
+    from harness.fleet_tuner import parsed_params_b
+    # id parsing: total params, not the active MoE part
+    assert parsed_params_b("mistralai/mistral-large-4-1t-a52b") == 1000.0
+    assert parsed_params_b("nvidia/nemotron-3-ultra-550b-a55b") == 550.0
+    assert parsed_params_b("minimaxai/minimax-m3.1-flash") is None  # no size token
+    tuner = FleetTuner(api_key="test-key")
+    catalog = [
+        {"id": "nvidia/nemotron-3-ultra-550b-a55b"},   # 550B -> in
+        {"id": "mistralai/mistral-large-4-1t-a52b"},   # 1T   -> in
+        {"id": "nvidia/nemotron-3.5-super-vl-120b-a12b"},  # 120B -> OUT (operator: too small)
+        {"id": "google/gemma-2b"},                     # 2B   -> OUT
+        {"id": "minimaxai/minimax-m3.1-flash"},        # unknown size -> probe decides
+    ]
+    pool_ids = [c["id"] for c in tuner.build_candidate_pool(catalog, previous_fleet_ids=[])]
+    assert "nvidia/nemotron-3-ultra-550b-a55b" in pool_ids
+    assert "mistralai/mistral-large-4-1t-a52b" in pool_ids
+    assert "nvidia/nemotron-3.5-super-vl-120b-a12b" not in pool_ids, "120B must be below the floor"
+    assert "google/gemma-2b" not in pool_ids, "2B must be below the floor"
+    assert "minimaxai/minimax-m3.1-flash" in pool_ids, "unknown-size ids stay probe-eligible"
+    print(f"[+] Pool under a 150B floor: {pool_ids}")
+    print("[+] Test 14b Passed: only big models (or unknown-size) enter the pool.")
+
+
 def test_14_sync_helper_rebases_and_retries():
     print("\n" + "=" * 60)
     print("TEST 14: Race-safe push helper exists and actually retries")
@@ -379,6 +406,7 @@ if __name__ == "__main__":
         test_12_no_secrets_in_public_source,
         test_13_workflows_that_push_have_contents_write,
         test_14_sync_helper_rebases_and_retries,
+        test_14b_size_floor_keeps_only_big_models,
     ]
     failed = []
     for t in tests:
