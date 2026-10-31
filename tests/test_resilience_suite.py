@@ -24,6 +24,8 @@ Suites:
  14. Sync: the race-safe push helper actually rebases and retries.
  15. Bot: the Telegram cursor survives a restart, holds at gaps, never replays.
  16. Bot: the daemon keeps itself alive (chained windows + watchdog).
+ 17. Bot: two independent recovery paths revive a dead chain, and neither
+     can start a second chain beside a live one.
 """
 
 import os
@@ -562,10 +564,53 @@ def test_16_bot_keeps_itself_alive():
     assert "if: always()" in bot_wf, "the chain must survive a crashed daemon step"
     assert "actions: write" in bot_wf, "dispatching a workflow requires actions: write"
     assert "schedule:" in watchdog, "the watchdog needs a schedule"
-    assert "gh workflow run telegram_bot.yml" in watchdog, "the watchdog must revive the bot"
-    assert "status=in_progress" in watchdog and "status=queued" in watchdog, \
+    assert "scripts/revive_bot.sh" in watchdog, "the watchdog must revive the bot"
+    revive = (PROJECT_ROOT / "scripts" / "revive_bot.sh").read_text(encoding="utf-8")
+    assert "status=in_progress" in revive and "status=queued" in revive, \
         "the watchdog must never create a second chain next to a live one"
     print("[+] Test 16 Passed: the bot keeps itself alive without a punctual cron.")
+
+
+def test_17_bot_has_two_independent_recovery_paths():
+    """
+    A single cron path is a single point of failure: on 2026-10-31 the bot's
+    own `*/30` schedule was skipped and the bot was unreachable for hours.
+    The bot now chains its own windows (no cron at all), and the chain is
+    backed by TWO revive paths — a dense watchdog and the heartbeat whose
+    cron demonstrably fires. Neither may start a second chain next to a live
+    one, and neither may fail its surrounding job.
+    """
+    print("=" * 60)
+    print("Test 17: the bot has two independent recovery paths")
+    revive = PROJECT_ROOT / "scripts" / "revive_bot.sh"
+    assert revive.exists(), "scripts/revive_bot.sh must exist"
+    script = revive.read_text(encoding="utf-8")
+
+    # The guard: a live OR waiting window means "do nothing".
+    assert "status=in_progress" in script and "status=queued" in script, \
+        "the reviver must look at both running and waiting windows"
+    assert "the bot is alive" in script, "the reviver must stay silent while the bot lives"
+    assert "gh workflow run" in script, "the reviver must be able to start a window"
+    assert "attempt in 1 2 3" in script, "a failed dispatch must be retried"
+    assert script.rstrip().endswith("exit 0"), \
+        "the reviver must never fail the job that hosts it"
+    assert "sleep 10" in script, "a retry must wait instead of hammering the API"
+
+    watchdog = (PROJECT_ROOT / ".github" / "workflows" / "bot_watchdog.yml").read_text(encoding="utf-8")
+    heartbeat = (PROJECT_ROOT / ".github" / "workflows" / "emergency_cron.yml").read_text(encoding="utf-8")
+
+    assert "scripts/revive_bot.sh" in watchdog, "the watchdog must use the shared reviver"
+    assert "scripts/revive_bot.sh" in heartbeat, \
+        "the heartbeat must be the second, independent recovery path"
+    assert "actions: write" in watchdog, "dispatching a window requires actions: write"
+    assert "actions: write" in heartbeat, "dispatching a window requires actions: write"
+
+    # The watchdog's schedule is expressed the same way as every other
+    # scheduled workflow in the repo: one cron entry per minute value.
+    assert "- cron: '7 * * * *'" in watchdog, "the watchdog must have a dense schedule"
+    assert "," not in watchdog.split("schedule:")[1].split("workflow_dispatch:")[0], \
+        "the comma-list cron form produced no scheduled run and must not come back"
+    print("[+] Test 17 Passed: two independent recovery paths, both fail-safe.")
 
 
 if __name__ == "__main__":
@@ -594,6 +639,7 @@ if __name__ == "__main__":
         test_14e_langsearch_parses_standard_shape,
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
+        test_17_bot_has_two_independent_recovery_paths,
     ]
     failed = []
     for t in tests:

@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
   issues: write
+  # Required to dispatch a Telegram bot window when the self-chaining
+  # sequence is dead.
+  actions: write
 
 jobs:
   heartbeat-and-fallback:
@@ -55,6 +58,18 @@ jobs:
           else
             python harness/emergency_runner.py
           fi
+
+      # Second independent recovery path for the Telegram bot. The bot
+      # normally lives in a self-chaining sequence of windows; if that chain
+      # ever breaks, this workflow — whose own cron demonstrably fires — is
+      # the safety net. It starts a window only when none is running and none
+      # is waiting, so it can never race a live bot.
+      - name: Revive the bot window if the chain is dead
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: bash scripts/revive_bot.sh "${{ github.repository }}" telegram_bot.yml 50
 
       - name: Commit & Push Heartbeat (Profile & Workflow Keepalive)
         run: |
