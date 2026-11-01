@@ -71,6 +71,20 @@ jobs:
             -f delay_minutes=55 \
             || echo "[arm] WARNING: could not arm the watchdog tick; the cron watchdog and the heartbeat still cover this."
 
+      # The cycles that GitHub's scheduler forgets must still come back. The
+      # bot window is the most reliable clock in the complex (it chains
+      # itself and runs every ~50 minutes), so it also supervises the other
+      # cycles: each cycle has an artefact that says when it last ran, and a
+      # stale artefact means the cycle is owed a run. Measured on 2026-11-01:
+      # the self-test's daily cron produced ZERO scheduled runs in the whole
+      # life of the repository.
+      - name: Supervise the cycles the scheduler forgets
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python harness/cycle_supervisor.py
+
       - name: Run Bot Daemon (bounded window + state sync)
         env:
           DURATION_MINUTES: ${{ inputs.duration_minutes || '50' }}

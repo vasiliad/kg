@@ -1698,6 +1698,146 @@ def test_29_the_web_is_asked_when_the_operator_asks_for_it():
           "and the facts name their source.")
 
 
+def test_30_every_cycle_comes_back_without_the_scheduler():
+    """
+    Measured on 2026-11-01: GitHub's scheduler skips slots. The self-test's
+    daily cron produced ZERO scheduled runs in the whole life of the
+    repository; the fleet tuner's 03:43Z slot produced no run; the
+    diagnostics' 03:26Z slot produced no run. A cycle that exists only in a
+    cron does not come back after a reboot — and the operator asked for every
+    process to return by itself.
+
+    The supervisor dispatches a cycle whose ARTEFACT is stale, and never
+    dispatches a duplicate: a busy cycle is left alone, and a cycle that was
+    attempted recently waits for its cooldown.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 30: every cycle comes back without the scheduler")
+    print("=" * 60)
+    import tempfile
+    from datetime import datetime, timezone, timedelta
+    from harness import cycle_supervisor as cs
+
+    now = datetime(2026, 11, 1, 6, 0, 0, tzinfo=timezone.utc)
+
+    # --- The timestamps of the artefacts come in three shapes.
+    assert cs.parse_timestamp("2026-11-01T04:20:28.969685+00:00") is not None
+    assert cs.parse_timestamp("2026-11-01T04:20:28Z") is not None
+    assert cs.parse_timestamp("2026-10-31 21:43:12 UTC") is not None, \
+        "the fleet report writes «YYYY-MM-DD HH:MM:SS UTC»"
+    assert cs.parse_timestamp("not a date") is None
+    assert cs.parse_timestamp("") is None
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "data").mkdir(parents=True, exist_ok=True)
+
+        def write_json(rel, payload):
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+        fresh = (now - timedelta(hours=1)).isoformat()
+        stale = (now - timedelta(hours=9)).isoformat()
+        write_json("data/fleet_report.json", {"tuned_at": fresh})
+        write_json("diagnostics_report.json", {"timestamp": fresh})
+        write_json("data/bot_selftest_report.json", {"ran_at": fresh})
+        # The daily report was delivered YESTERDAY — the usual state at the
+        # start of a new day.
+        yesterday = now - timedelta(days=1)
+        (root / "nim_history.log").write_text(
+            f"[{yesterday.strftime('%Y-%m-%d %H:%M:%S')} UTC] "
+            "ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=дневной | статус=DELIVERED\n",
+            encoding="utf-8",
+        )
+
+        cycles = (
+            {"name": "fleet", "workflow": "fleet_tuner.yml",
+             "artefact": "data/fleet_report.json", "field": "tuned_at",
+             "max_age_h": 7.0, "retry_h": 2.0},
+        )
+        daily_cycle = (
+            {"name": "daily_dispatch", "workflow": "daily_dispatch_novt.yml",
+             "artefact": "nim_history.log", "marker": "ОТЧЁТЫ ОТПРАВЛЕНЫ",
+             "max_age_h": 26.0, "retry_h": 6.0, "daily": True,
+             "not_before_utc": 5},
+        )
+
+        dispatched = []
+        original_busy = cs.workflow_busy
+        original_last = cs.last_run_age_h
+        original_dispatch = cs.dispatch_cycle
+        try:
+            cs.workflow_busy = lambda repo, workflow: False
+            cs.last_run_age_h = lambda repo, workflow, now=None: 99.0
+            cs.dispatch_cycle = lambda repo, workflow, ref="": dispatched.append(workflow) or True
+
+            # --- Fresh artefacts are left alone.
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert not dispatched, f"fresh cycles must not run: {dispatched}"
+            assert all(e["action"] == "fresh" for e in report["cycles"]), \
+                f"a fresh artefact must read as fresh: {report['cycles']}"
+
+            # --- A stale artefact is dispatched.
+            write_json("data/fleet_report.json", {"tuned_at": stale})
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert dispatched == ["fleet_tuner.yml"], \
+                f"the stale cycle must be started: {dispatched}"
+            assert "fleet_tuner.yml" in report["dispatched"], \
+                "the report must say what it did"
+
+            # --- The daily cycle is due only after its own hour.
+            dispatched.clear()
+            report = cs.supervise(repo="owner/repo", now=now.replace(hour=4),
+                                  cycles=daily_cycle, root=root)
+            daily = report["cycles"][0]
+            assert daily["action"] == "fresh", \
+                f"the daily report must not go out before 05:00 UTC: {daily}"
+            report = cs.supervise(repo="owner/repo", now=now, cycles=daily_cycle, root=root)
+            daily = report["cycles"][0]
+            assert daily.get("due_today") is True, \
+                f"the daily report is due once a day: {daily}"
+            assert daily["action"] == "dispatched", \
+                f"a due daily report must go out: {daily}"
+
+            # --- A busy cycle is never duplicated.
+            dispatched.clear()
+            cs.workflow_busy = lambda repo, workflow: True
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert not dispatched, f"a busy cycle must not be started: {dispatched}"
+            assert all(e["action"] == "busy" for e in report["cycles"]), \
+                f"a busy cycle must read as busy: {report['cycles']}"
+
+            # --- A cycle that was attempted recently waits for its cooldown.
+            cs.workflow_busy = lambda repo, workflow: False
+            cs.last_run_age_h = lambda repo, workflow, now=None: 0.2
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert not dispatched, f"the cooldown must hold: {dispatched}"
+            assert any(e["action"] == "cooldown" for e in report["cycles"]), \
+                f"the cooldown must be visible: {report['cycles']}"
+
+            # --- A missing artefact is a cycle that never ran: it is owed.
+            dispatched.clear()
+            cs.last_run_age_h = lambda repo, workflow, now=None: 99.0
+            (root / "data" / "fleet_report.json").unlink()
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert "fleet_tuner.yml" in dispatched, \
+                f"a cycle that never ran is owed a run: {dispatched}"
+
+            # --- A broken artefact must not break the supervisor.
+            (root / "data" / "fleet_report.json").write_text("{not json", encoding="utf-8")
+            dispatched.clear()
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert report is not None, "a broken artefact is a verdict, not a crash"
+        finally:
+            cs.workflow_busy = original_busy
+            cs.last_run_age_h = original_last
+            cs.dispatch_cycle = original_dispatch
+
+    print("[+] Test 30 Passed: every cycle comes back on its own artefact, "
+          "and none is duplicated.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1737,6 +1877,7 @@ if __name__ == "__main__":
         test_27_no_chunk_is_lost_and_the_placeholder_is_bare,
         test_28_the_silence_alarm_judges_two_signals_and_never_floods,
         test_29_the_web_is_asked_when_the_operator_asks_for_it,
+        test_30_every_cycle_comes_back_without_the_scheduler,
     ]
     failed = []
     for t in tests:
