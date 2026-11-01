@@ -72,7 +72,9 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "artefact": "nim_history.log",
         "marker": "ОТЧЁТЫ ОТПРАВЛЕНЫ",
         "max_age_h": 26.0,
-        "retry_h": 12.0,
+        # A crashed dispatch must be retried long before the next report is
+        # owed: the report is a daily promise, not a weekly one.
+        "retry_h": 3.0,
         # The report is the 12:00 NOVT one (05:00 UTC). A daily cycle is not
         # merely stale — it is DUE: once a day, and not before its hour.
         "daily": True,
