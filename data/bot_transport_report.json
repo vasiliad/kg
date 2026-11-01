@@ -1,7 +1,7 @@
 {
-  "ran_at": "2026-10-31T08:25:14.302571+00:00",
+  "ran_at": "2026-11-01T00:57:56.899244+00:00",
   "bot": "immortal911bot",
-  "chat_id": 846947027,
+  "chat_id": 557677490,
   "tests": [
     {
       "label": "короткое_с_клавиатурой",
@@ -19,10 +19,25 @@
       "detail": "доставлено через fallback=True"
     },
     {
+      "label": "редактирование_сообщения",
+      "ok": false,
+      "detail": "message_id=114, editMessageText ok=False"
+    },
+    {
+      "label": "удаление_сообщения",
+      "ok": true,
+      "detail": "message_id=115, deleteMessage ok=True"
+    },
+    {
+      "label": "инлайн_кнопки",
+      "ok": true,
+      "detail": "message_id=116, кнопки: [{'text': '🧑\\u200d💼 Состав команды', 'callback_data': 'roster'}, {'text': '🔄 Обновить флот', 'callback_data': 'retune'}]"
+    },
+    {
       "label": "живая_карточка_статуса",
       "ok": true,
       "detail": "handle_status_command выполнен в реальном чате"
     }
   ],
-  "summary": "PASSED"
+  "summary": "FAILED"
 }
