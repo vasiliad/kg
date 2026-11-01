@@ -47,6 +47,8 @@ Suites:
  27. Bot: a long answer loses no chunk (a null reply_markup is refused by
      Telegram), and the placeholder carries no keyboard — so it can be
      edited in place.
+ 28. Bot: the silence alarm judges the trace and the live window together,
+     mails the measured evidence once, and never floods the operator.
 """
 
 import os
@@ -1368,6 +1370,130 @@ def test_27_no_chunk_is_lost_and_the_placeholder_is_bare():
     print("[+] Test 27 Passed: no chunk is lost and the placeholder stays bare.")
 
 
+def test_28_the_silence_alarm_judges_two_signals_and_never_floods():
+    """
+    Silence has two causes — a dead daemon and a failing one — and from the
+    operator's chat they look exactly the same. The alarm must judge it from
+    two independent signals (the bot's own trace AND whether a window is
+    really running), mail the measured evidence once, and stay quiet
+    afterwards. A trace that merely lags behind a live window is push
+    latency, not an outage, and must never produce an alarm.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 28: the silence alarm judges two signals and never floods")
+    print("=" * 60)
+    from datetime import datetime, timedelta, timezone
+    from harness import bot_silence_alarm as alarm
+    from harness import email_sender
+
+    tmp = Path(tempfile.mkdtemp(prefix="silence-alarm-test-"))
+    sessions = tmp / ".bot_sessions.json"
+    marker = tmp / ".bot_silence_alarm.json"
+    now = datetime(2026, 11, 1, 8, 0, 0, tzinfo=timezone.utc)
+
+    def write_trace(minutes_old: int, poll=True):
+        stamp = (now - timedelta(minutes=minutes_old)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        health = {
+            "runs": 3, "started_at": stamp, "last_poll_at": stamp if poll else None,
+            "last_update_at": None, "last_send_at": None, "last_chat_id": 846947027,
+            "updates_seen": 4, "messages_sent": 4, "errors": 1,
+            "last_error": "poll: TimeoutError: timed out",
+        }
+        sessions.write_text(
+            json.dumps({"last_update_id": 12345, "authorized_chats": [846947027],
+                        "health": health}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    sent = []
+
+    class FakeSender:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def is_configured(self):
+            return True
+
+        def send_email(self, recipient_email, subject, html_content, plain_text_content=None):
+            sent.append({"recipient": recipient_email, "subject": subject,
+                         "html": html_content, "plain": plain_text_content})
+            return {"status": "DELIVERED", "recipient": recipient_email, "subject": subject}
+
+    original_sender = email_sender.EmailSender
+    original_window = alarm.live_window
+    original_recipient = alarm.resolve_recipient
+    email_sender.EmailSender = FakeSender
+    alarm.resolve_recipient = lambda: "operator@example.test"
+    try:
+        # --- A live window with a lagging trace is push latency, not an outage.
+        write_trace(20)
+        alarm.live_window = lambda repo=None, workflow="telegram_bot.yml": {
+            "state": "alive", "running": 1, "queued": 0,
+            "started_at": "2026-11-01T07:30:00Z", "age_min": 30.0, "detail": "running=1 queued=0",
+        }
+        report = alarm.run_silence_alarm(now=now, sessions_path=sessions, marker_path=marker)
+        assert report["verdict"]["severity"] == "watch", \
+            f"a lagging trace behind a live window must not be an alarm: {report['verdict']}"
+        assert not sent, "push latency must never mail the operator"
+
+        # --- The chain is dead and the trace is old: the silence is real.
+        write_trace(60)
+        alarm.live_window = lambda repo=None, workflow="telegram_bot.yml": {
+            "state": "dead", "running": 0, "queued": 0,
+            "started_at": None, "age_min": None, "detail": "running=0 queued=0",
+        }
+        report = alarm.run_silence_alarm(now=now, sessions_path=sessions, marker_path=marker)
+        assert report["verdict"]["silent"] is True, "a dead chain with a stale trace is silence"
+        assert report["sent"] is True, "the operator must be told"
+        assert len(sent) == 1, f"exactly one mail per outage, got {len(sent)}"
+        mail = sent[0]
+        assert mail["recipient"] == "operator@example.test", \
+            "the recipient must come from the runtime settings, not the code"
+        assert "не отвечает" in mail["subject"], f"the subject must say it: {mail['subject']}"
+        assert "60" in mail["plain"], f"the age must be measured, not guessed: {mail['plain']}"
+        assert "12345" in mail["plain"], "the cursor belongs in the evidence"
+        assert "poll: TimeoutError" in mail["plain"], "the last error belongs in the evidence"
+
+        # --- The same outage in the next cycle must not produce a second mail.
+        report = alarm.run_silence_alarm(now=now + timedelta(minutes=10),
+                                         sessions_path=sessions, marker_path=marker)
+        assert not sent[1:], "the alarm must not flood the operator"
+        assert report.get("reason") == "cooldown", \
+            f"the repeat must be suppressed by the cooldown: {report.get('reason')}"
+
+        # --- The bot comes back: the marker is cleared, so the next outage is
+        #     reported at once.
+        write_trace(1)
+        alarm.live_window = lambda repo=None, workflow="telegram_bot.yml": {
+            "state": "alive", "running": 1, "queued": 0,
+            "started_at": "2026-11-01T07:58:00Z", "age_min": 2.0, "detail": "running=1 queued=0",
+        }
+        report = alarm.run_silence_alarm(now=now + timedelta(minutes=20),
+                                         sessions_path=sessions, marker_path=marker)
+        assert not report["verdict"]["silent"], "a fresh trace behind a live window is health"
+        assert len(sent) == 1, "a healthy bot must not mail the operator"
+        assert json.loads(marker.read_text(encoding="utf-8")).get("last_alert_at") is None, \
+            "the marker must be cleared when the bot recovers"
+
+        # --- A broken trace must not break the alarm.
+        sessions.write_text("{not json", encoding="utf-8")
+        report = alarm.run_silence_alarm(now=now + timedelta(minutes=30),
+                                         sessions_path=sessions, marker_path=marker)
+        assert report.get("verdict") is not None, "a broken file is a verdict, not a crash"
+
+        # --- No address is hardcoded in the source of the alarm.
+        import re
+        source = Path(alarm.__file__).read_text(encoding="utf-8")
+        assert re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", source) is None, \
+            "the alarm must not embed an email address"
+    finally:
+        email_sender.EmailSender = original_sender
+        alarm.live_window = original_window
+        alarm.resolve_recipient = original_recipient
+
+    print("[+] Test 28 Passed: the alarm judges two signals, mails once and never floods.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1405,6 +1531,7 @@ if __name__ == "__main__":
         test_25_the_cursor_never_rolls_back,
         test_26_the_edit_strips_the_payload_until_telegram_accepts,
         test_27_no_chunk_is_lost_and_the_placeholder_is_bare,
+        test_28_the_silence_alarm_judges_two_signals_and_never_floods,
     ]
     failed = []
     for t in tests:

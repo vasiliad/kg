@@ -71,11 +71,28 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: bash scripts/revive_bot.sh "${{ github.repository }}" telegram_bot.yml 50
 
+      # The third leg: a silence alarm. The daemon writes a health trace and
+      # the reviver can start a window, but neither of them can tell the
+      # operator that the bot has gone quiet. This step judges the silence
+      # from two independent signals — the bot's own trace AND whether a
+      # window is really running — and mails the measured evidence once per
+      # outage, never a flood. `if: always()` so that a broken heartbeat
+      # above cannot silence the alarm that watches it.
+      - name: Alarm if the Telegram bot is silent
+        if: always()
+        env:
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python harness/bot_silence_alarm.py
+
       - name: Commit & Push Heartbeat (Profile & Workflow Keepalive)
         run: |
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
-          git add active_models.json nim_history.log config.yaml || true
+          git add active_models.json nim_history.log config.yaml data/.bot_silence_alarm.json || true
 
           if ! git diff --staged --quiet; then
             git commit -m "chore(heartbeat): autonomous state sync [skip ci]"
