@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-01T05:53:07.321076+00:00",
+  "timestamp": "2026-11-01T12:56:31.025927+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -132,9 +132,9 @@
   "state": {
     "ok": true,
     "files": {
-      "data/.bot_sessions.json": 436,
-      "data/telegram_history.txt": 33826,
-      "active_models.json": 18972,
+      "data/.bot_sessions.json": 437,
+      "data/telegram_history.txt": 36875,
+      "active_models.json": 8324,
       "data/.memory_vault.json": null
     }
   },
@@ -154,11 +154,11 @@
   },
   "bot_health": {
     "ok": true,
-    "last_poll_at": "2026-11-01T05:49:27Z",
-    "age_min": 3.7,
-    "last_send_at": "2026-11-01T04:46:14Z",
-    "updates_seen": 10,
-    "messages_sent": 10,
+    "last_poll_at": "2026-11-01T12:55:35Z",
+    "age_min": 1.0,
+    "last_send_at": "2026-11-01T12:31:05Z",
+    "updates_seen": 12,
+    "messages_sent": 13,
     "errors": 0,
     "last_chat_id": 846947027,
     "last_error": null
