@@ -55,6 +55,18 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: python harness/bot_transport_test.py
 
+      # The fourth leg: the live web itself. On 2026-11-01 the operator asked
+      # for a company and its price and the bot answered from memory — the
+      # planner never asked the web. This proves the planner asks AND that a
+      # real tier answers, with the real secrets. Nothing is sent to Telegram.
+      - name: Prove the live web is reachable and the planner asks for it
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
+          LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+        run: python harness/search_probe.py
+
       # The silence alarm is the third leg of the bot's survival: if the
       # chain dies, somebody has to be told. This proves the alarm is armed
       # — a synthetic outage must produce the alarm verdict, and a recipient

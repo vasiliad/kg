@@ -48,42 +48,36 @@ class MiniMaxExecutor:
         self.key_pool = NVIDIAKeyPool(self.nvidia_api_key)
         self.nvidia_api_key = self.key_pool.current()
         self._last_search_time = 0.0
+        # Which tier actually served the last search. Measured, never assumed:
+        # the block of live facts must name its own source.
+        self.last_search_tier = ""
 
-    def search_web(self, query: str, num_results: int = 3) -> List[Dict[str, str]]:
+    # ---------------------------------------------------------------
+    # The search tiers, one method each.
+    #
+    # Every tier is a separate method so that it can be MEASURED on its own:
+    # measured on 2026-11-01, the public Keenable tier answered an English
+    # query perfectly and a Russian query with pure noise (LAX APM for
+    # «стоимость генетического теста Атлас»). A chain that hides its tiers
+    # cannot be diagnosed; a chain of named tiers can.
+    # ---------------------------------------------------------------
+
+    def _search_tinyfish(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """TinyFish Search — an 8-key rotating pool (keys live only in the secret)."""
+        from harness.tinyfish import get_tinyfish_pool
+        return get_tinyfish_pool().search(query, num_results=num_results) or []
+
+    def _search_langsearch(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """LangSearch — the operator's key, ~1M tokens/day."""
+        from harness.langsearch import get_langsearch_client
+        return get_langsearch_client().search(query, num_results=num_results) or []
+
+    def _search_keenable(self, query: str, num_results: int) -> List[Dict[str, str]]:
         """
-        Executes web search via Keenable API with rate limiting (<=10 req/s)
-        and fallback to DuckDuckGo HTML.
+        Keenable Search. If the configured key is rejected, the public tier
+        is tried too, so that one stale key never costs the complex its
+        live-search capability.
         """
-        now = time.time()
-        elapsed = now - self._last_search_time
-        if elapsed < 0.1:
-            time.sleep(0.1 - elapsed)
-        self._last_search_time = time.time()
-
-        # 0. TinyFish Search — primary tier: an 8-key rotating pool with
-        # generous limits (keys live only in the TINYFISH_API_KEYS secret).
-        try:
-            from harness.tinyfish import get_tinyfish_pool
-            tiny_results = get_tinyfish_pool().search(query, num_results=num_results)
-            if tiny_results:
-                print(f"[Search] served by TinyFish ({len(tiny_results)} results)")
-                return tiny_results
-        except Exception:
-            pass
-
-        # 0.5 LangSearch — second tier (operator's key, ~1M tokens/day).
-        try:
-            from harness.langsearch import get_langsearch_client
-            lang_results = get_langsearch_client().search(query, num_results=num_results)
-            if lang_results:
-                print(f"[Search] served by LangSearch ({len(lang_results)} results)")
-                return lang_results
-        except Exception:
-            pass
-
-        # 1. Primary: Keenable Search API
-        #    If the configured key is rejected, retry on the public tier so that
-        #    one stale key never costs the complex its live-search capability.
         keenable_attempts = []
         if self.keenable_api_key:
             keenable_attempts.append((
@@ -126,48 +120,97 @@ class MiniMaxExecutor:
                     continue
             except Exception:
                 continue
-
-        # 2. Fallback: Tavily Search API (key via TAVILY_API_KEY env)
-        try:
-            tavily_key = os.getenv("TAVILY_API_KEY", "")
-            if tavily_key:
-                res = requests.post(
-                    "https://api.tavily.com/search",
-                    json={"api_key": tavily_key, "query": query, "max_results": num_results},
-                    timeout=12
-                )
-                if res.status_code == 200:
-                    results = []
-                    for item in res.json().get("results", [])[:num_results]:
-                        results.append({
-                            "title": item.get("title", ""),
-                            "url": item.get("url", ""),
-                            "snippet": item.get("content", "")
-                        })
-                    if results:
-                        return results
-        except Exception:
-            pass
-
-        # 3. Fallback: DuckDuckGo HTML
-        try:
-            import re
-            encoded = urllib.parse.quote_plus(query)
-            url = f"https://html.duckduckgo.com/html/?q={encoded}"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            res = requests.get(url, headers=headers, timeout=12)
-            if res.status_code == 200:
-                snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', res.text, re.DOTALL)
-                links = re.findall(r'<a class="result__url[^>]*href="([^"]+)"', res.text)
-                results = []
-                for l, s in zip(links[:num_results], snippets[:num_results]):
-                    clean_s = re.sub(r'<[^>]+>', '', s).strip()
-                    results.append({"title": query, "url": l.strip(), "snippet": clean_s})
-                return results
-        except Exception:
-            pass
-
         return []
+
+    def _search_tavily(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """Tavily Search API (key via TAVILY_API_KEY env)."""
+        tavily_key = os.getenv("TAVILY_API_KEY", "")
+        if not tavily_key:
+            return []
+        res = requests.post(
+            "https://api.tavily.com/search",
+            json={"api_key": tavily_key, "query": query, "max_results": num_results},
+            timeout=12
+        )
+        if res.status_code != 200:
+            return []
+        results = []
+        for item in res.json().get("results", [])[:num_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", "")
+            })
+        return results
+
+    def _search_duckduckgo(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """DuckDuckGo HTML — the last resort, with no key and no quota."""
+        import re
+        encoded = urllib.parse.quote_plus(query)
+        url = f"https://html.duckduckgo.com/html/?q={encoded}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        res = requests.get(url, headers=headers, timeout=12)
+        if res.status_code != 200:
+            return []
+        snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', res.text, re.DOTALL)
+        links = re.findall(r'<a class="result__url[^>]*href="([^"]+)"', res.text)
+        results = []
+        for l, s in zip(links[:num_results], snippets[:num_results]):
+            clean_s = re.sub(r'<[^>]+>', '', s).strip()
+            results.append({"title": query, "url": l.strip(), "snippet": clean_s})
+        return results
+
+    # The order of the chain. The first tier that answers wins.
+    SEARCH_TIERS: tuple = (
+        ("TinyFish", "_search_tinyfish"),
+        ("LangSearch", "_search_langsearch"),
+        ("Keenable", "_search_keenable"),
+        ("Tavily", "_search_tavily"),
+        ("DuckDuckGo", "_search_duckduckgo"),
+    )
+
+    def search_web(self, query: str, num_results: int = 3) -> List[Dict[str, str]]:
+        """
+        Runs the search chain and returns the results of the first tier that
+        answered. The tier that served them is remembered in
+        `last_search_tier` — the live facts must name their own source.
+        """
+        now = time.time()
+        elapsed = now - self._last_search_time
+        if elapsed < 0.1:
+            time.sleep(0.1 - elapsed)
+        self._last_search_time = time.time()
+        self.last_search_tier = ""
+
+        for tier, method_name in self.SEARCH_TIERS:
+            try:
+                results = getattr(self, method_name)(query, num_results) or []
+            except Exception:
+                continue
+            if results:
+                self.last_search_tier = tier
+                print(f"[Search] served by {tier} ({len(results)} results)")
+                return results
+        return []
+
+    def search_each_tier(self, query: str, num_results: int = 3) -> List[Dict[str, Any]]:
+        """
+        Asks every tier on its own and reports what each one answered. Used
+        by the probe to tell a dead tier from a tier that answers in another
+        language — the two look identical from the outside.
+        """
+        outcomes: List[Dict[str, Any]] = []
+        for tier, method_name in self.SEARCH_TIERS:
+            try:
+                results = getattr(self, method_name)(query, num_results) or []
+                outcomes.append({"tier": tier, "results": results, "error": ""})
+            except Exception as exc:
+                outcomes.append({
+                    "tier": tier,
+                    "results": [],
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+        return outcomes
 
     def _search_query_for(self, task_prompt: str) -> str:
         """
@@ -201,12 +244,13 @@ class MiniMaxExecutor:
         start_time = time.time()
         citations = []
 
-        # 1. Enrich with Keenable Search if requested
+        # 1. Enrich with the live web if requested
         enriched_context = context
         if enable_search:
             query_text = self._search_query_for(task_prompt)
-            print(f"[MiniMax Harness] Pre-fetching live web intel via Keenable: '{query_text}'...")
+            print(f"[MiniMax Harness] Pre-fetching live web intel: '{query_text}'...")
             search_results = self.search_web(query_text, num_results=3)
+            tier = getattr(self, "last_search_tier", "") or "unknown"
             if search_results:
                 citations = [r.get("url") for r in search_results if r.get("url")]
                 full_items = []
@@ -217,7 +261,21 @@ class MiniMaxExecutor:
                     full_items.append(f"Source: {title} ({url})\nFull Content:\n{snip}")
 
                 search_text = "\n\n".join(full_items)
-                enriched_context += f"\n\n--- LIVE WEB FACTS (KEENABLE) ---\n{search_text}"
+                # The block names the tier that actually served it. A hardcoded
+                # label ("KEENABLE") made a TinyFish answer look like a
+                # Keenable one — and a dead Keenable made the duty model
+                # declare the whole web unavailable.
+                enriched_context += f"\n\n--- LIVE WEB FACTS (source: {tier}) ---\n{search_text}"
+            else:
+                # The web WAS asked and answered nothing. Reporting that as
+                # "the live search is unavailable" is a lie the model must not
+                # be able to tell.
+                enriched_context += (
+                    "\n\n--- LIVE WEB FACTS (source: none) ---\n"
+                    f"The live web WAS queried for this question (query: '{query_text}') and every "
+                    "search tier returned no result. Do NOT describe the live web as unavailable; "
+                    "say that the query returned nothing."
+                )
 
         identity_block = (
             f"You are {target_model}, a duty executor model of the Autonomous Complex "

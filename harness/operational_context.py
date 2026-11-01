@@ -38,6 +38,28 @@ _KEY_FILES = {
     "diagnostics": PROJECT_ROOT / "diagnostics_report.json",
 }
 
+# The diagnostics workflow runs every 6 hours. A snapshot older than three
+# cycles is a picture of a past, and the duty model must be told so: measured
+# on 2026-11-01, a 5-hour-old snapshot with one dead search tier made the
+# model declare the live web unavailable while two tiers were healthy.
+DIAG_STALE_MIN = 180.0
+
+
+def _snapshot_age_min(timestamp: str) -> Optional[float]:
+    """How old the diagnostics snapshot is, in minutes. None if unknown."""
+    text = (timestamp or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - parsed).total_seconds() / 60.0)
+
 
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:
     try:
@@ -185,16 +207,33 @@ def build_operational_context(
     if diag:
         nvidia = diag.get("nvidia") or {}
         telegram = diag.get("telegram") or {}
-        keenable = diag.get("keenable") or {}
+        taken_at = str(diag.get("timestamp") or "")
+        age_min = _snapshot_age_min(taken_at)
+        stale = age_min is not None and age_min > DIAG_STALE_MIN
+        age_text = f"{age_min:.0f} min ago" if age_min is not None else "age unknown"
         parts.append("\nLast cloud diagnostics (diagnostics_report.json):")
         parts.append(
-            f"  taken at: {diag.get('timestamp')} | NVIDIA ok={nvidia.get('ok')} "
+            f"  taken at: {taken_at} ({age_text})"
+            + ("  [STALE SNAPSHOT — do not treat it as the current state]" if stale else "")
+            + f" | NVIDIA ok={nvidia.get('ok')} "
             f"| live models={len(nvidia.get('models') or [])}"
         )
         if telegram.get("username"):
             parts.append(f"  Telegram bot: {telegram.get('username')} (reachable={telegram.get('ok')})")
-        if keenable:
-            parts.append(f"  Keenable search: ok={keenable.get('ok')} reason={keenable.get('reason', 'n/a')}")
+        tiers = []
+        for name in ("tinyfish", "langsearch", "keenable"):
+            info = diag.get(name) or {}
+            if not info:
+                continue
+            tiers.append(f"{name} ok={info.get('ok')} reason={info.get('reason', 'n/a')}")
+        if tiers:
+            parts.append("  Live-search tiers: " + "; ".join(tiers))
+        if any(tier.startswith("keenable ok=False") for tier in tiers):
+            parts.append(
+                "  NOTE: a dead search tier does NOT mean the live web is unavailable. The stack "
+                "falls through TinyFish → LangSearch → Keenable → Tavily → DuckDuckGo. Only a live "
+                "query that returned nothing may be reported as 'the web has no answer'."
+            )
     else:
         parts.append("\nLast cloud diagnostics: NOT PRESENT.")
 
@@ -207,6 +246,10 @@ def build_operational_context(
         "- If a fact is missing, say so explicitly and offer the concrete action "
         "you can take right now (for example: run the mail check, re-scan the "
         "catalog, re-run diagnostics).\n"
+        "- A question about the live web (a company, a price, fresh news) is "
+        "answered from the LIVE WEB FACTS block when it is present. If the "
+        "block says the query returned nothing, say exactly that. A dead tier "
+        "in the diagnostics snapshot is not a dead web.\n"
         "- Never claim an action was performed when this snapshot does not show it."
     )
     return "\n".join(parts)

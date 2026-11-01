@@ -1504,6 +1504,169 @@ def test_28_the_silence_alarm_judges_two_signals_and_never_floods():
     print("[+] Test 28 Passed: the alarm judges two signals, mails once and never floods.")
 
 
+def test_29_the_web_is_asked_when_the_operator_asks_for_it():
+    """
+    The cloud evidence of 2026-11-01: the operator wrote «Есть компания Атлас…
+    Можешь найти её в интернете и узнать сколько стоит тест?». The request
+    sits in the middle of the sentence, the old prefix-only rule missed it,
+    and the bot answered from memory while TinyFish and LangSearch were
+    healthy — then refused to name a price because one DEAD tier (Keenable)
+    was mislabelled as "the whole web".
+
+    Three things must hold now:
+      1. the planner asks the web whenever the request is anywhere in the
+         sentence, and knows the price vocabulary;
+      2. the live facts name the tier that actually served them;
+      3. a stale diagnostics snapshot is marked stale, and one dead tier
+         never reads as "the live web is unavailable".
+    """
+    print("\n" + "=" * 60)
+    print("TEST 29: the operator's request reaches the live web")
+    print("=" * 60)
+    import tempfile
+    import harness.minimax_executor as executor_mod
+    import harness.nim_pacer as pacer_mod
+    from harness import search_query
+    from harness import operational_context
+    from harness.minimax_executor import MiniMaxExecutor
+
+    # ------------------------------------------------------------------
+    # 1. The planner.
+    # ------------------------------------------------------------------
+    real = ("Есть компания Атлас,которая делает генетические тесты."
+            "Можешь найти её в интернете и узнать сколько стоит тест?")
+    plan = search_query.plan(real)
+    assert plan["search"] is True, \
+        "an explicit request for the web must reach the web, wherever it sits"
+    q = plan["query"]
+    assert "Атлас" in q, f"the topic must survive: {q!r}"
+    assert "генетические тесты" in q, f"the topic must survive: {q!r}"
+    assert "сколько стоит" in q, f"the asked fact must survive: {q!r}"
+    assert "в интернете" not in q.lower(), f"the instruction is not a topic: {q!r}"
+    assert "найти" not in q.lower(), f"the instruction is not a topic: {q!r}"
+    assert "можешь" not in q.lower(), f"the instruction is not a topic: {q!r}"
+
+    # The price vocabulary alone is enough.
+    assert search_query.needs_search("сколько стоит генетический тест Атлас"), \
+        "a price question asks about a live fact"
+    assert search_query.needs_search("почем Атлас"), "the money words ask for the live web"
+    # A lookup request whose object the web knows asks the web.
+    assert search_query.needs_search("найди компанию Атлас в вебе"), \
+        "a lookup request must reach the web"
+    # Our own state still answers our own questions.
+    assert not search_query.needs_search("найди дежурного в ростере"), \
+        "our own roster is not a web lookup"
+    assert not search_query.needs_search("какой сейчас основной дежурный?"), \
+        "our own roster is not a web lookup"
+
+    # ------------------------------------------------------------------
+    # 2. The live facts name the tier that served them.
+    # ------------------------------------------------------------------
+    captured = {}
+
+    class _FakeResp:
+        status_code = 200
+        text = "ok"
+
+        def iter_lines(self):
+            return iter([
+                b'data: {"choices":[{"delta":{"content":"answer"}}]}',
+                b"data: [DONE]",
+            ])
+
+    def fake_post(url, headers=None, json=None, stream=None, timeout=None):
+        captured["payload"] = json
+        return _FakeResp()
+
+    class _FakeKeyPool:
+        def __len__(self):
+            return 1
+
+        def current(self):
+            return "test-key"
+
+        def mark_bad(self):
+            return "test-key"
+
+    ex = MiniMaxExecutor.__new__(MiniMaxExecutor)
+    ex.base_url = "https://example.invalid/v1"
+    ex.model_id = "test/model"
+    ex.key_pool = _FakeKeyPool()
+    ex.last_search_tier = ""
+    ex._last_search_time = 0.0
+
+    original_post = executor_mod.requests.post
+    original_wait = pacer_mod.nim_pacer.wait_for_slot
+    try:
+        executor_mod.requests.post = fake_post
+        pacer_mod.nim_pacer.wait_for_slot = lambda: 0.0
+
+        def served_by_langsearch(query, num_results=3):
+            ex.last_search_tier = "LangSearch"
+            return [{"title": "Атлас", "url": "https://example.test/atlas",
+                     "snippet": "Генетический тест стоит 5000 рублей."}]
+
+        ex.search_web = served_by_langsearch
+        ex.execute_task(task_prompt=real, context="facts", enable_search=True, max_tokens=1024)
+        user_content = captured["payload"]["messages"][1]["content"]
+        assert "LIVE WEB FACTS (source: LangSearch)" in user_content, \
+            f"the facts must name the tier that served them: {user_content[:400]}"
+        assert "(KEENABLE)" not in user_content, \
+            "a hardcoded tier label is a lie about where the facts came from"
+        assert "https://example.test/atlas" in user_content, \
+            "the live facts must reach the model"
+
+        # A live query that returned nothing must say so — not "no web".
+        def empty_search(query, num_results=3):
+            ex.last_search_tier = ""
+            return []
+
+        ex.search_web = empty_search
+        captured.clear()
+        ex.execute_task(task_prompt=real, context="facts", enable_search=True, max_tokens=1024)
+        user_content = captured["payload"]["messages"][1]["content"]
+        assert "LIVE WEB FACTS (source: none)" in user_content, \
+            f"an empty answer must still be labelled: {user_content[:400]}"
+        assert "The live web WAS queried" in user_content, \
+            "the model must not be told the web is missing when it was asked"
+    finally:
+        executor_mod.requests.post = original_post
+        pacer_mod.nim_pacer.wait_for_slot = original_wait
+
+    # ------------------------------------------------------------------
+    # 3. The diagnostics snapshot says how old it is, and one dead tier is
+    #    not a dead web.
+    # ------------------------------------------------------------------
+    stale_report = {
+        "timestamp": "2026-10-31T21:26:57Z",
+        "nvidia": {"ok": True, "models": [{"id": "a"}]},
+        "telegram": {"ok": True, "username": "@immortal911bot"},
+        "tinyfish": {"ok": True, "keys": 8, "results": 1},
+        "langsearch": {"ok": True, "results": 1},
+        "keenable": {"ok": False, "reason": "http_401"},
+    }
+    original_diag = operational_context._KEY_FILES["diagnostics"]
+    with tempfile.TemporaryDirectory() as tmp:
+        diag_path = Path(tmp) / "diagnostics_report.json"
+        diag_path.write_text(json.dumps(stale_report), encoding="utf-8")
+        operational_context._KEY_FILES["diagnostics"] = diag_path
+        try:
+            text = operational_context.build_operational_context(query="что нового?")
+        finally:
+            operational_context._KEY_FILES["diagnostics"] = original_diag
+
+    assert "STALE SNAPSHOT" in text, \
+        f"an old snapshot must be marked as old: {text[-600:]}"
+    assert "tinyfish ok=True" in text, "every live-search tier must be listed"
+    assert "langsearch ok=True" in text, "every live-search tier must be listed"
+    assert "keenable ok=False" in text, "a dead tier must be visible, not hidden"
+    assert "does NOT mean the live web is unavailable" in text, \
+        "one dead tier must never read as a dead web"
+
+    print("[+] Test 29 Passed: the operator's request reaches the live web, "
+          "and the facts name their source.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1542,6 +1705,7 @@ if __name__ == "__main__":
         test_26_the_edit_strips_the_payload_until_telegram_accepts,
         test_27_no_chunk_is_lost_and_the_placeholder_is_bare,
         test_28_the_silence_alarm_judges_two_signals_and_never_floods,
+        test_29_the_web_is_asked_when_the_operator_asks_for_it,
     ]
     failed = []
     for t in tests:
