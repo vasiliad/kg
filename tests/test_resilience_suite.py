@@ -1838,6 +1838,70 @@ def test_30_every_cycle_comes_back_without_the_scheduler():
           "and none is duplicated.")
 
 
+def test_31_the_supervisor_dispatches_through_the_gh_binary():
+    """
+    Measured in the cloud on 2026-11-01: the supervisor's dispatch died with
+    FileNotFoundError: 'workflow' — the command was built WITHOUT the "gh"
+    prefix, so Python tried to execute a program named "workflow". The busy
+    check spoke through `gh api` and worked, which is why only the dispatch
+    was broken and the failure looked like a permissions problem (a lesson
+    the permissions fix could not teach us).
+    """
+    print("\n" + "=" * 60)
+    print("TEST 31: the supervisor dispatches through the gh binary")
+    print("=" * 60)
+    from harness import cycle_supervisor as cs
+
+    calls = []
+
+    class _Ok:
+        returncode = 0
+        stdout = "0"
+        stderr = ""
+
+    original_run = cs.subprocess.run
+    try:
+        def fake_run(args, **kwargs):
+            calls.append(list(args))
+            return _Ok()
+
+        cs.subprocess.run = fake_run
+
+        assert cs.dispatch_cycle("owner/repo", "fleet_tuner.yml", "main") is True
+        assert calls, "the dispatch must actually call out"
+        args = calls[0]
+        assert args[0] == "gh", \
+            f"the command must START with the gh binary, not with 'workflow': {args}"
+        assert args[1:3] == ["workflow", "run"], f"wrong gh subcommand: {args}"
+        assert "fleet_tuner.yml" in args, f"the workflow file must be named: {args}"
+        assert "--repo" in args and "owner/repo" in args, \
+            f"the repository must be named: {args}"
+        assert "--ref" in args and "main" in args, f"the ref must be named: {args}"
+
+        # The busy check must speak through the same binary — it is the
+        # check that works, so its command is the reference shape.
+        calls.clear()
+        cs.workflow_busy("owner/repo", "fleet_tuner.yml")
+        assert calls and calls[0][0] == "gh", \
+            f"the busy check must use the gh binary: {calls}"
+        assert calls[0][1] == "api", f"the busy check must use gh api: {calls}"
+
+        # A refusal is a False, not an exception and not a success.
+        class _Refused:
+            returncode = 1
+            stdout = ""
+            stderr = "HTTP 403: Resource not accessible by integration"
+
+        cs.subprocess.run = lambda args, **kwargs: _Refused()
+        assert cs.dispatch_cycle("owner/repo", "fleet_tuner.yml") is False, \
+            "a refused dispatch must never report success"
+    finally:
+        cs.subprocess.run = original_run
+
+    print("[+] Test 31 Passed: every supervisor command starts with gh, "
+          "and a refusal is reported as a refusal.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1878,6 +1942,7 @@ if __name__ == "__main__":
         test_28_the_silence_alarm_judges_two_signals_and_never_floods,
         test_29_the_web_is_asked_when_the_operator_asks_for_it,
         test_30_every_cycle_comes_back_without_the_scheduler,
+        test_31_the_supervisor_dispatches_through_the_gh_binary,
     ]
     failed = []
     for t in tests:

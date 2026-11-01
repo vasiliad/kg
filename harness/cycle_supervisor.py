@@ -233,7 +233,10 @@ def dispatch_cycle(repo: str, workflow: str, ref: str = "") -> bool:
     """
     if not repo:
         return False
-    args = ["workflow", "run", workflow, "--repo", repo]
+    # The "gh" prefix is part of the command: without it Python tries to
+    # execute a program named "workflow" (measured in the cloud on
+    # 2026-11-01, where the first dispatch died with FileNotFoundError).
+    args = ["gh", "workflow", "run", workflow, "--repo", repo]
     if ref:
         args += ["--ref", ref]
     try:
