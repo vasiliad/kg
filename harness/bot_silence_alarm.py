@@ -35,7 +35,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -498,6 +498,50 @@ def run_silence_alarm(
     return report
 
 
+def selftest(repo: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Proves the outage path is armed — without mailing anyone.
+
+    A synthetic trace that is 90 minutes old and a simulated dead window must
+    produce exactly the alarm verdict a real outage would produce, and the
+    recipient must be resolvable. The address itself is never printed: the
+    alarm has to work without ever writing the address into a log.
+    """
+    import tempfile
+
+    now = _now()
+    stamp = (now - timedelta(minutes=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    health = {
+        "runs": 3, "started_at": stamp, "last_poll_at": stamp,
+        "last_update_at": None, "last_send_at": None, "last_chat_id": None,
+        "updates_seen": 0, "messages_sent": 0, "errors": 0, "last_error": None,
+    }
+    tmp = Path(tempfile.mkdtemp(prefix="silence-selftest-"))
+    sessions = tmp / ".bot_sessions.json"
+    sessions.write_text(
+        json.dumps({"last_update_id": 0, "authorized_chats": [], "health": health},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    # The chain is simulated as dead: that is the only state in which the
+    # alarm must fire, and it must not depend on the live GitHub state.
+    window = {"state": "dead", "running": 0, "queued": 0,
+              "started_at": None, "age_min": None, "detail": "simulated"}
+    verdict = judge(read_health(sessions), window, now=now)
+    subject, html, plain = render_mail(verdict)
+    recipient = resolve_recipient()
+
+    return {
+        "verdict": verdict,
+        "armed": bool(verdict.get("silent")) and bool(recipient),
+        "subject": subject,
+        "recipient_configured": bool(recipient),
+        "evidence_lines": len(_evidence_lines(verdict)),
+        "mail_bytes": len(html) + len(plain),
+    }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     import argparse
 
@@ -505,7 +549,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--repo", default=None, help="owner/name of the repository")
     parser.add_argument("--no-send", action="store_true", help="judge only, do not mail")
     parser.add_argument("--json", action="store_true", help="print the raw verdict")
+    parser.add_argument("--selftest", action="store_true",
+                        help="prove the outage path is armed, without mailing anyone")
     args = parser.parse_args(argv)
+
+    if args.selftest:
+        report = selftest(repo=args.repo)
+        verdict = report.get("verdict") or {}
+        print(f"[selftest] synthetic outage  : 90 min old trace + a dead window")
+        print(f"[selftest] verdict           : {verdict.get('severity')} / {verdict.get('reason')}")
+        print(f"[selftest] subject           : {report.get('subject')}")
+        print(f"[selftest] evidence lines    : {report.get('evidence_lines')}")
+        print(f"[selftest] recipient         : {'configured (not shown)' if report.get('recipient_configured') else 'NOT CONFIGURED'}")
+        if report.get("armed"):
+            print("[selftest] the outage path is armed — no mail was sent.")
+            return 0
+        print("[selftest] WARNING: the alarm is NOT armed — a real outage would go unnoticed.")
+        return 1
 
     report = run_silence_alarm(repo=args.repo, send=not args.no_send)
     verdict = report.get("verdict") or {}

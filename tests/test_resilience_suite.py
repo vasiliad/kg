@@ -1486,6 +1486,16 @@ def test_28_the_silence_alarm_judges_two_signals_and_never_floods():
         source = Path(alarm.__file__).read_text(encoding="utf-8")
         assert re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", source) is None, \
             "the alarm must not embed an email address"
+
+        # --- The selftest proves the outage path is armed, and mails nobody.
+        alarm.resolve_recipient = lambda: "operator@example.test"
+        probe = alarm.selftest()
+        assert probe["verdict"]["silent"] is True, \
+            "a synthetic outage must produce the alarm verdict"
+        assert probe["armed"] is True, "the alarm must be armed: verdict + recipient"
+        assert "не отвечает" in probe["subject"], "the alarm must have a subject"
+        assert probe["evidence_lines"] >= 8, \
+            "the mail must carry the measured evidence, not a one-liner"
     finally:
         email_sender.EmailSender = original_sender
         alarm.live_window = original_window

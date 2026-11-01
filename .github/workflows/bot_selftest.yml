@@ -55,6 +55,17 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: python harness/bot_transport_test.py
 
+      # The silence alarm is the third leg of the bot's survival: if the
+      # chain dies, somebody has to be told. This proves the alarm is armed
+      # — a synthetic outage must produce the alarm verdict, and a recipient
+      # must be resolvable — without mailing anyone.
+      - name: Verify the silence alarm is armed (no mail is sent)
+        env:
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
+        run: python harness/bot_silence_alarm.py --selftest
+
       - name: Commit & Push the Transcript
         if: always()
         run: |
