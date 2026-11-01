@@ -225,7 +225,12 @@ def last_run_age_h(repo: str, workflow: str, now: Optional[datetime] = None) -> 
 
 
 def dispatch_cycle(repo: str, workflow: str, ref: str = "") -> bool:
-    """Starts a run of the workflow. True only when the dispatch worked."""
+    """
+    Starts a run of the workflow. True only when the dispatch worked — and a
+    failed dispatch says WHY: a refusal that says nothing cannot be
+    diagnosed (measured in the cloud on 2026-11-01, where the first dispatch
+    attempt failed silently).
+    """
     if not repo:
         return False
     args = ["workflow", "run", workflow, "--repo", repo]
@@ -233,9 +238,14 @@ def dispatch_cycle(repo: str, workflow: str, ref: str = "") -> bool:
         args += ["--ref", ref]
     try:
         proc = subprocess.run(args, capture_output=True, text=True, timeout=120)
-    except Exception:
+    except Exception as exc:
+        print(f"[supervisor] dispatch of {workflow} failed: {type(exc).__name__}: {exc}")
         return False
-    return proc.returncode == 0
+    if proc.returncode != 0:
+        reason = (proc.stderr or proc.stdout or "").strip().replace("\n", " ")[:300]
+        print(f"[supervisor] dispatch of {workflow} was refused: {reason}")
+        return False
+    return True
 
 
 def supervise(
