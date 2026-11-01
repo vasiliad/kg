@@ -117,6 +117,9 @@ class HarnessTelegramBot:
             log_format="events",
         )
         self.user_states: Dict[int, str] = {} # chat_id -> awaiting_input_type
+        # The id of the last message the bot sent — the handle for editing
+        # a "thinking" placeholder into the real answer.
+        self.last_message_id: Optional[int] = None
         # Re-entrant: saving the session file takes the same lock that
         # advances the update cursor, and both live in one code path.
         self._state_lock = threading.RLock()
@@ -227,12 +230,19 @@ class HarnessTelegramBot:
         except Exception:
             pass
 
-    def delete_message(self, chat_id: int, message_id: int) -> None:
+    def delete_message(self, chat_id: int, message_id: int) -> bool:
         """Deletes sensitive message (e.g. password) from chat history."""
+        if not self.is_configured() or not message_id:
+            return False
         try:
-            requests.post(f"{self.base_url}/deleteMessage", json={"chat_id": chat_id, "message_id": message_id}, timeout=5)
+            res = requests.post(
+                f"{self.base_url}/deleteMessage",
+                json={"chat_id": chat_id, "message_id": message_id},
+                timeout=5,
+            )
+            return bool(res.ok)
         except Exception:
-            pass
+            return False
 
     def get_main_keyboard(self) -> Dict[str, Any]:
         """Builds interactive reply keyboard with quick-access buttons."""
@@ -253,11 +263,16 @@ class HarnessTelegramBot:
         text: str,
         reply_markup: Optional[Dict[str, Any]] = None,
         parse_mode: Optional[str] = None
-    ) -> bool:
-        """Sends a message, automatically chunking if length exceeds 4000 characters."""
+    ) -> Optional[int]:
+        """
+        Sends a message, automatically chunking if length exceeds 4000
+        characters. Returns the id of the LAST chunk (or None when nothing
+        was delivered) so a caller can edit that message later instead of
+        sending another one.
+        """
         if not self.is_configured():
             print(f"[Telegram Bot] Token missing. Message to {chat_id}: {text[:100]}...")
-            return False
+            return None
 
         markup = reply_markup if reply_markup is not None else self.get_main_keyboard()
         # Split on paragraph boundaries, never mid-word: a message cut like
@@ -280,7 +295,8 @@ class HarnessTelegramBot:
         if current:
             chunks.append(current)
         chunks = chunks or [text[:3900]]
-        
+
+        last_id: Optional[int] = None
         for idx, chunk in enumerate(chunks):
             # Only attach reply markup to the last chunk
             current_markup = markup if idx == len(chunks) - 1 else None
@@ -298,11 +314,81 @@ class HarnessTelegramBot:
                 if not res.ok and parse_mode:
                     # Fallback to plain text if markdown formatting failed
                     payload.pop("parse_mode", None)
-                    requests.post(f"{self.base_url}/sendMessage", json=payload, timeout=15)
+                    res = requests.post(f"{self.base_url}/sendMessage", json=payload, timeout=15)
+                if res.ok:
+                    try:
+                        mid = (res.json().get("result") or {}).get("message_id")
+                        if mid:
+                            last_id = int(mid)
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"[!] Error sending message to {chat_id}: {e}")
-                return False
-        return True
+                return None
+        self.last_message_id = last_id
+        return last_id
+
+    def edit_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        parse_mode: Optional[str] = None
+    ) -> bool:
+        """
+        Edits a message that was already sent — the transport that turns a
+        "the keeper is thinking" placeholder into the real answer without
+        adding another message to the operator's chat.
+        """
+        if not self.is_configured() or not message_id:
+            return False
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "disable_web_page_preview": True,
+            "link_preview_options": {"is_disabled": True}
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        try:
+            res = requests.post(f"{self.base_url}/editMessageText", json=payload, timeout=15)
+            if not res.ok and parse_mode:
+                # Same rescue as sendMessage: broken markup must not lose the text.
+                payload.pop("parse_mode", None)
+                res = requests.post(f"{self.base_url}/editMessageText", json=payload, timeout=15)
+            return bool(res.ok)
+        except Exception as e:
+            print(f"[!] Error editing message {message_id} in {chat_id}: {e}")
+            return False
+
+    def answer_callback_query(self, callback_query_id: str, text: str = "") -> bool:
+        """
+        Answers a button press. Without this the button keeps spinning and
+        the operator concludes that the bot is stuck.
+        """
+        if not self.is_configured() or not callback_query_id:
+            return False
+        payload: Dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text[:200]
+        try:
+            res = requests.post(f"{self.base_url}/answerCallbackQuery", json=payload, timeout=10)
+            return bool(res.ok)
+        except Exception as e:
+            print(f"[!] Error answering callback: {e}")
+            return False
+
+    def get_status_keyboard(self) -> Dict[str, Any]:
+        """Inline buttons for the status card: a press is a command."""
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": "🧑‍💼 Состав команды", "callback_data": "roster"},
+                    {"text": "🔄 Обновить флот", "callback_data": "retune"},
+                ]
+            ]
+        }
 
     def handle_status_command(self, chat_id: int) -> None:
         """Handles /status command."""
@@ -338,7 +424,7 @@ class HarnessTelegramBot:
             f"🕒 <b>Обновлено:</b> {state.get('last_updated', 'N/A')}\n\n"
             "🛡️ <i>Автономный суверенный комплекс полностью отвязан от очередей сторонних сервисов.</i>"
         )
-        self.send_message(chat_id, report, parse_mode="HTML")
+        self.send_message(chat_id, report, reply_markup=self.get_status_keyboard(), parse_mode="HTML")
 
     def handle_fleet_command(self, chat_id: int) -> None:
         """Handles the team roster command — who serves and why."""
@@ -480,7 +566,9 @@ class HarnessTelegramBot:
             return self.handle_arbiter_query(chat_id, prompt)
 
         self.send_chat_action(chat_id, "typing")
-        self.send_message(chat_id, "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>", parse_mode="HTML")
+        placeholder_id = self.send_message(
+            chat_id, "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>", parse_mode="HTML"
+        )
 
         # 2. Append user prompt to eternal memory log
         self.memory_engine.append_message("user", prompt, {"chat_id": chat_id})
@@ -582,17 +670,39 @@ class HarnessTelegramBot:
                 alt = ok_answers[1]
                 alt_body = alt["content"][:600] + ("…" if len(alt["content"]) > 600 else "")
                 parts.append(f"\n\n🔁 <b>Второе мнение</b> — {label(alt)}:\n{html.escape(alt_body)}")
-            self.send_message(chat_id, "\n".join(parts), parse_mode="HTML")
+            self._deliver_answer(chat_id, placeholder_id, "\n".join(parts), parse_mode="HTML")
         else:
             failed = ", ".join(a.get("model", "?") for a in answers) or "нет измеренных дежурных"
-            self.send_message(
+            self._deliver_answer(
                 chat_id,
+                placeholder_id,
                 "[-] <b>Ни одна дежурная модель не ответила.</b>\n"
                 f"Попытки: {html.escape(failed)}\n\n"
                 "Хранитель в строю, но сетевые модели недоступны. "
                 "Нажмите «🔄 Обновить флот» — замер выберет работающие модели из живого каталога.",
                 parse_mode="HTML",
             )
+
+    def _deliver_answer(
+        self,
+        chat_id: int,
+        placeholder_id: Optional[int],
+        text: str,
+        parse_mode: Optional[str] = None
+    ) -> None:
+        """
+        The answer replaces the "thinking" placeholder when the transport can
+        edit it; otherwise it goes out as a new message and the placeholder is
+        removed. The operator always gets the answer — never a message stuck
+        on "the keeper is thinking".
+        """
+        if isinstance(placeholder_id, int) and placeholder_id > 0 and len(text) <= 4096:
+            if self.edit_message(chat_id, placeholder_id, text, parse_mode=parse_mode):
+                return
+        self.send_message(chat_id, text, parse_mode=parse_mode)
+        if placeholder_id:
+            # The placeholder is noise once the answer is out.
+            self.delete_message(chat_id, placeholder_id)
 
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""
@@ -831,6 +941,13 @@ class HarnessTelegramBot:
                             # Handle in a worker pool: long model generations must not
                             # freeze polling (the bot stays responsive to everyone else).
                             self._pool.submit(self._safe_process, update["message"], update_id)
+                        elif "callback_query" in update:
+                            # A button press is not a message: it arrives as its
+                            # own update type. Dropping it silently would leave
+                            # the operator staring at a spinning button.
+                            self._pool.submit(
+                                self._safe_process_callback, update["callback_query"], update_id
+                            )
                         else:
                             self._mark_update_handled(update_id)
                 elif res.status_code == 409:
@@ -857,6 +974,50 @@ class HarnessTelegramBot:
             # The cursor advances only AFTER the handler finished, so a crash
             # in the middle of an answer can never swallow the message.
             self._mark_update_handled(update_id)
+
+    def _safe_process_callback(self, callback: Dict[str, Any], update_id: int = 0) -> None:
+        """Same discipline for a button press."""
+        try:
+            self.process_callback_query(callback)
+        except Exception as e:
+            print(f"[!] Callback processing error: {e}")
+        finally:
+            self._mark_update_handled(update_id)
+
+    def process_callback_query(self, callback: Dict[str, Any]) -> None:
+        """
+        A button press is a command. It must be answered (or the button spins
+        forever) and it must be routed to the same handler as the equivalent
+        text command — and only for an authorized chat.
+        """
+        chat = ((callback.get("message") or {}).get("chat")) or {}
+        chat_id = int(chat.get("id") or 0)
+        query_id = str(callback.get("id") or "")
+        data = str(callback.get("data") or "")
+
+        if not chat_id:
+            self.answer_callback_query(query_id, "не удалось определить чат")
+            return
+        if chat_id not in self.authorized_chats:
+            # Fail closed: an unauthorized chat must not be able to trigger a
+            # fleet re-measure or read the roster.
+            self.answer_callback_query(query_id, "нет доступа")
+            return
+
+        self.answer_callback_query(query_id)
+        action = data.split(":", 1)[0]
+        if action == "status":
+            self.handle_status_command(chat_id)
+        elif action == "roster":
+            self.handle_fleet_command(chat_id)
+        elif action == "retune":
+            self.handle_fleet_refresh(chat_id)
+        elif action == "search":
+            with self._state_lock:
+                self.user_states[chat_id] = "awaiting_search_query"
+            self.send_message(chat_id, "🔍 Введите поисковый запрос для поиска через Keenable:")
+        else:
+            self.send_message(chat_id, f"[?] Неизвестная кнопка: {html.escape(data)}")
 
 if __name__ == "__main__":
     bot = HarnessTelegramBot()

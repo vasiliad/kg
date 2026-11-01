@@ -62,22 +62,44 @@ def main() -> int:
         print(f"  [{'OK' if ok else 'FAIL'}] {label}: {detail}")
 
     # 1. Short keyboard message — the everyday path.
-    sent = bot.send_message(chat_id, "🧪 <b>Транспортный самотест 1/4</b>: обычное сообщение с клавиатурой.", parse_mode="HTML")
-    record("короткое_с_клавиатурой", sent, f"sendMessage ok={sent}")
+    sent = bot.send_message(chat_id, "🧪 <b>Транспортный самотест 1/7</b>: обычное сообщение с клавиатурой.", parse_mode="HTML")
+    record("короткое_с_клавиатурой", bool(sent), f"sendMessage ok={bool(sent)}")
 
     # 2. Long message — paragraph chunking over the wire (no mid-word cuts).
     long_text = "\n\n".join(
         f"Абзац {i}: " + ("проверка разбивки длинных сообщений. " * 8)
         for i in range(1, 31)
     )
-    sent = bot.send_message(chat_id, "🧪 <b>Транспортный самотест 2/4</b>: длинное сообщение (разбивка по абзацам).\n\n" + long_text, parse_mode="HTML")
-    record("длинное_сообщение", sent, f"длина {len(long_text)} символов, доставлено={sent}")
+    sent = bot.send_message(chat_id, "🧪 <b>Транспортный самотест 2/7</b>: длинное сообщение (разбивка по абзацам).\n\n" + long_text, parse_mode="HTML")
+    record("длинное_сообщение", bool(sent), f"длина {len(long_text)} символов, доставлено={bool(sent)}")
 
     # 3. Malformed HTML — the parse-mode fallback must rescue delivery.
-    sent = bot.send_message(chat_id, "🧪 Транспортный самотест 3/4: <b>незакрытый тег и <<двойные>> скобки", parse_mode="HTML")
-    record("битый_html_fallback", sent, f"доставлено через fallback={sent}")
+    sent = bot.send_message(chat_id, "🧪 Транспортный самотест 3/7: <b>незакрытый тег и <<двойные>> скобки", parse_mode="HTML")
+    record("битый_html_fallback", bool(sent), f"доставлено через fallback={bool(sent)}")
 
-    # 4. The real status card end-to-end (key check + fleet + dispatch record).
+    # 4. Edit — the placeholder becomes the real answer in place.
+    editable_id = bot.send_message(chat_id, "🧪 Транспортный самотест 4/7: это сообщение будет отредактировано.", parse_mode="HTML")
+    edited = bot.edit_message(chat_id, editable_id, "🧪 Транспортный самотест 4/7: <b>сообщение отредактировано</b> — editMessageText работает.", parse_mode="HTML")
+    record("редактирование_сообщения", bool(edited) and bool(editable_id),
+           f"message_id={editable_id}, editMessageText ok={edited}")
+
+    # 5. Delete — the sensitive-message transport must still work.
+    temp_id = bot.send_message(chat_id, "🧪 Транспортный самотест 5/7: это сообщение будет удалено.", parse_mode="HTML")
+    deleted = bot.delete_message(chat_id, temp_id) if temp_id else False
+    record("удаление_сообщения", bool(deleted), f"message_id={temp_id}, deleteMessage ok={deleted}")
+
+    # 6. Inline buttons — the operator can press a button; the press arrives
+    #    as a callback query and must be answered and routed.
+    pressed_id = bot.send_message(
+        chat_id,
+        "🧪 Транспортный самотест 6/7: нажмите кнопку ниже — пресс придёт как callback query.",
+        reply_markup=bot.get_status_keyboard(),
+        parse_mode="HTML",
+    )
+    record("инлайн_кнопки", bool(pressed_id),
+           f"message_id={pressed_id}, кнопки: {bot.get_status_keyboard()['inline_keyboard'][0]}")
+
+    # 7. The real status card end-to-end (key check + fleet + dispatch record).
     bot.handle_status_command(chat_id)
     record("живая_карточка_статуса", True, "handle_status_command выполнен в реальном чате")
 

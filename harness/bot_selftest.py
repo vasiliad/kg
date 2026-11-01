@@ -68,9 +68,13 @@ def _capture_bot() -> HarnessTelegramBot:
     )
     # Transport stubs: capture everything the bot would have sent.
     bot._sent: List[str] = []
-    bot.send_message = lambda chat_id, text, **kw: (bot._sent.append(text), True)[1]
+    # The fake message id: the answer travels as an EDIT of the placeholder,
+    # so the captured text is exactly what the operator would see.
+    bot.send_message = lambda chat_id, text, **kw: (bot._sent.append(text), 777)[1]
+    bot.edit_message = lambda chat_id, message_id, text, **kw: (bot._sent.append(text), True)[1]
     bot.send_chat_action = lambda *a, **k: None
     bot.delete_message = lambda *a, **k: None
+    bot.answer_callback_query = lambda *a, **k: True
     # Never persist the synthetic session into the real session store.
     bot._save_authorized_sessions = lambda: None
     return bot
@@ -133,6 +137,38 @@ def run_battery() -> Dict[str, Any]:
             print(r[:900])
         if missing_soft:
             print(f"[soft] не найдено (провайдер может варьировать): {missing_soft}")
+
+    # --- 4. a button press is a command too ---------------------------------
+    bot._sent.clear()
+    try:
+        bot.process_callback_query({
+            "id": "cbq-roster",
+            "data": "roster",
+            "message": {"chat": {"id": chat_id}, "message_id": 1},
+        })
+    except Exception as e:
+        bot._sent.append(f"[EXCEPTION] {type(e).__name__}: {e}")
+    pressed = any("СОСТАВ КОМАНДЫ" in t for t in bot._sent)
+    results.append({"label": "нажатие_кнопки", "input": "inline: roster",
+                    "ok": pressed, "replies": bot._sent[:]})
+    if not pressed:
+        failures.append("нажатие inline-кнопки не вернуло состав команды")
+
+    # --- 5. a button press from a stranger must do nothing ------------------
+    bot._sent.clear()
+    try:
+        bot.process_callback_query({
+            "id": "cbq-stranger",
+            "data": "roster",
+            "message": {"chat": {"id": 999999}, "message_id": 2},
+        })
+    except Exception as e:
+        bot._sent.append(f"[EXCEPTION] {type(e).__name__}: {e}")
+    denied = not any("СОСТАВ КОМАНДЫ" in t for t in bot._sent)
+    results.append({"label": "кнопка_от_чужого", "input": "inline: roster (чужой чат)",
+                    "ok": denied, "replies": bot._sent[:]})
+    if not denied:
+        failures.append("нажатие кнопки из чужого чата было выполнено")
 
     return {
         "ran_at": _now(),

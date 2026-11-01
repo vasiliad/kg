@@ -890,6 +890,96 @@ def test_21_status_card_shows_the_measured_drift():
     print("[+] Test 21 Passed: the status card shows the drift and invents nothing.")
 
 
+def test_22_transport_covers_button_press_edit_and_delete():
+    """
+    The wire must cover every verb the operator can trigger: a button press
+    (callback query), an edit (the answer replaces the placeholder) and a
+    delete (the password message). A press from an unauthorized chat must do
+    nothing, and a failed edit must still deliver the answer.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 22: the transport answers a button press, edits and deletes")
+    print("=" * 60)
+    import threading
+    from harness.telegram_bot import HarnessTelegramBot
+
+    def bare_bot():
+        bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
+        bot.authorized_chats = {846947027}
+        bot.user_states = {}
+        bot._state_lock = threading.RLock()
+        bot.sent: List[str] = []
+        bot.edited: List[str] = []
+        bot.deleted: List[int] = []
+        bot.answered: List[str] = []
+        bot.send_message = lambda chat_id, text, **kw: (bot.sent.append(text), 555)[1]
+        bot.edit_message = lambda chat_id, mid, text, parse_mode=None: (bot.edited.append(text), True)[1]
+        bot.delete_message = lambda chat_id, mid: (bot.deleted.append(mid), True)[1]
+        bot.answer_callback_query = lambda qid, text="": (bot.answered.append(qid), True)[1]
+        bot.handle_status_command = lambda chat_id: bot.sent.append("STATUS")
+        bot.handle_fleet_command = lambda chat_id: bot.sent.append("ROSTER")
+        bot.handle_fleet_refresh = lambda chat_id: bot.sent.append("RETUNE")
+        return bot
+
+    bot = bare_bot()
+    bot.process_callback_query({
+        "id": "cb1", "data": "roster",
+        "message": {"chat": {"id": 846947027}, "message_id": 1},
+    })
+    assert "ROSTER" in bot.sent, "a button press must reach the handler"
+    assert bot.answered, "a button press must be answered, or the button spins forever"
+
+    # A stranger's press must reach no handler at all.
+    bot.sent.clear()
+    bot.answered.clear()
+    bot.process_callback_query({
+        "id": "cb2", "data": "retune",
+        "message": {"chat": {"id": 999999}, "message_id": 2},
+    })
+    assert "RETUNE" not in bot.sent, "an unauthorized chat must not trigger a re-measure"
+    assert bot.answered, "even a denied press must be answered"
+
+    # An unknown button: answered, no crash.
+    bot.sent.clear()
+    bot.answered.clear()
+    bot.process_callback_query({
+        "id": "cb3", "data": "что-то-неизвестное",
+        "message": {"chat": {"id": 846947027}, "message_id": 3},
+    })
+    assert bot.answered and bot.sent, "an unknown button must answer, not go silent"
+
+    # The answer replaces the placeholder in place.
+    bot.sent.clear()
+    bot.edited.clear()
+    bot._deliver_answer(846947027, 555, "🧪 ответ", parse_mode="HTML")
+    assert bot.edited and "🧪 ответ" in bot.edited[0], "the answer must edit the placeholder"
+    assert not bot.sent, "an edited answer must not be sent as a second message"
+
+    # A failed edit must still deliver the answer, and drop the placeholder.
+    bot.sent.clear()
+    bot.edited.clear()
+    bot.deleted.clear()
+    bot.edit_message = lambda *a, **k: False
+    bot._deliver_answer(846947027, 555, "🧪 ответ")
+    assert bot.sent, "if the edit fails the answer must still be sent"
+    assert bot.deleted, "the stale placeholder must be removed"
+
+    # An answer too long for one message cannot be edited — it goes out whole.
+    bot.sent.clear()
+    bot.edited.clear()
+    bot.edit_message = lambda *a, **k: True
+    bot._deliver_answer(846947027, 555, "x" * 5000)
+    assert not bot.edited, "a 5000-character answer must not be edited into one message"
+    assert bot.sent, "a long answer must still be delivered"
+
+    # The polling loop must route button presses, not drop them silently.
+    source = (PROJECT_ROOT / "harness" / "telegram_bot.py").read_text(encoding="utf-8")
+    assert '"callback_query" in update' in source, "the poll loop must route button presses"
+    for endpoint in ("answerCallbackQuery", "editMessageText", "deleteMessage"):
+        assert endpoint in source, f"the transport must speak {endpoint}"
+    print("[+] Test 22 Passed: the transport covers press, edit and delete.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -921,6 +1011,7 @@ if __name__ == "__main__":
         test_19_fleet_drift_is_measured_not_guessed,
         test_20_dispatch_follows_measured_task_evidence,
         test_21_status_card_shows_the_measured_drift,
+        test_22_transport_covers_button_press_edit_and_delete,
     ]
     failed = []
     for t in tests:
