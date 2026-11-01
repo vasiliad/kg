@@ -17,6 +17,7 @@ from typing import Dict, Any, Optional, List
 import requests
 
 from harness.key_pool import NVIDIAKeyPool
+from harness import search_query
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -168,6 +169,14 @@ class MiniMaxExecutor:
 
         return []
 
+    def _search_query_for(self, task_prompt: str) -> str:
+        """
+        The query the search stack receives. It is formulated from the
+        operator's question — the topical core, not a truncated blob of the
+        whole prompt.
+        """
+        return search_query.formulate(task_prompt)
+
     def execute_task(
         self,
         task_prompt: str,
@@ -195,9 +204,9 @@ class MiniMaxExecutor:
         # 1. Enrich with Keenable Search if requested
         enriched_context = context
         if enable_search:
-            search_query = task_prompt[:120]
-            print(f"[MiniMax Harness] Pre-fetching live web intel via Keenable: '{search_query}'...")
-            search_results = self.search_web(search_query, num_results=3)
+            query_text = self._search_query_for(task_prompt)
+            print(f"[MiniMax Harness] Pre-fetching live web intel via Keenable: '{query_text}'...")
+            search_results = self.search_web(query_text, num_results=3)
             if search_results:
                 citations = [r.get("url") for r in search_results if r.get("url")]
                 full_items = []

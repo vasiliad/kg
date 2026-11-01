@@ -573,9 +573,13 @@ class HarnessTelegramBot:
         # 2. Append user prompt to eternal memory log
         self.memory_engine.append_message("user", prompt, {"chat_id": chat_id})
 
-        # 3. Web search is STRICTLY DISABLED by default!
-        search_prefixes = ["найди в интернете:", "найди в интернете ", "поиск в интернете:", "/search "]
-        needs_search = enable_search or any(clean_prompt.startswith(p) for p in search_prefixes)
+        # 3. Web search: only when the question actually needs the live web.
+        #    A question about our own complex is answered by our own state.
+        from harness import search_query as query_formulation
+        search_plan = query_formulation.plan(prompt)
+        needs_search = enable_search or search_plan["search"]
+        if needs_search:
+            print(f"[Bot] Поиск: '{search_plan['query']}' ({search_plan['reason']})")
 
         # 4. Verified system facts + semantic memory envelope
         memory_envelope = self.memory_engine.build_memory_envelope(prompt)

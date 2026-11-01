@@ -34,6 +34,10 @@ Suites:
      static order of the roster.
  21. Bot: the status card shows the measured drift in words, and invents
      nothing when there is no measurement.
+ 22. Bot: the transport answers a button press, edits and deletes — and a
+     press from a stranger does nothing.
+ 23. Search: the query is the topical core of the question, not a truncated
+     blob of the prompt; our own questions never cost a search.
 """
 
 import os
@@ -980,6 +984,60 @@ def test_22_transport_covers_button_press_edit_and_delete():
     print("[+] Test 22 Passed: the transport covers press, edit and delete.")
 
 
+def test_23_search_query_is_formulated_not_truncated():
+    """
+    The search engine must receive the topical core of the operator's
+    question — not the first 120 characters of the whole sentence. The
+    decision to search at all must also be honest: our own questions are
+    answered by our own state, not by the web.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 23: the search query is formulated, not truncated")
+    print("=" * 60)
+    from harness import search_query
+    from harness.minimax_executor import MiniMaxExecutor
+
+    q = search_query.formulate(
+        "найди в интернете: что нового в NVIDIA NIM за последние дни"
+    )
+    assert q == "NVIDIA NIM за последние дни", f"the topic must survive, got {q!r}"
+    assert "найди" not in q.lower(), "the instruction is not a topic"
+    assert "что нового" not in q.lower(), "the question frame is not a topic"
+
+    # Politeness and meta-words are noise.
+    q2 = search_query.formulate("Пожалуйста, расскажи мне про is_palindrome")
+    assert "is_palindrome" in q2, f"the topic must survive, got {q2!r}"
+    assert "пожалуйста" not in q2.lower(), f"politeness is not a topic: {q2!r}"
+    assert "мне" not in q2.lower().split(), f"meta-words are not a topic: {q2!r}"
+
+    # The cut must never land mid-word.
+    long_prompt = "найди в интернете: " + (" ".join(f"слово{i}" for i in range(60)))
+    q3 = search_query.formulate(long_prompt)
+    assert len(q3) <= search_query.MAX_QUERY_LEN, f"the query must be bounded, got {len(q3)}"
+    assert q3.split()[-1].isdigit() or not q3.endswith(("слово", "сло")), \
+        f"the cut must not split a word: {q3[-20:]!r}"
+
+    # The question itself decides whether the live web is needed.
+    assert search_query.needs_search("найди в интернете: что нового в NVIDIA NIM")
+    assert search_query.needs_search("что нового в мире ИИ?"), \
+        "a fresh-news question needs the live web"
+    assert not search_query.needs_search("какой сейчас основной дежурный?"), \
+        "a question about our own roster must not cost a search"
+    assert not search_query.needs_search("напиши python функцию is_palindrome"), \
+        "a code request must not cost a search"
+    assert not search_query.needs_search(""), "an empty question searches nothing"
+
+    plan = search_query.plan("найди в интернете: что нового в NVIDIA NIM")
+    assert plan["search"] is True and plan["query"], "the plan must carry query and decision"
+    assert plan["reason"], "the plan must say why it searched"
+
+    # The executor must actually use the formulated query.
+    ex = MiniMaxExecutor.__new__(MiniMaxExecutor)
+    assert ex._search_query_for("найди в интернете: что нового в NVIDIA NIM") \
+        == "NVIDIA NIM", "the executor must not send the raw prompt to the search engine"
+    print("[+] Test 23 Passed: the search query is formulated, not truncated.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1012,6 +1070,7 @@ if __name__ == "__main__":
         test_20_dispatch_follows_measured_task_evidence,
         test_21_status_card_shows_the_measured_drift,
         test_22_transport_covers_button_press_edit_and_delete,
+        test_23_search_query_is_formulated_not_truncated,
     ]
     failed = []
     for t in tests:
