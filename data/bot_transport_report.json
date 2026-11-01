@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-11-01T00:57:56.899244+00:00",
+  "ran_at": "2026-11-01T01:37:43.261339+00:00",
   "bot": "immortal911bot",
   "chat_id": 557677490,
   "tests": [
@@ -21,17 +21,17 @@
     {
       "label": "редактирование_сообщения",
       "ok": false,
-      "detail": "message_id=114, editMessageText ok=False"
+      "detail": "message_id=121, editMessageText ok=False, причина: Bad Request: message can't be edited"
     },
     {
       "label": "удаление_сообщения",
       "ok": true,
-      "detail": "message_id=115, deleteMessage ok=True"
+      "detail": "message_id=122, deleteMessage ok=True"
     },
     {
       "label": "инлайн_кнопки",
       "ok": true,
-      "detail": "message_id=116, кнопки: [{'text': '🧑\\u200d💼 Состав команды', 'callback_data': 'roster'}, {'text': '🔄 Обновить флот', 'callback_data': 'retune'}]"
+      "detail": "message_id=123, кнопки: [{'text': '🧑\\u200d💼 Состав команды', 'callback_data': 'roster'}, {'text': '🔄 Обновить флот', 'callback_data': 'retune'}]"
     },
     {
       "label": "живая_карточка_статуса",
