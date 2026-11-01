@@ -4,5 +4,16 @@
     846947027,
     486378909
   ],
-  "last_update_id": 0
+  "last_update_id": 0,
+  "health": {
+    "runs": 1,
+    "started_at": "2026-11-01T00:52:39Z",
+    "last_poll_at": "2026-11-01T00:55:24Z",
+    "last_update_at": null,
+    "last_send_at": null,
+    "updates_seen": 0,
+    "messages_sent": 0,
+    "errors": 0,
+    "last_error": null
+  }
 }
