@@ -1,7 +1,7 @@
 {
-  "ran_at": "2026-11-01T02:02:32.811322+00:00",
+  "ran_at": "2026-11-01T02:55:35.454397+00:00",
   "bot": "immortal911bot",
-  "chat_id": 557677490,
+  "chat_id": 486378909,
   "tests": [
     {
       "label": "короткое_с_клавиатурой",
@@ -21,17 +21,17 @@
     {
       "label": "редактирование_сообщения",
       "ok": true,
-      "detail": "message_id=130, editMessageText ok=True, форма: markup | с клавиатурой ok=False (Bad Request: message can't be edited)"
+      "detail": "message_id=142, editMessageText ok=True, форма: markup | с клавиатурой ok=False (Bad Request: message can't be edited)"
     },
     {
       "label": "удаление_сообщения",
       "ok": true,
-      "detail": "message_id=132, deleteMessage ok=True"
+      "detail": "message_id=144, deleteMessage ok=True"
     },
     {
       "label": "инлайн_кнопки",
       "ok": true,
-      "detail": "message_id=133, кнопки: [{'text': '🧑\\u200d💼 Состав команды', 'callback_data': 'roster'}, {'text': '🔄 Обновить флот', 'callback_data': 'retune'}]"
+      "detail": "message_id=145, кнопки: [{'text': '🧑\\u200d💼 Состав команды', 'callback_data': 'roster'}, {'text': '🔄 Обновить флот', 'callback_data': 'retune'}]"
     },
     {
       "label": "живая_карточка_статуса",
