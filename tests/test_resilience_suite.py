@@ -1972,6 +1972,31 @@ def test_32_the_operator_address_never_reaches_the_public_repository():
         assert "DELIVERED" in written, \
             f"the status must survive: {written}"
 
+    # --- The conversation log is COMMITTED: the operator's own turns are
+    # stored verbatim, so a turn that names an address must be masked.
+    from harness.memory_engine import MemoryEngine
+    saved_key = os.environ.pop("NVIDIA_API_KEY", None)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            hist_path = Path(tmp) / "telegram_history.txt"
+            vault_path = Path(tmp) / ".memory_vault.json"
+            engine = MemoryEngine(history_file=hist_path, vault_file=vault_path,
+                                  nvidia_api_key="")
+            engine.append_message("user", f"отправь отчёт на {address} пожалуйста")
+            written = hist_path.read_text(encoding="utf-8")
+            assert address not in written, \
+                f"the address reached the conversation log: {written}"
+            assert "sha256:" in written, \
+                f"the address must be fingerprinted, not dropped: {written}"
+            assert "пожалуйста" in written, \
+                f"the rest of the turn must survive: {written}"
+            if vault_path.exists():
+                assert address not in vault_path.read_text(encoding="utf-8"), \
+                    "the address reached the semantic vault"
+    finally:
+        if saved_key is not None:
+            os.environ["NVIDIA_API_KEY"] = saved_key
+
     # --- The decisive check: NO tracked file holds a real address.
     allowed_domains = {"example.com", "example.org", "example.invalid", "localhost"}
     email_re = re.compile(r"[A-Za-z0-9._%+\-]+@([A-Za-z0-9.\-]+\.[A-Za-z]{2,})")

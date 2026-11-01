@@ -52,6 +52,7 @@ from harness.sovereign_cpu_engine import SovereignCPUEngine
 from harness.memory_engine import MemoryEngine
 from harness.tools import AgentToolbox
 from harness import runtime_settings
+from harness import redaction
 from harness import operational_context
 
 
@@ -371,6 +372,9 @@ class HarnessTelegramBot:
                     "health": dict(getattr(self, "health", {}) or {}),
                 }
                 payload = self._merge_sessions_payload(payload)
+            # The session file is committed to a public repository: no address
+            # may travel in it (see harness/redaction.py).
+            payload = redaction.mask_emails_deep(payload)
             with open(self.sessions_file, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
         except Exception:

@@ -35,6 +35,7 @@ from typing import List, Dict, Any, Optional
 
 from harness.key_pool import NVIDIAKeyPool
 from harness import vector_codec
+from harness import redaction
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -390,7 +391,10 @@ class MemoryEngine:
         (bot workers, test suite, backup job) never lose each other's entries.
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        clean_text = text.strip()
+        # The conversation log is COMMITTED to a public repository, so an
+        # address in a turn is replaced by a fingerprint before it is written
+        # — both to the plain text log and to the semantic vault.
+        clean_text = redaction.mask_emails(text.strip())
         if not clean_text:
             return
 
