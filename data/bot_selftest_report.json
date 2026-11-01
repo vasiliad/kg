@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-11-01T04:30:50.206487+00:00",
+  "ran_at": "2026-11-01T05:52:30.096586+00:00",
   "tests": [
     {
       "label": "пароль_неверный",
@@ -21,10 +21,10 @@
       "label": "статус",
       "input": "📡 Статус системы",
       "ok": true,
-      "elapsed_sec": 0.1,
+      "elapsed_sec": 0.2,
       "missing_soft_markers": [],
       "replies": [
-        "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n👑 <b>Верховный арбитр (CPU):</b> <code>minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)</code>\n🧑‍💼 <b>Дежурная команда:</b> 5 моделей, источник: <code>live_probe</code>\n🫀 <b>Активность бота:</b> последний ответ 2026-11-01T02:48:48Z; ответов 1\n⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n🔑 <b>NVIDIA NIM API:</b> Key is active and authorized. (HTTP 200)\n💾 <b>Дисковое пространство:</b> 87.5 ГБ свободно (39.4% занято)\n📬 <b>Последняя отправка отчётов:</b> <code>[2026-10-31 10:57:18 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | получатель=настроен (sha256:2604fb61) | статус=DELIVERED</code>\n📨 <b>Получатель отчётов:</b> <code>настроен (sha256:2604fb61)</code>\n🕒 <b>Обновлено:</b> 2026-11-01T03:56:02.013179+00:00Z\n\n🛡️ <i>Автономный суверенный комплекс полностью отвязан от очередей сторонних сервисов.</i>"
+        "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n👑 <b>Верховный арбитр (CPU):</b> <code>minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)</code>\n🧑‍💼 <b>Дежурная команда:</b> 4 моделей, источник: <code>live_probe</code>\n📉 <b>Дрейф флота:</b> набор проб изменился — баллы разных шкал не сравниваются; средний сдвиг +11.42; худший: nvidia/nemotron-3-ultra-550b-a55b (+1.06); выбыло: z-ai/glm-5.3-flash.\n🫀 <b>Активность бота:</b> последний ответ 2026-11-01T04:46:14Z; ответов 10\n⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n🔑 <b>NVIDIA NIM API:</b> Key is active and authorized. (HTTP 200)\n💾 <b>Дисковое пространство:</b> 87.5 ГБ свободно (39.4% занято)\n📬 <b>Последняя отправка отчётов:</b> <code>[2026-11-01 05:18:24 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | получатель=настроен (sha256:2604fb61) | статус=DELIVERED</code>\n📨 <b>Получатель отчётов:</b> <code>настроен (sha256:2604fb61)</code>\n🕒 <b>Обновлено:</b> 2026-11-01T05:03:36.898683+00:00Z\n\n🛡️ <i>Автономный суверенный комплекс полностью отвязан от очередей сторонних сервисов.</i>"
       ]
     },
     {
@@ -34,53 +34,54 @@
       "elapsed_sec": 0.0,
       "missing_soft_markers": [],
       "replies": [
-        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (5):</b>\n<b>1. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный основной\n   • балл: <b>95.19</b> (✅ замер, 0.68с)\n   • вендор: nvidia\n<b>2. mistralai/mistral-large-4-1t-a52b</b>\n   • роль: дежурный быстрый\n   • балл: <b>92.55</b> (✅ замер, 10.94с)\n   • вендор: mistralai\n<b>3. minimaxai/minimax-m3.1-flash</b>\n   • роль: дежурный флагман\n   • балл: <b>76.15</b> (✅ замер, 5.37с)\n   • вендор: minimaxai\n<b>4. z-ai/glm-5.3-flash</b>\n   • роль: дежурный кодер\n   • балл: <b>74.8</b> (✅ замер, 19.87с)\n   • вендор: z-ai\n<b>5. stepfun-ai/step-5-preview</b>\n   • роль: дежурный резерв\n   • балл: <b>73.31</b> (✅ замер, 4.93с)\n   • вендор: stepfun-ai"
+        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (4):</b>\n<b>1. stepfun-ai/step-5-preview</b>\n   • роль: дежурный основной\n   • балл: <b>99.52</b> (✅ замер, 2.57с)\n   • вендор: stepfun-ai\n<b>2. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный быстрый\n   • балл: <b>96.25</b> (✅ замер, 0.67с)\n   • вендор: nvidia\n<b>3. mistralai/mistral-large-4-1t-a52b</b>\n   • роль: дежурный кодер\n   • балл: <b>95.44</b> (✅ замер, 2.97с)\n   • вендор: mistralai\n<b>4. minimaxai/minimax-m3.1-flash</b>\n   • роль: дежурный флагман\n   • балл: <b>91.67</b> (✅ замер, 4.49с)\n   • вендор: minimaxai"
       ]
     },
     {
       "label": "быстрый_вопрос",
       "input": "какой сейчас основной дежурный и почему он выбран?",
       "ok": true,
-      "elapsed_sec": 13.4,
+      "elapsed_sec": 17.0,
       "missing_soft_markers": [],
       "replies": [
         "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Тип: quick; быстрый вопрос — отвечает самая быстрая дежурная. Порядок вызова: mistralai/mistral-large-4-1t-a52b (дежурный быстрый) (по измеренным пробам).\n\n⚡ <b>mistralai/mistral-large-4-1t-a52b — дежурный быстрый · балл 92.55 (замер ✅) · 12.78с</b>\n\nОсновной дежурный сейчас — **`nvidia/nemotron-3-ultra-550b-a55b`**, tier **«Дежурный основной»**, score **95.19**, `verified=True`, `status=APPROVED` (согласно `active_models.json` в снапшоте от **2026-11-01 04:28:33 UTC**).\n\nПочему выбран: по журналу **`[2026-10-31 21:57:21 UTC] ФЛОТ ПЕРЕОБРАН`** состав флота был переобран **методом «живой замер»**: из **12 кандидатов** было измерено **6**, и `nvidia/nemotron-3-ultra-550b-a55b` получил наивысший балл **95.19**, поэтому занял роль основного дежурного. Последний emergency-run, подтвердивший состав из 5 моделей, был **`[2026-11-01 03:56:02 UTC] EMERGENCY RUN SUCCESS | Fleet: 5 models`** (причина: state устарел на 6.8h при пороге 6h), изменений состава (`+0/-0`) не было.\n\nДля полноты: я, `mistralai/mistral-large-4-1t-a52b`, в этом же составе — **«Дежурный быстрый»**, score **92.55**, тоже `APPROVED`."
+        "🧑‍💼 <i>Хранитель:</i> Тип: quick; быстрый вопрос — отвечает самая быстрая дежурная. Порядок вызова: nvidia/nemotron-3-ultra-550b-a55b (дежурный быстрый) (по измеренным пробам).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный быстрый · балл 96.25 (замер ✅) · 16.37с</b>\n\n**Основной дежурный на данный момент: `stepfun-ai/step-5-preview`**  \n**Оценка (score): 99.52**  \n**Статус: APPROVED, verified=True**\n\n### Почему он выбран\nПо записи в оперативном логе от **2026-11-01 05:03:36 UTC** прошла переоценка флота:\n- **Метод:** живой замер (live benchmark)  \n- **Кандидатов рассмотрено:** 12  \n- **Фактически измерено:** 4  \n- **Результат замеров:**  \n  - `stepfun-ai/step-5-preview` — **Дежурный основной, 99.52**  \n  - `nvidia/nemotron-3-ultra-550b-a55b` — Дежурный быстрый, 96.25  \n  - `mistralai/mistral-large-4-1t-a52b` — Дежурный кодер, 95.44  \n  - `minimaxai/minimax-m3.1-flash` — Дежурный флагман, 91.67  \n\nМодель `stepfun-ai/step-5-preview` получила наивысший балл (99.52) и была назначена на роль **Дежурный основной**. Это подтверждается актуальным состоянием `active_models.json` (снимок от 05:44:36 UTC)."
       ]
     },
     {
       "label": "код_задача",
       "input": "напиши python функцию is_palindrome(s) с обработкой ошибок",
       "ok": true,
-      "elapsed_sec": 90.9,
+      "elapsed_sec": 320.4,
       "missing_soft_markers": [],
       "replies": [
         "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Тип: code; задача на код — первым идёт измеренный кодер. Порядок вызова: z-ai/glm-5.3-flash (дежурный кодер) → nvidia/nemotron-3-ultra-550b-a55b (дежурный основной) (по измеренным пробам).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 95.19 (замер ✅) · 8.42с</b>\n\n```python\ndef is_palindrome(s: str) -&gt; bool:\n    &quot;&quot;&quot;\n    Check if a string is a palindrome (reads the same forwards and backwards).\n    \n    Normalization: case-insensitive, ignores non-alphanumeric characters.\n    \n    Args:\n        s: Input string to check.\n        \n    Returns:\n        True if `s` is a palindrome after normalization, False otherwise.\n        \n    Raises:\n        TypeError: If `s` is not a string or None.\n    &quot;&quot;&quot;\n    if s is None:\n        raise TypeError(&quot;Input cannot be None&quot;)\n    if not isinstance(s, str):\n        raise TypeError(f&quot;Expected str, got {type(s).__name__}&quot;)\n    \n    # Normalize: keep only alphanumeric, lowercased\n    cleaned = &#x27;&#x27;.join(ch.lower() for ch in s if ch.isalnum())\n    \n    # Empty string or single char after cleaning is a palindrome\n    return cleaned == cleaned[::-1]\n\n\n# ---"
+        "🧑‍💼 <i>Хранитель:</i> Тип: code; задача на код — первым идёт измеренный кодер. Порядок вызова: mistralai/mistral-large-4-1t-a52b (дежурный кодер) → stepfun-ai/step-5-preview (дежурный основной) (по измеренным пробам).\n\n⚡ <b>mistralai/mistral-large-4-1t-a52b — дежурный кодер · балл 95.44 (замер ✅) · 319.61с</b>\n\nВот функция `is_palindrome(s)` с полной обработкой ошибок:\n\n```python\nimport unicodedata\n\ndef is_palindrome(s: str) -&gt; bool:\n    &quot;&quot;&quot;\n    Проверяет, является ли строка палиндромом.\n\n    Игнорирует регистр и все символы, не являющиеся буквами или цифрами\n    (пробелы, пунктуацию и т.п.). Корректно работает с Unicode (кириллица и др.).\n\n    Args:\n        s: строка для проверки.\n\n    Returns:\n        True, если строка — палиндром, иначе False.\n        Пустая строка считается палиндромом.\n\n    Raises:\n        TypeError: если аргумент не является строкой (None, число, список и т.д.).\n    &quot;&quot;&quot;\n    # --- Обработка ошибок входных данных ---\n    if s is None:\n        raise TypeError(&quot;is_palindrome() ожидает str, получено None&quot;)\n    if not isinstance(s, str):\n        raise TypeError(\n            f&quot;is_palindrome() ожидает str, получено {typ"
       ]
     },
     {
       "label": "память_фактов",
       "input": "отправляли ли мне сегодня отчёты на почту?",
       "ok": true,
-      "elapsed_sec": 15.7,
+      "elapsed_sec": 42.2,
       "missing_soft_markers": [
+        "ОТЧЁТЫ",
         "нет записей"
       ],
       "replies": [
         "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Тип: quick; быстрый вопрос — отвечает самая быстрая дежурная. Порядок вызова: mistralai/mistral-large-4-1t-a52b (дежурный быстрый) (по измеренным пробам).\n\n⚡ <b>mistralai/mistral-large-4-1t-a52b — дежурный быстрый · балл 92.55 (замер ✅) · 14.92с</b>\n\nНет. Сегодня, **2026-11-01** (по состоянию на снапшот в 04:30:17 UTC), отчёты на почту **не отправлялись** — в журнале отправок записей за эту дату нет, а семантический поиск по операционному логу совпадений не нашёл.\n\nПоследние отправки были **вчера, 2026-10-31**, обе на `настроен (sha256:2604fb61)`, обе со статусом DELIVERED:\n\n- `[2026-10-31 10:44:13 UTC]` ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Проверка связи | статус=DELIVERED\n- `[2026-10-31 10:57:18 UTC]` ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n\nТо есть вчерашний ежедневный дайджест и проверка связи до вас дошли, а сегодняшних (утренних) рассылок пока не было.\n\nМогу прямо сейчас отправить отчёт на `настроен (sha256:2604fb61)` — например, внеочередную «Проверку связи» или актуальный дайджест по состоянию комплекса (флот из 5 моделей APPROVED, последний emergency run в 03:56:02 UTC, бот @immortal911bot доступен, диагностика 03:16:14 UTC — NVIDIA ok, live mo"
+        "🧑‍💼 <i>Хранитель:</i> Тип: quick; быстрый вопрос — отвечает самая быстрая дежурная. Порядок вызова: nvidia/nemotron-3-ultra-550b-a55b (дежурный быстрый) (по измеренным пробам).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный быстрый · балл 96.25 (замер ✅) · 41.59с</b>\n\n**Да, сегодня (2026-11-01) на почту `настроен (sha256:2604fb61)` отправлено два отчёта — оба со статусом `DELIVERED`:**\n\n| Время (UTC) | Тип отчёта | Статус |\n|-------------|------------|--------|\n| 05:11:14 | Проверка связи | DELIVERED |\n| 05:18:24 | Ежедневный дайджест ИИ | DELIVERED |\n\nИсточник: блок **Report dispatch records** и хвост **Operational log** в снапшоте фактов (snapshot taken at 2026-11-01 05:50:13 UTC)."
       ]
     },
     {
       "label": "поиск",
       "input": "найди в интернете: что нового в NVIDIA NIM за последние дни",
       "ok": true,
-      "elapsed_sec": 17.2,
+      "elapsed_sec": 94.9,
       "missing_soft_markers": [],
       "replies": [
         "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Тип: general; общая задача — отвечает основной дежурный. Порядок вызова: nvidia/nemotron-3-ultra-550b-a55b (дежурный основной) (по измеренным пробам).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 95.19 (замер ✅) · 16.47с</b>\n\n**Результаты живого поиска (TinyFish) по запросу «что нового в NVIDIA NIM за последние дни»:**\n\n1. **Reddit — пользователи жалуются на сбои**  \n   *Источник:* `https://www.reddit.com/r/SillyTavernAI/comments/1rlh9ff/nvidia_nim_not_working_for_the_last_23_days/?tl=ru`  \n   *Суть:* за последние 2–3 дня NVIDIA NIM API в Silly Tavern работает нестабильно / выдаёт ошибки. Конкретных новых функций или релизов в посте нет — только репорт о проблемах.\n\n2. **Официальный пресс-релиз NVIDIA (общий, без даты «за последние дни»)**  \n   *Источник:* `https://nvidianews.nvidia.com/news/nvidia-nim-model-deployment-generative-ai-developers`  \n   *Суть:* обзорное описание NIM как inference-микросервисов для развёртывания в облаках, дата-центрах и на рабочих станциях. Конкретных свежих анонсов за прошедшие дни в сниппете не видно.\n\n3. **YouTube — обзор NIM и AI Blueprints для RTX**  \n   *Источник:* `https://www.youtube.com/watch?v=K_MnB"
+        "🧑‍💼 <i>Хранитель:</i> Тип: general; общая задача — отвечает основной дежурный. Порядок вызова: stepfun-ai/step-5-preview (дежурный основной) (по измеренным пробам).\n\n⚡ <b>stepfun-ai/step-5-preview — дежурный основной · балл 99.52 (замер ✅) · 94.34с</b>\n\n**Свежая живая выборка (источник: TinyFish, тир live-search активен — ok=True на 03:16:14 UTC):**\n\nПо запросу «что нового в NVIDIA NIM за последние дни» живой поиск вернул три источника, и ни один из них не является свежим официальным анонсом:\n\n1. **Reddit r/SillyTavernAI — «NVIDIA NIM not working for the last 2-3 days»**\n   https://www.reddit.com/r/SillyTavernAI/comments/1rlh9ff/nvidia_nim_not_working_for_the_last_23_days/\n   Содержание: пользовательский репорт о сбоях NVIDIA NIM API в SillyTavern «последние 2–3 дня». Это жалоба community, не релиз.\n\n2. **NVIDIA NIM for Developers (продуктовая страница)**\n   https://developer.nvidia.com/nim\n   Содержание: «NVIDIA NIM is a set of accelerated inference microservices that allow organizations to run AI models on NVIDIA GPUs anywhere.» — статичное описание продукта, без даты и без новостей.\n\n3. **NVIDIA Newsroom — «NVIDIA NIM Revolutionizes Model Deployment»**\n   https://nvidianews.nvid"
       ]
     },
     {
@@ -88,7 +89,7 @@
       "input": "inline: roster",
       "ok": true,
       "replies": [
-        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (5):</b>\n<b>1. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный основной\n   • балл: <b>95.19</b> (✅ замер, 0.68с)\n   • вендор: nvidia\n<b>2. mistralai/mistral-large-4-1t-a52b</b>\n   • роль: дежурный быстрый\n   • балл: <b>92.55</b> (✅ замер, 10.94с)\n   • вендор: mistralai\n<b>3. minimaxai/minimax-m3.1-flash</b>\n   • роль: дежурный флагман\n   • балл: <b>76.15</b> (✅ замер, 5.37с)\n   • вендор: minimaxai\n<b>4. z-ai/glm-5.3-flash</b>\n   • роль: дежурный кодер\n   • балл: <b>74.8</b> (✅ замер, 19.87с)\n   • вендор: z-ai\n<b>5. stepfun-ai/step-5-preview</b>\n   • роль: дежурный резерв\n   • балл: <b>73.31</b> (✅ замер, 4.93с)\n   • вендор: stepfun-ai"
+        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (4):</b>\n<b>1. stepfun-ai/step-5-preview</b>\n   • роль: дежурный основной\n   • балл: <b>99.52</b> (✅ замер, 2.57с)\n   • вендор: stepfun-ai\n<b>2. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный быстрый\n   • балл: <b>96.25</b> (✅ замер, 0.67с)\n   • вендор: nvidia\n<b>3. mistralai/mistral-large-4-1t-a52b</b>\n   • роль: дежурный кодер\n   • балл: <b>95.44</b> (✅ замер, 2.97с)\n   • вендор: mistralai\n<b>4. minimaxai/minimax-m3.1-flash</b>\n   • роль: дежурный флагман\n   • балл: <b>91.67</b> (✅ замер, 4.49с)\n   • вендор: minimaxai"
       ]
     },
     {
