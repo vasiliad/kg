@@ -15,7 +15,7 @@ import json
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -266,6 +266,65 @@ def check_credentials_present() -> Dict[str, Any]:
     return {"ok": all(out.values()), "inventory": out}
 
 
+def check_bot_health() -> Dict[str, Any]:
+    """
+    Reads the bot's own health block — what it last polled, what it last
+    answered, what it last failed on. This is what separates "the bot is
+    not running" from "the bot is running and failing": without it both
+    look like silence in the operator's chat.
+    """
+    _hdr("[6] Bot health (last measured activity)")
+    path = PROJECT_ROOT / "data" / ".bot_sessions.json"
+    if not path.exists():
+        print("  STATUS: UNKNOWN - data/.bot_sessions.json is missing.")
+        return {"ok": False, "reason": "no_session_file"}
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  STATUS: UNREADABLE - {type(e).__name__}: {e}")
+        return {"ok": False, "reason": "broken_session_file"}
+
+    health = data.get("health")
+    if not isinstance(health, dict) or not health:
+        print("  STATUS: UNKNOWN - the bot has not recorded its activity yet.")
+        return {"ok": False, "reason": "no_health_block"}
+
+    last_poll = health.get("last_poll_at")
+    last_send = health.get("last_send_at")
+    updates = int(health.get("updates_seen") or 0)
+    sent = int(health.get("messages_sent") or 0)
+    errors = int(health.get("errors") or 0)
+
+    age_min: Optional[float] = None
+    if last_poll:
+        try:
+            stamp = datetime.strptime(str(last_poll), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            age_min = round((datetime.now(timezone.utc) - stamp).total_seconds() / 60.0, 1)
+        except Exception:
+            age_min = None
+
+    print(f"  Last poll      : {last_poll or '—'}" + (f" ({age_min} min ago)" if age_min is not None else ""))
+    print(f"  Last answer    : {last_send or '—'}")
+    print(f"  Updates seen   : {updates}")
+    print(f"  Messages sent  : {sent}")
+    print(f"  Errors         : {errors}" + (f" — {health.get('last_error')}" if health.get("last_error") else ""))
+
+    # A poll older than 15 minutes means the bot is not talking to Telegram.
+    if age_min is not None and age_min <= 15:
+        print("  STATUS: OK - the bot polled Telegram recently.")
+        return {"ok": True, "last_poll_at": last_poll, "age_min": age_min,
+                "last_send_at": last_send, "updates_seen": updates,
+                "messages_sent": sent, "errors": errors,
+                "last_error": health.get("last_error")}
+
+    print("  STATUS: SILENT - the bot has not polled Telegram recently.")
+    return {"ok": False, "reason": "no_recent_poll", "last_poll_at": last_poll,
+            "age_min": age_min, "last_send_at": last_send, "updates_seen": updates,
+            "messages_sent": sent, "errors": errors,
+            "last_error": health.get("last_error")}
+
+
 def main() -> int:
     print("=" * 72)
     print("AUTONOMOUS COMPLEX - CLOUD SELF-DIAGNOSTICS")
@@ -282,6 +341,7 @@ def main() -> int:
         "telegram": check_telegram(),
         "state": check_github_state(),
         "credentials": check_credentials_present(),
+        "bot_health": check_bot_health(),
     }
 
     _hdr("SUMMARY")
@@ -291,6 +351,7 @@ def main() -> int:
     print(f"  LangSearch : {'OK' if report['langsearch'].get('ok') else 'DEGRADED (' + str(report['langsearch'].get('reason')) + ')'}")
     print(f"  Keenable   : {'OK' if report['keenable'].get('ok') else 'DEGRADED (' + str(report['keenable'].get('reason')) + ')'}")
     print(f"  Telegram   : {'OK' if report['telegram'].get('ok') else 'DEGRADED (' + str(report['telegram'].get('reason')) + ')'}")
+    print(f"  Bot health : {'OK' if report['bot_health'].get('ok') else 'SILENT (' + str(report['bot_health'].get('reason')) + ')'}")
     print(f"  Credentials: {'ALL SET' if report['credentials'].get('ok') else 'INCOMPLETE'}")
 
     out_path = PROJECT_ROOT / "diagnostics_report.json"

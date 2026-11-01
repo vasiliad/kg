@@ -38,6 +38,8 @@ Suites:
      press from a stranger does nothing.
  23. Search: the query is the topical core of the question, not a truncated
      blob of the prompt; our own questions never cost a search.
+ 24. Bot: a measured health trace survives a restart, and an absent bot is
+     distinguishable from a broken one.
 """
 
 import os
@@ -1038,6 +1040,94 @@ def test_23_search_query_is_formulated_not_truncated():
     print("[+] Test 23 Passed: the search query is formulated, not truncated.")
 
 
+def test_24_the_bot_reports_its_own_health():
+    """
+    "The bot does not answer" has two causes — an absent bot and a broken
+    one — and from the outside they look the same. The bot must therefore
+    leave a measured health trace: what it last polled, what it last
+    answered, what it last failed on. And with nothing measured, the card
+    must say nothing rather than invent activity.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 24: the bot leaves a measured health trace")
+    print("=" * 60)
+    import threading
+    from harness.telegram_bot import HarnessTelegramBot, health_line
+
+    tmp = Path(tempfile.mkdtemp(prefix="health-test-"))
+    sessions = tmp / ".bot_sessions.json"
+
+    def bare_bot():
+        bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
+        bot.sessions_file = sessions
+        bot.authorized_chats = {846947027}
+        bot.last_update_id = 0
+        bot._pending_update_ids = set()
+        bot._dispatched_max = 0
+        bot._state_lock = threading.RLock()
+        bot.health = {
+            "runs": 0, "started_at": None, "last_poll_at": None,
+            "last_update_at": None, "last_send_at": None,
+            "updates_seen": 0, "messages_sent": 0, "errors": 0,
+            "last_error": None,
+        }
+        bot._last_health_save = 0.0
+        return bot
+
+    bot = bare_bot()
+    bot._record_poll()
+    bot._record_update()
+    bot._record_send()
+    assert bot.health["last_poll_at"], "a poll must be recorded"
+    assert bot.health["updates_seen"] == 1, "an update must be counted"
+    assert bot.health["messages_sent"] == 1, "an answer must be counted"
+
+    # The trace must survive a restart — that is what makes it diagnosable
+    # after the window that produced it is gone.
+    on_disk = json.loads(sessions.read_text(encoding="utf-8"))
+    assert on_disk["health"]["messages_sent"] == 1, "the health must be persisted"
+    assert on_disk["last_update_id"] == 0, "the cursor must stay beside the health"
+
+    restarted = bare_bot()
+    restarted.health = restarted._load_health()
+    assert restarted.health["messages_sent"] == 1, "the health must survive a restart"
+
+    # Errors are part of the trace: a silent failure must not look healthy.
+    bot._record_error("boom")
+    assert bot.health["errors"] == 1 and bot.health["last_error"] == "boom"
+    assert "ошибок 1" in health_line(bot.health), "the card must show the errors"
+
+    # Nothing measured means nothing shown.
+    assert health_line({}) == "", "no health means no line"
+    assert health_line(None) == ""
+    assert "активности ещё не было" in health_line({"runs": 1}), \
+        "a fresh bot must say it has done nothing yet"
+
+    # The diagnostics must read the same trace and judge it by age.
+    from harness import diagnostics
+    health_path = PROJECT_ROOT / "data" / ".bot_sessions.json"
+    original = health_path.read_text(encoding="utf-8") if health_path.exists() else None
+    try:
+        health_path.write_text(json.dumps({
+            "authorized_chats": [1], "last_update_id": 0,
+            "health": {"runs": 2, "last_poll_at": "2020-01-01T00:00:00Z",
+                       "last_send_at": None, "updates_seen": 3,
+                       "messages_sent": 0, "errors": 1, "last_error": "boom"},
+        }), encoding="utf-8")
+        verdict = diagnostics.check_bot_health()
+        assert verdict["ok"] is False and verdict["reason"] == "no_recent_poll", \
+            f"a stale poll must read as silent, got {verdict}"
+        assert verdict["updates_seen"] == 3 and verdict["errors"] == 1, \
+            "the diagnostics must report what the bot measured"
+    finally:
+        if original is not None:
+            health_path.write_text(original, encoding="utf-8")
+        elif health_path.exists():
+            health_path.unlink()
+
+    print("[+] Test 24 Passed: the bot leaves a measured health trace.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1071,6 +1161,7 @@ if __name__ == "__main__":
         test_21_status_card_shows_the_measured_drift,
         test_22_transport_covers_button_press_edit_and_delete,
         test_23_search_query_is_formulated_not_truncated,
+        test_24_the_bot_reports_its_own_health,
     ]
     failed = []
     for t in tests:

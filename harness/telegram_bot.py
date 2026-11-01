@@ -22,6 +22,7 @@ import signal
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 
@@ -52,6 +53,36 @@ from harness.memory_engine import MemoryEngine
 from harness.tools import AgentToolbox
 from harness import runtime_settings
 from harness import operational_context
+
+
+def _now_iso() -> str:
+    """UTC timestamp, second precision — the unit the health block speaks in."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def health_line(health: Optional[Dict[str, Any]]) -> str:
+    """
+    The bot's own liveness as one card line. Empty when there is nothing
+    measured yet — the card must never invent an activity.
+    """
+    if not isinstance(health, dict) or not health:
+        return ""
+    parts: List[str] = []
+    last_send = health.get("last_send_at")
+    last_poll = health.get("last_poll_at")
+    if last_send:
+        parts.append(f"последний ответ {last_send}")
+    elif last_poll:
+        parts.append(f"последний опрос {last_poll}")
+    else:
+        parts.append("активности ещё не было")
+    sent = health.get("messages_sent")
+    if isinstance(sent, int):
+        parts.append(f"ответов {sent}")
+    errors = health.get("errors")
+    if isinstance(errors, int) and errors:
+        parts.append(f"ошибок {errors}")
+    return f"🫀 <b>Активность бота:</b> {html.escape('; '.join(parts))}\n"
 
 
 def fleet_drift_line(state: Dict[str, Any]) -> str:
@@ -100,6 +131,14 @@ class HarnessTelegramBot:
         # sequence starting at 1.
         self._pending_update_ids: Set[int] = set()
         self._dispatched_max: int = self.last_update_id
+        # The bot's own health: what it last polled, what it last answered,
+        # what it last failed on. Without it "the bot does not answer" has
+        # two possible causes — an absent bot and a broken one — and from
+        # the outside they look exactly the same.
+        self.health: Dict[str, Any] = self._load_health()
+        self.health["runs"] = int(self.health.get("runs") or 0) + 1
+        self.health["started_at"] = _now_iso()
+        self._last_health_save: float = 0.0
 
         self.state_mgr = StateManager()
         self.disk_guard = DiskGuard()
@@ -164,6 +203,73 @@ class HarnessTelegramBot:
         except Exception:
             return set()
 
+    def _load_health(self) -> Dict[str, Any]:
+        """
+        The health block of the previous runs. A broken file yields an empty
+        block — the bot must still start and must not invent history.
+        """
+        raw = self._load_sessions().get("health")
+        raw = raw if isinstance(raw, dict) else {}
+        health = {
+            "runs": 0,
+            "started_at": None,
+            "last_poll_at": None,
+            "last_update_at": None,
+            "last_send_at": None,
+            "updates_seen": 0,
+            "messages_sent": 0,
+            "errors": 0,
+            "last_error": None,
+        }
+        for key in health:
+            if key in raw:
+                health[key] = raw[key]
+        for key in ("runs", "updates_seen", "messages_sent", "errors"):
+            try:
+                health[key] = int(health[key] or 0)
+            except Exception:
+                health[key] = 0
+        return health
+
+    def _save_health(self, force: bool = False) -> None:
+        """
+        Persists the health block. Throttled, so a 25-second poll does not
+        write the file on every tick — but an update, an answer or an error
+        is always written through.
+        """
+        now = time.time()
+        if not force and now - self._last_health_save < 120:
+            return
+        self._last_health_save = now
+        self._save_authorized_sessions()
+
+    def _record_poll(self) -> None:
+        """The bot reached Telegram — this is the liveness signal."""
+        with self._state_lock:
+            self.health["last_poll_at"] = _now_iso()
+        self._save_health()
+
+    def _record_update(self) -> None:
+        """An update arrived from Telegram."""
+        with self._state_lock:
+            self.health["last_update_at"] = _now_iso()
+            self.health["updates_seen"] = int(self.health.get("updates_seen") or 0) + 1
+        self._save_health(force=True)
+
+    def _record_send(self) -> None:
+        """A message went out to the operator."""
+        with self._state_lock:
+            self.health["last_send_at"] = _now_iso()
+            self.health["messages_sent"] = int(self.health.get("messages_sent") or 0) + 1
+        self._save_health(force=True)
+
+    def _record_error(self, error: str) -> None:
+        """Something broke — the reason must outlive the window."""
+        with self._state_lock:
+            self.health["errors"] = int(self.health.get("errors") or 0) + 1
+            self.health["last_error"] = str(error)[:300]
+        self._save_health(force=True)
+
     def _load_last_update_id(self) -> int:
         try:
             return int(self._load_sessions().get("last_update_id") or 0)
@@ -171,12 +277,15 @@ class HarnessTelegramBot:
             return 0
 
     def _save_authorized_sessions(self) -> None:
-        """Persists authorized chats AND the Telegram update cursor together."""
+        """Persists authorized chats, the Telegram update cursor and the health block together."""
         try:
             with self._state_lock:
                 payload = {
                     "authorized_chats": list(self.authorized_chats),
                     "last_update_id": self.last_update_id,
+                    # The health block is a bonus, never a precondition: the
+                    # cursor must be persisted even if it is missing.
+                    "health": dict(getattr(self, "health", {}) or {}),
                 }
             with open(self.sessions_file, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
@@ -326,6 +435,10 @@ class HarnessTelegramBot:
                 print(f"[!] Error sending message to {chat_id}: {e}")
                 return None
         self.last_message_id = last_id
+        if last_id:
+            # The operator actually received something — that is the answer
+            # side of the health signal.
+            self._record_send()
         return last_id
 
     def edit_message(
@@ -415,6 +528,7 @@ class HarnessTelegramBot:
             f"👑 <b>Верховный арбитр (CPU):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct')}</code>\n"
             f"🧑‍💼 <b>Дежурная команда:</b> {len(state.get('active_fleet', []) or [])} моделей, источник: <code>{state.get('fleet_source', 'статический сид')}</code>\n"
             f"{fleet_drift_line(state)}"
+            f"{health_line(self.health)}"
             "⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n"
             "🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n"
             f"🔑 <b>NVIDIA NIM API:</b> {key_res.get('message')} (HTTP {key_res.get('status_code', 0)})\n"
@@ -936,10 +1050,12 @@ class HarnessTelegramBot:
 
                 res = requests.get(f"{self.base_url}/getUpdates", params=params, timeout=30)
                 if res.status_code == 200:
+                    self._record_poll()
                     data = res.json()
                     for update in data.get("result", []):
                         update_id = int(update.get("update_id", 0))
                         offset = update_id + 1
+                        self._record_update()
                         self._mark_update_dispatched(update_id)
                         if "message" in update:
                             # Handle in a worker pool: long model generations must not
@@ -965,6 +1081,7 @@ class HarnessTelegramBot:
                 print("\n[*] Polling stopped by user.")
                 break
             except Exception as e:
+                self._record_error(f"poll: {type(e).__name__}: {e}")
                 print(f"[!] Polling network exception: {e}. Retrying in 5s...")
                 time.sleep(5)
 
@@ -973,6 +1090,7 @@ class HarnessTelegramBot:
         try:
             self.process_message(message)
         except Exception as e:
+            self._record_error(f"message: {type(e).__name__}: {e}")
             print(f"[!] Message processing error: {e}")
         finally:
             # The cursor advances only AFTER the handler finished, so a crash
@@ -984,6 +1102,7 @@ class HarnessTelegramBot:
         try:
             self.process_callback_query(callback)
         except Exception as e:
+            self._record_error(f"callback: {type(e).__name__}: {e}")
             print(f"[!] Callback processing error: {e}")
         finally:
             self._mark_update_handled(update_id)
