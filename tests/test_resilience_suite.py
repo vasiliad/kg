@@ -44,6 +44,9 @@ Suites:
      make Telegram replay answers the operator already saw.
  26. Bot: the edit verb strips the payload until Telegram accepts it, and
      reports the refusal instead of swallowing it.
+ 27. Bot: a long answer loses no chunk (a null reply_markup is refused by
+     Telegram), and the placeholder carries no keyboard — so it can be
+     edited in place.
 """
 
 import os
@@ -1271,6 +1274,100 @@ def test_26_the_edit_strips_the_payload_until_telegram_accepts():
     print("[+] Test 26 Passed: the edit strips the payload and keeps the reason.")
 
 
+def test_27_no_chunk_is_lost_and_the_placeholder_is_bare():
+    """
+    Measured in the cloud: a chunk sent with `reply_markup: null` is refused
+    by Telegram ("Bad Request: object expected as reply markup"), and the
+    long answer silently lost every chunk but the last. The field must be
+    absent, not empty — and the placeholder that the answer replaces must go
+    out bare, because Telegram refuses to edit a message that carries the
+    reply keyboard ("Bad Request: message can't be edited").
+    """
+    print("\n" + "=" * 60)
+    print("TEST 27: no chunk is lost, and the placeholder carries no keyboard")
+    print("=" * 60)
+    import threading
+    from harness import telegram_bot as tb
+
+    class FakeResponse:
+        ok = True
+        status_code = 200
+
+        def __init__(self, mid):
+            self._mid = mid
+            self.text = "{}"
+
+        def json(self):
+            return {"ok": True, "result": {"message_id": self._mid}}
+
+    payloads = []
+
+    def fake_post(url, json=None, timeout=None):
+        payloads.append(dict(json or {}))
+        return FakeResponse(100 + len(payloads))
+
+    bot = tb.HarnessTelegramBot.__new__(tb.HarnessTelegramBot)
+    bot.bot_token = "test-token-0123456789"
+    bot.base_url = "https://api.telegram.org/bottest-token-0123456789"
+    bot.last_api_error = ""
+    bot.last_edit_mode = ""
+    bot.last_message_id = None
+    bot.last_message_chunks = 0
+    bot.last_message_chunks_sent = 0
+    bot._state_lock = threading.RLock()
+    bot.health = {
+        "runs": 1, "started_at": "2026-11-01T00:00:00Z", "last_poll_at": None,
+        "last_update_at": None, "last_send_at": None, "last_chat_id": None,
+        "updates_seen": 0, "messages_sent": 0, "errors": 0, "last_error": None,
+    }
+    bot._last_health_save = 0.0
+    bot.sessions_file = Path(tempfile.mkdtemp(prefix="transport-test-")) / ".bot_sessions.json"
+    bot.authorized_chats = {846947027}
+    bot.last_update_id = 0
+
+    original = tb.requests.post
+    tb.requests.post = fake_post
+    try:
+        # A long answer: several chunks, only the last one may carry markup.
+        long_text = "\n\n".join(f"абзац {i} " + ("тест разбивки " * 90) for i in range(1, 6))
+        bot.send_message(846947027, long_text, parse_mode="HTML")
+    finally:
+        tb.requests.post = original
+
+    assert len(payloads) >= 2, "the long answer must be split into chunks"
+    assert bot.last_message_chunks == len(payloads), "every chunk must be sent"
+    assert bot.last_message_chunks_sent == len(payloads), "no chunk may be lost"
+    for payload in payloads[:-1]:
+        assert "reply_markup" not in payload, \
+            f"a null reply_markup is refused by Telegram: {payload}"
+    assert payloads[-1].get("reply_markup"), "the last chunk carries the keyboard"
+
+    # The placeholder goes out bare — that is what makes it editable.
+    payloads.clear()
+    original = tb.requests.post
+    tb.requests.post = fake_post
+    try:
+        bot.send_message(846947027, "🧠 Хранитель думает...", parse_mode="HTML",
+                         reply_markup=tb.NO_MARKUP)
+    finally:
+        tb.requests.post = original
+    assert "reply_markup" not in payloads[0], \
+        "the placeholder must not carry a keyboard, or it cannot be edited"
+
+    # The ordinary operator message still carries the keyboard.
+    payloads.clear()
+    original = tb.requests.post
+    tb.requests.post = fake_post
+    try:
+        bot.send_message(846947027, "📡 Статус системы", parse_mode="HTML")
+    finally:
+        tb.requests.post = original
+    assert payloads[0].get("reply_markup", {}).get("keyboard"), \
+        "the everyday message must keep the reply keyboard"
+
+    print("[+] Test 27 Passed: no chunk is lost and the placeholder stays bare.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1307,6 +1404,7 @@ if __name__ == "__main__":
         test_24_the_bot_reports_its_own_health,
         test_25_the_cursor_never_rolls_back,
         test_26_the_edit_strips_the_payload_until_telegram_accepts,
+        test_27_no_chunk_is_lost_and_the_placeholder_is_bare,
     ]
     failed = []
     for t in tests:

@@ -21,7 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness.state_manager import StateManager
-from harness.telegram_bot import HarnessTelegramBot
+from harness.telegram_bot import HarnessTelegramBot, NO_MARKUP
 
 REPORT_PATH = PROJECT_ROOT / "data" / "bot_transport_report.json"
 
@@ -79,7 +79,8 @@ def main() -> int:
 
     me = bot.get_me()
     username = (me.get("result") or {}).get("username", "?")
-    print(f"[*] Bot: @{username}; target chat: {chat_id}")
+    chat_info = bot.get_chat(chat_id)
+    print(f"[*] Bot: @{username}; target chat: {chat_id} ({chat_info.get('type', 'unknown')})")
 
     tests: List[Dict[str, Any]] = []
 
@@ -92,25 +93,45 @@ def main() -> int:
     record("короткое_с_клавиатурой", bool(sent), f"sendMessage ok={bool(sent)}")
 
     # 2. Long message — paragraph chunking over the wire (no mid-word cuts).
+    #    Every chunk must arrive: a chunk lost to a refused payload used to
+    #    disappear without a trace, and the operator read half an answer.
     long_text = "\n\n".join(
         f"Абзац {i}: " + ("проверка разбивки длинных сообщений. " * 8)
         for i in range(1, 31)
     )
     sent = bot.send_message(chat_id, "🧪 <b>Транспортный самотест 2/7</b>: длинное сообщение (разбивка по абзацам).\n\n" + long_text, parse_mode="HTML")
-    record("длинное_сообщение", bool(sent), f"длина {len(long_text)} символов, доставлено={bool(sent)}")
+    planned = getattr(bot, "last_message_chunks", 0)
+    delivered = getattr(bot, "last_message_chunks_sent", 0)
+    record("длинное_сообщение", bool(sent) and planned == delivered and delivered > 1,
+           f"длина {len(long_text)} символов, доставлено={bool(sent)}, частей={delivered}/{planned}")
 
     # 3. Malformed HTML — the parse-mode fallback must rescue delivery.
     sent = bot.send_message(chat_id, "🧪 Транспортный самотест 3/7: <b>незакрытый тег и <<двойные>> скобки", parse_mode="HTML")
     record("битый_html_fallback", bool(sent), f"доставлено через fallback={bool(sent)}")
 
     # 4. Edit — the placeholder becomes the real answer in place.
-    editable_id = bot.send_message(chat_id, "🧪 Транспортный самотест 4/7: это сообщение будет отредактировано.", parse_mode="HTML")
+    #    Two shapes are measured, because Telegram refuses one of them:
+    #    a message that carries the persistent reply keyboard cannot be
+    #    edited ("Bad Request: message can't be edited" — measured in the
+    #    cloud). The first probe is the shape the daemon really uses — a bare
+    #    placeholder; the second shows what the keyboard does.
+    editable_id = bot.send_message(
+        chat_id,
+        "🧪 Транспортный самотест 4/7: это сообщение будет отредактировано.",
+        parse_mode="HTML",
+        reply_markup=NO_MARKUP,
+    )
     bot.last_api_error = ""
     edited = bot.edit_message(chat_id, editable_id, "🧪 Транспортный самотест 4/7: <b>сообщение отредактировано</b> — editMessageText работает.", parse_mode="HTML")
     reason = f", причина: {bot.last_api_error}" if bot.last_api_error else ""
     mode = f", форма: {bot.last_edit_mode}" if getattr(bot, "last_edit_mode", "") else ""
+    keyboard_id = bot.send_message(chat_id, "🧪 Транспортный самотест 4/7b: это сообщение несёт клавиатуру.", parse_mode="HTML")
+    bot.last_api_error = ""
+    edited_with_keyboard = bot.edit_message(chat_id, keyboard_id, "🧪 4/7b: отредактировано вместе с клавиатурой.", parse_mode="HTML")
+    keyboard_reason = f" ({bot.last_api_error})" if bot.last_api_error else ""
     record("редактирование_сообщения", bool(edited) and bool(editable_id),
-           f"message_id={editable_id}, editMessageText ok={edited}{mode}{reason}")
+           f"message_id={editable_id}, editMessageText ok={edited}{mode}{reason}"
+           f" | с клавиатурой ok={edited_with_keyboard}{keyboard_reason}")
 
     # 5. Delete — the sensitive-message transport must still work.
     temp_id = bot.send_message(chat_id, "🧪 Транспортный самотест 5/7: это сообщение будет удалено.", parse_mode="HTML")

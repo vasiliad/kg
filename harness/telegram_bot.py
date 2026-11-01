@@ -55,6 +55,24 @@ from harness import runtime_settings
 from harness import operational_context
 
 
+class _NoMarkup:
+    """
+    Sentinel: "send this message without any reply markup".
+
+    The plain `None` means "attach the persistent keyboard" (the default for
+    every operator-facing message). A transient placeholder needs the opposite:
+    Telegram refuses to edit a message that carries a reply keyboard
+    ("Bad Request: message can't be edited" — measured in the cloud), so the
+    placeholder must go out bare and the answer may then replace it in place.
+    """
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<NO_MARKUP>"
+
+
+NO_MARKUP = _NoMarkup()
+
+
 def _now_iso() -> str:
     """UTC timestamp, second precision — the unit the health block speaks in."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -145,6 +163,11 @@ class HarnessTelegramBot:
         # Which form of the edit payload Telegram accepted ("markup", "plain",
         # "bare") — a silent downgrade must be visible.
         self.last_edit_mode: str = ""
+        # How many chunks the last send produced and how many were actually
+        # delivered — a long answer that lost a chunk must be visible, not
+        # silent.
+        self.last_message_chunks: int = 0
+        self.last_message_chunks_sent: int = 0
 
         self.state_mgr = StateManager()
         self.disk_guard = DiskGuard()
@@ -445,6 +468,8 @@ class HarnessTelegramBot:
             return None
 
         markup = reply_markup if reply_markup is not None else self.get_main_keyboard()
+        if markup is NO_MARKUP:
+            markup = None
         # Split on paragraph boundaries, never mid-word: a message cut like
         # "…ко | нфигурацию развёртывания" reads as corruption to the user.
         chunks = []
@@ -467,16 +492,23 @@ class HarnessTelegramBot:
         chunks = chunks or [text[:3900]]
 
         last_id: Optional[int] = None
+        sent_chunks = 0
         for idx, chunk in enumerate(chunks):
             # Only attach reply markup to the last chunk
             current_markup = markup if idx == len(chunks) - 1 else None
             payload = {
                 "chat_id": chat_id,
                 "text": chunk,
-                "reply_markup": current_markup,
                 "disable_web_page_preview": True,
                 "link_preview_options": {"is_disabled": True}
             }
+            if current_markup is not None:
+                # A null reply_markup is not "no markup" for Telegram — it is
+                # an invalid object ("Bad Request: object expected as reply
+                # markup"), and the message is refused. The field must be
+                # absent, not empty. Measured in the cloud: a long answer
+                # silently lost every chunk but the last.
+                payload["reply_markup"] = current_markup
             if parse_mode:
                 payload["parse_mode"] = parse_mode
             try:
@@ -489,6 +521,7 @@ class HarnessTelegramBot:
                     # A silent failure is not a delivery — say why.
                     print(f"[!] sendMessage failed (HTTP {res.status_code}): {self._api_error(res)}")
                 if res.ok:
+                    sent_chunks += 1
                     try:
                         mid = (res.json().get("result") or {}).get("message_id")
                         if mid:
@@ -499,11 +532,30 @@ class HarnessTelegramBot:
                 print(f"[!] Error sending message to {chat_id}: {e}")
                 return None
         self.last_message_id = last_id
+        self.last_message_chunks = len(chunks)
+        self.last_message_chunks_sent = sent_chunks
         if last_id:
             # The operator actually received something — that is the answer
             # side of the health signal.
             self._record_send(chat_id)
         return last_id
+
+    def get_chat(self, chat_id: int) -> Dict[str, Any]:
+        """
+        The chat's type and identity ("private", "group", "channel"). The
+        transport behaves differently per type, so a delivery problem must be
+        read against the kind of chat it happened in.
+        """
+        if not self.is_configured():
+            return {}
+        try:
+            res = requests.post(f"{self.base_url}/getChat", json={"chat_id": chat_id}, timeout=10)
+            if not res.ok:
+                return {}
+            result = res.json().get("result")
+            return result if isinstance(result, dict) else {}
+        except Exception:
+            return {}
 
     def _api_error(self, res: Any) -> str:
         """
@@ -783,7 +835,14 @@ class HarnessTelegramBot:
 
         self.send_chat_action(chat_id, "typing")
         placeholder_id = self.send_message(
-            chat_id, "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>", parse_mode="HTML"
+            chat_id,
+            "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>",
+            parse_mode="HTML",
+            # No reply keyboard: Telegram refuses to edit a message that
+            # carries one ("Bad Request: message can't be edited" — measured
+            # in the cloud), and the whole point of this placeholder is to be
+            # replaced by the answer in place.
+            reply_markup=NO_MARKUP,
         )
 
         # 2. Append user prompt to eternal memory log
