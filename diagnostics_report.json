@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-31T21:27:09.622040+00:00",
+  "timestamp": "2026-11-01T03:16:14.036189+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -132,9 +132,9 @@
   "state": {
     "ok": true,
     "files": {
-      "data/.bot_sessions.json": 75,
-      "data/telegram_history.txt": 24028,
-      "active_models.json": 9033,
+      "data/.bot_sessions.json": 434,
+      "data/telegram_history.txt": 25601,
+      "active_models.json": 17742,
       "data/.memory_vault.json": null
     }
   },
@@ -151,5 +151,16 @@
       "GMAIL_APP_PASSWORD": true,
       "DISPATCH_RECIPIENT_EMAIL": true
     }
+  },
+  "bot_health": {
+    "ok": true,
+    "last_poll_at": "2026-11-01T03:11:09Z",
+    "age_min": 5.1,
+    "last_send_at": "2026-11-01T02:48:48Z",
+    "updates_seen": 1,
+    "messages_sent": 1,
+    "errors": 0,
+    "last_chat_id": 486378909,
+    "last_error": null
   }
 }
