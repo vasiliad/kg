@@ -58,6 +58,7 @@ from harness.nim_scanner import NIMScanner, LOCAL_ONLY_MODEL_IDS
 from harness.benchmark_tracker import BenchmarkTracker
 from harness.state_manager import StateManager
 from harness import fleet_probes
+from harness import fleet_drift
 
 DEFAULT_POLICY = {
     "max_candidates": 18,        # pinged
@@ -783,6 +784,18 @@ class FleetTuner:
         for n in notes:
             self.say(f"  role: {n}")
 
+        # The previous cycle is read BEFORE the report is written: without it
+        # a model that quietly degraded looks exactly like one that was
+        # always fine.
+        previous_report = None
+        try:
+            previous_path = PROJECT_ROOT / "data" / "fleet_report.json"
+            if previous_path.exists():
+                with open(previous_path, "r", encoding="utf-8") as f:
+                    previous_report = json.load(f)
+        except Exception:
+            previous_report = None
+
         report = {
             "tuned_at": started,
             "method": "live_probe" if offline_catalog is None else "offline_dry_run",
@@ -809,6 +822,10 @@ class FleetTuner:
             "decision_log": self._log[-40:],
         }
 
+        # Drift: the difference between this cycle and the last measured one.
+        report["drift"] = fleet_drift.compare_cycles(previous_report, report)
+        self.say(f"  drift: {fleet_drift.summarize(report['drift'])}")
+
         if dry_run or offline_catalog is not None:
             self.say("Dry-run/offline: state NOT modified.")
             return report
@@ -822,6 +839,7 @@ class FleetTuner:
             "log": self._log[-40:],
         }
         state["fleet_measurements"] = report["measurements"]
+        state["fleet_drift"] = report["drift"]
         self.state_mgr.save_local_state(state)
 
         summary = ", ".join(f"{e['id']} ({e['tier']}, {e['quality_score']})" for e in fleet_entries)
@@ -829,11 +847,14 @@ class FleetTuner:
             f"ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов={len(candidates)} | "
             f"измерено={sum(1 for m in measurements.values() if m.get('status') == 'MEASURED')} | состав={summary}"
         )
+        if report["drift"].get("status") == "DEGRADED":
+            self.state_mgr.append_history_log(f"ДРЕЙФ ФЛОТА | {fleet_drift.summarize(report['drift'])}")
 
         report_path = PROJECT_ROOT / "data" / "fleet_report.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
+        fleet_drift.append_cycle(str(PROJECT_ROOT / "data" / "fleet_history.json"), report)
         self.say(f"Report written to {report_path}")
         return report
 

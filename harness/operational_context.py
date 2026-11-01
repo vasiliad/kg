@@ -138,6 +138,16 @@ def build_operational_context(
                 )
             parts.append("\nActive fleet (active_models.json):")
             parts.extend(fleet_lines or ["  (empty)"])
+        # Drift: how the roster measured against the previous cycle. Without
+        # it the operator cannot tell a stable fleet from one that quietly
+        # got worse.
+        drift = state.get("fleet_drift")
+        if isinstance(drift, dict) and drift.get("status"):
+            from harness import fleet_drift
+            parts.append(f"  {fleet_drift.summarize(drift)}")
+            worst = drift.get("worst")
+            if isinstance(worst, dict) and worst.get("id") and drift.get("status") == "DEGRADED":
+                parts.append(f"    worst: {worst.get('id')} ({worst.get('delta')})")
         diff = state.get("catalog_diff") or {}
         if isinstance(diff, dict) and (diff.get("new_count") or diff.get("removed_count")):
             parts.append(

@@ -28,6 +28,10 @@ Suites:
      can start a second chain beside a live one.
  18. Fleet: the multilingual and tool-use probes score by construction, and
      every quality candidate gets the same probe set.
+ 19. Fleet: drift is the difference between two measured cycles, bounded,
+     and never guessed.
+ 20. Duty: the dispatch order follows the measured task probes, not the
+     static order of the roster.
 """
 
 import os
@@ -44,6 +48,7 @@ if str(PROJECT_ROOT) not in sys.path:
 os.environ.setdefault("SOVEREIGN_FORCE_DETERMINISTIC", "1")
 
 from harness import fleet_probes
+from harness import fleet_drift
 from harness.fleet_tuner import FleetTuner, DEFAULT_POLICY
 from harness.duty_team import DutyTeam, KEEPER_ID
 from harness.state_manager import StateManager
@@ -700,6 +705,144 @@ def test_18_multilingual_and_tool_use_probes_are_objective():
     print("[+] Test 18 Passed: the new probes are objective, cheap and wired in.")
 
 
+def _cycle(scores, fleet=None, primary=None):
+    """A minimal measured-cycle report, as the tuner writes it."""
+    measurements = []
+    for mid, score in scores.items():
+        measurements.append({
+            "id": mid, "status": "MEASURED", "final_score": score,
+            "task_scores": {"instruction": 1.0, "reasoning": 1.0, "code": 1.0, "json": 1.0},
+            "roles": [],
+        })
+    fleet_ids = list(fleet if fleet is not None else scores.keys())
+    fleet = [{"id": mid, "roles": ["duty_primary"] if mid == primary else []} for mid in fleet_ids]
+    return {"tuned_at": "2026-11-01 00:00:00 UTC", "measurements": measurements, "fleet": fleet}
+
+
+def test_19_fleet_drift_is_measured_not_guessed():
+    """
+    Drift is the difference between two MEASURED cycles. It must never be
+    inferred: with no previous cycle the answer is "FIRST", and a model that
+    was not measured is not counted as a change.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 19: fleet drift compares measured cycles and remembers them")
+    print("=" * 60)
+
+    previous = _cycle({"m/a": 90.0, "m/b": 80.0}, primary="m/a")
+    current = _cycle({"m/a": 92.0, "m/b": 78.0}, primary="m/a")
+
+    drift = fleet_drift.compare_cycles(previous, current)
+    assert drift["status"] == "STABLE", f"a 2-point move is noise, got {drift['status']}"
+    assert drift["mean_score_delta"] == 0.0, f"mean delta must be the measured mean, got {drift}"
+    assert drift["per_model"]["m/a"]["delta"] == 2.0
+    assert drift["per_model"]["m/b"]["delta"] == -2.0
+
+    # A real regression must be visible, not smoothed away.
+    degraded = fleet_drift.compare_cycles(previous, _cycle({"m/a": 70.0, "m/b": 78.0}, primary="m/a"))
+    assert degraded["status"] == "DEGRADED", "a 20-point drop must be flagged"
+    assert degraded["worst"]["id"] == "m/a"
+    assert degraded["worst"]["delta"] == -20.0
+
+    # A roster swap without a collapse is REPLACED, not DEGRADED.
+    replaced = fleet_drift.compare_cycles(
+        previous, _cycle({"m/a": 90.0, "m/c": 89.0}, primary="m/c"))
+    assert replaced["status"] == "REPLACED", "a new primary must be visible"
+    assert "m/c" in replaced["added"] and "m/b" in replaced["removed"]
+
+    # No previous cycle means no number at all.
+    first = fleet_drift.compare_cycles(None, current)
+    assert first["status"] == "FIRST" and first["mean_score_delta"] is None, \
+        "without a previous cycle there is nothing to compare"
+
+    # A changed probe set means a changed scale: the composite is a weighted
+    # mean over the probes, so the delta would look like an improvement that
+    # never happened. The verdict must be RESCALED, not IMPROVING.
+    old_scale = _cycle({"m/a": 90.0}, primary="m/a")
+    old_scale["policy"] = {"quality_tasks": ["reasoning", "code", "json"]}
+    new_scale = _cycle({"m/a": 99.0}, primary="m/a")
+    new_scale["policy"] = {"quality_tasks": ["reasoning", "code", "json", "translation"]}
+    rescaled = fleet_drift.compare_cycles(old_scale, new_scale)
+    assert rescaled["status"] == "RESCALED", \
+        f"a scale change must not be reported as an improvement, got {rescaled['status']}"
+    assert rescaled["mean_score_delta"] == 9.0, "the raw delta is still shown"
+    assert rescaled["previous_tasks"] == ["reasoning", "code", "json"]
+
+    # A broken report must not take the tuner down.
+    broken = fleet_drift.compare_cycles({"measurements": "not a list"}, current)
+    assert broken["status"] == "FIRST", "a broken previous report degrades to FIRST"
+
+    # The history is bounded, so the trend line cannot grow without limit.
+    workdir = _tmp_dir()
+    hist = str(workdir / "fleet_history.json")
+    for i in range(30):
+        fleet_drift.append_cycle(hist, _cycle({"m/a": 90.0 + i}))
+    history = fleet_drift.load_history(hist)
+    assert len(history) == fleet_drift.MAX_HISTORY_CYCLES, \
+        f"the history must stay bounded, got {len(history)} cycles"
+    assert history[-1]["scores"]["m/a"] == 119.0
+
+    # A corrupt history file must not crash the reader.
+    with open(hist, "w", encoding="utf-8") as f:
+        f.write("{not json")
+    assert fleet_drift.load_history(hist) == [], "a corrupt history yields no cycles"
+
+    assert fleet_drift.summarize(degraded).startswith("Дрейф флота: DEGRADED")
+    print("[+] Test 19 Passed: drift is measured, bounded and never guessed.")
+
+
+def test_20_dispatch_follows_measured_task_evidence():
+    """
+    The duty order must follow the MEASURED probes, not the static order of
+    the roster: a model whose code probe measured 1.0 must serve code tasks
+    ahead of one that measured 0.3, even if the latter has a higher overall
+    score.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 20: the duty order follows the measured task probes")
+    print("=" * 60)
+    workdir = _tmp_dir()
+    state_path = workdir / "active_models.json"
+    state_path.write_text(json.dumps({
+        "active_fleet": [
+            {
+                "id": "v/low-code", "tier": "Дежурный кодер", "roles": ["duty_code"],
+                "quality_score": 95.0, "score_verified": True,
+                "measured": {"latency_sec": 3.0, "task_scores": {"code": 0.3, "reasoning": 1.0}},
+            },
+            {
+                "id": "v/high-code", "tier": "Дежурный кодер", "roles": ["duty_code"],
+                "quality_score": 80.0, "score_verified": True,
+                "measured": {"latency_sec": 4.0, "task_scores": {"code": 1.0, "reasoning": 0.5}},
+            },
+        ]
+    }, ensure_ascii=False), encoding="utf-8")
+
+    team = DutyTeam(state_path=state_path)
+    roster = team.load_roster()
+    assert len(roster["duty"]) == 2
+    assert "task_scores" in roster["duty"][0], "the roster must carry the measured probes"
+
+    plan = team.dispatch("напиши функцию на python", max_calls=2)
+    assert plan["task_type"] == "code", f"a code request must classify as code, got {plan['task_type']}"
+    assert plan["calls"], "a code request must reach a duty model"
+    assert plan["calls"][0]["id"] == "v/high-code", \
+        f"the measured code probe must decide, got {plan['calls'][0]['id']}"
+    assert plan["calls"][0]["task_weight"] == 1.0
+
+    # For a quick task, speed counts: the fast model wins over the slower
+    # one even when the slower one has the higher probe score.
+    quick = team.dispatch("какой сейчас статус?", max_calls=2)
+    assert quick["task_type"] == "quick", f"expected quick, got {quick['task_type']}"
+    assert quick["calls"][0]["id"] == "v/low-code", \
+        "for a quick question the fastest measured model must answer"
+
+    # A model with no measured probe falls back to the overall score instead
+    # of being treated as zero.
+    assert team.task_weight({"id": "x", "score": 70.0, "task_scores": {}}, "code") == 70.0
+    print("[+] Test 20 Passed: the duty order follows measured task evidence.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -728,6 +871,8 @@ if __name__ == "__main__":
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,
         test_18_multilingual_and_tool_use_probes_are_objective,
+        test_19_fleet_drift_is_measured_not_guessed,
+        test_20_dispatch_follows_measured_task_evidence,
     ]
     failed = []
     for t in tests:

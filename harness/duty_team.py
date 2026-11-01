@@ -66,6 +66,16 @@ ROLE_ORDER = {
     "general": ["duty_primary", "duty_fast", "duty_code"],
 }
 
+# Which MEASURED probe decides who serves a task type. This is the dynamic
+# weight: the tuner already measured every model on every probe, so the
+# dispatch order follows that evidence instead of a static roster order.
+TASK_PROBE = {
+    "code": "code",
+    "analysis": "reasoning",
+    "quick": "instruction",
+    "general": None,  # no single probe — the overall composite decides
+}
+
 
 class DutyTeam:
     def __init__(self, state_path: Optional[Path] = None):
@@ -97,6 +107,7 @@ class DutyTeam:
                     "score": m.get("quality_score"),
                     "verified": bool(m.get("score_verified")),
                     "latency_sec": (m.get("measured") or {}).get("latency_sec"),
+                    "task_scores": (m.get("measured") or {}).get("task_scores") or {},
                     "params": m.get("recommended_params") or {},
                     "vendor": (m["id"].split("/", 1)[0].lower()),
                 })
@@ -141,6 +152,34 @@ class DutyTeam:
         best = max(scores, key=lambda k: scores[k])
         return best if scores[best] > 0 else "general"
 
+    def task_weight(self, model: Dict[str, Any], task_type: str) -> float:
+        """
+        How well a model fits a task type, by MEASURED evidence.
+
+        The tuner measured every model on every probe, so the dispatch order
+        follows that measurement instead of the static order the roster
+        happens to have. A model whose code probe measured 1.0 outranks one
+        whose code probe measured 0.3 — even if the latter has a higher
+        overall score. Without a measured probe we fall back to the overall
+        composite rather than inventing a number.
+        """
+        overall = model.get("score")
+        overall = float(overall) if isinstance(overall, (int, float)) else 0.0
+        probe = TASK_PROBE.get(task_type)
+        weight = overall
+        if probe:
+            measured = (model.get("task_scores") or {}).get(probe)
+            if isinstance(measured, (int, float)):
+                weight = float(measured)
+        if task_type == "quick":
+            # For a quick question being fast is part of being right: a
+            # slightly better model that takes 30 seconds loses to a clean
+            # one that answers in two.
+            latency = model.get("latency_sec")
+            if isinstance(latency, (int, float)):
+                weight -= min(float(latency), 60.0) / 100.0
+        return weight
+
     def dispatch(self, task_text: str, max_calls: int = 3) -> Dict[str, Any]:
         """
         Deterministic dispatch plan: ordered duty models + plain-Russian
@@ -156,6 +195,9 @@ class DutyTeam:
         for m in duty:
             for r in m["roles"] or ["reserve"]:
                 by_role.setdefault(r, []).append(m)
+        # Within a role, the measured evidence decides who goes first.
+        for role, models in by_role.items():
+            models.sort(key=lambda m: self.task_weight(m, task_type), reverse=True)
 
         # How many duty models this task type warrants: a quick or general
         # question gets ONE crisp answer; code/analysis may take a second
@@ -171,16 +213,18 @@ class DutyTeam:
             for m in by_role.get(role, []):
                 if m["id"] not in seen:
                     target = calls if len(calls) < wanted else bench
-                    target.append({**m, "primary_role": role})
+                    target.append({**m, "primary_role": role,
+                                   "task_weight": round(self.task_weight(m, task_type), 3)})
                     seen.add(m["id"])
                     break
-        # fill with the best remaining measured models
-        for m in duty:
+        # fill with the best remaining measured models, same weighting
+        for m in sorted(duty, key=lambda x: self.task_weight(x, task_type), reverse=True):
             if len(calls) + len(bench) >= max_calls:
                 break
             if m["id"] not in seen:
                 target = calls if len(calls) < wanted else bench
-                target.append({**m, "primary_role": "duty_fallback"})
+                target.append({**m, "primary_role": "duty_fallback",
+                               "task_weight": round(self.task_weight(m, task_type), 3)})
                 seen.add(m["id"])
 
         why = {
@@ -190,5 +234,5 @@ class DutyTeam:
             "general": "общая задача — отвечает основной дежурный",
         }[task_type]
         names = " → ".join(f"{c['id']} ({ROLE_TITLES.get(c['primary_role'], c['primary_role'])})" for c in calls)
-        rationale = f"Тип: {task_type}; {why}. Порядок вызова: {names}."
+        rationale = f"Тип: {task_type}; {why}. Порядок вызова: {names} (по измеренным пробам)."
         return {"task_type": task_type, "calls": calls, "bench": bench, "rationale": rationale}
