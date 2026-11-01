@@ -12,6 +12,9 @@ on:
 
 permissions:
   contents: read
+  # Required so the cycle supervisor can dispatch this workflow when the
+  # scheduler skips its slot (the verification suite, dispatched by the cycle supervisor).
+  actions: write
 
 jobs:
   verify:

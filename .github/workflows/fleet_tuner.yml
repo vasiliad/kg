@@ -15,6 +15,9 @@ on:
 
 permissions:
   contents: write
+  # Required so the cycle supervisor can dispatch this workflow when the
+  # scheduler skips its slot (the fleet measurement, dispatched by the cycle supervisor).
+  actions: write
 
 jobs:
   tune:

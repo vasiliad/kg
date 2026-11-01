@@ -19,6 +19,9 @@ on:
 
 permissions:
   contents: write
+  # Required so the cycle supervisor can dispatch this workflow when the
+  # scheduler skips its slot (the 12:00 NOVT report, dispatched by the cycle supervisor).
+  actions: write
 
 jobs:
   dispatch-emails:

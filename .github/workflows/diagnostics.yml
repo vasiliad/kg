@@ -12,6 +12,9 @@ on:
 
 permissions:
   contents: write
+  # Required so the cycle supervisor can dispatch this workflow when the
+  # scheduler skips its slot (the provider probes, dispatched by the cycle supervisor).
+  actions: write
 
 jobs:
   diagnose:
