@@ -228,10 +228,12 @@ def test_7_email_never_half_sends():
     print("\n" + "=" * 60)
     print("TEST 7: Email skips cleanly without recipient / credentials")
     print("=" * 60)
-    sender_no_creds = EmailSender(sender_email="ivanvasiliadi@gmail.com", app_password=None)
+    # A synthetic address, never the operator's: this repository is public,
+    # and a test fixture is not a place for a real person's address.
+    sender_no_creds = EmailSender(sender_email="sender@example.com", app_password=None)
     res = sender_no_creds.send_email("someone@example.com", "Тест", "<p>ok</p>")
     assert res["status"] == "SKIPPED_NOT_CONFIGURED", res
-    sender_full = EmailSender(sender_email="ivanvasiliadi@gmail.com", app_password="x" * 16)
+    sender_full = EmailSender(sender_email="sender@example.com", app_password="x" * 16)
     res2 = sender_full.send_email("", "Тест", "<p>ok</p>")
     assert res2["status"] == "SKIPPED_NO_RECIPIENT", res2
     res3 = sender_full.send_email("not-an-email", "Тест", "<p>ok</p>")
@@ -1902,6 +1904,102 @@ def test_31_the_supervisor_dispatches_through_the_gh_binary():
           "and a refusal is reported as a refusal.")
 
 
+def test_32_the_operator_address_never_reaches_the_public_repository():
+    """
+    Measured on 2026-11-01: the operator's personal address was committed to
+    a PUBLIC repository in four places — `.env.example` (hardcoded, which the
+    standing rule forbids outright), `nim_history.log` (every delivery
+    record), `data/bot_selftest_report.json` (the bot's own honest answer
+    quotes where it would send a report) and a test fixture.
+
+    The rule is that the address lives in exactly two places: the GitHub
+    secret `DISPATCH_RECIPIENT_EMAIL` and the untracked `data/.bot_settings.json`.
+    Nothing else may hold it — so the test scans EVERY tracked file.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 32: the operator's address never reaches the public repo")
+    print("=" * 60)
+    import re
+    import subprocess
+    from harness import redaction
+
+    # The fixture is synthetic — a test file is not a place for a real
+    # person's address either.
+    address = "operator@example.com"
+
+    # --- The fingerprint says "an address was resolved" without saying which.
+    tag = redaction.recipient_tag(address)
+    assert address not in tag, f"the tag must not contain the address: {tag}"
+    assert "@" not in tag, f"the tag must not look like an address: {tag}"
+    assert "sha256:" in tag, f"the tag must be a verifiable fingerprint: {tag}"
+    assert redaction.recipient_tag(address) == tag, \
+        "the same address must always produce the same tag"
+    assert redaction.recipient_tag(address.upper()) == tag, \
+        "the tag must not depend on the case"
+    assert redaction.recipient_tag(address + "x") != tag, \
+        "a different address must produce a different tag"
+    assert redaction.recipient_tag("") == "не задан", \
+        "an unset recipient must say so"
+
+    # --- Free text is masked wherever an address appears.
+    masked = redaction.mask_emails(f"Отчёт на {address} отправлен вовремя.")
+    assert address not in masked, f"the address survived: {masked}"
+    assert "sha256:" in masked, f"the address must be replaced, not dropped: {masked}"
+    assert "отправлен вовремя" in masked, \
+        f"the rest of the sentence must survive: {masked}"
+
+    # --- Structured reports are masked all the way down.
+    deep = redaction.mask_emails_deep({
+        "tests": [{"replies": [f"Могу отправить на {address}"]}],
+        "label": address,
+    })
+    assert address not in json.dumps(deep, ensure_ascii=False), \
+        f"the address survived inside a report: {deep}"
+    assert deep["label"].startswith("настроен"), \
+        f"the label must be a fingerprint: {deep['label']}"
+
+    # --- The history log masks on the way in: it is a committed file.
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        log_path = Path(tmp) / "nim_history.log"
+        manager = StateManager(state_file=str(Path(tmp) / "state.json"),
+                               history_file=str(log_path))
+        manager.append_history_log(f"ОТЧЁТЫ ОТПРАВЛЕНЫ | получатель={address} | статус=DELIVERED")
+        written = log_path.read_text(encoding="utf-8")
+        assert address not in written, f"the address reached the log: {written}"
+        assert "ОТЧЁТЫ ОТПРАВЛЕНЫ" in written, \
+            f"the evidence of the dispatch must survive: {written}"
+        assert "DELIVERED" in written, \
+            f"the status must survive: {written}"
+
+    # --- The decisive check: NO tracked file holds a real address.
+    allowed_domains = {"example.com", "example.org", "example.invalid", "localhost"}
+    email_re = re.compile(r"[A-Za-z0-9._%+\-]+@([A-Za-z0-9.\-]+\.[A-Za-z]{2,})")
+    try:
+        listing = subprocess.run(["git", "ls-files"], capture_output=True, text=True, timeout=60)
+        tracked = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+    except Exception:
+        tracked = []
+    offenders = []
+    for rel in tracked:
+        path = Path(rel)
+        try:
+            if not path.is_file() or path.stat().st_size > 4_000_000:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for domain in email_re.findall(text):
+            if domain.lower() in allowed_domains:
+                continue
+            offenders.append(f"{rel} ({domain})")
+    assert not offenders, \
+        "a personal address is committed to a public repository: " + ", ".join(offenders)
+
+    print("[+] Test 32 Passed: the operator's address lives only in the secret "
+          "and the untracked settings file.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1943,6 +2041,7 @@ if __name__ == "__main__":
         test_29_the_web_is_asked_when_the_operator_asks_for_it,
         test_30_every_cycle_comes_back_without_the_scheduler,
         test_31_the_supervisor_dispatches_through_the_gh_binary,
+        test_32_the_operator_address_never_reaches_the_public_repository,
     ]
     failed = []
     for t in tests:

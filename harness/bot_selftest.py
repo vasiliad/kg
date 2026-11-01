@@ -37,6 +37,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from harness.memory_engine import MemoryEngine
 from harness.state_manager import StateManager
 from harness.telegram_bot import HarnessTelegramBot
+from harness import redaction
 
 # The battery: (label, input, hard_markers, soft_markers)
 #   hard_markers — MUST appear in the replies (structural correctness)
@@ -187,6 +188,11 @@ def main() -> None:
     print("🧪 BOT SELF-TEST: the complex interrogates its own Telegram bot")
     print("=" * 72)
     report = run_battery()
+
+    # The transcript is committed to a PUBLIC repository, and the bot's honest
+    # answers quote the address it would send a report to. The address is
+    # replaced by a fingerprint before the transcript is written.
+    report = redaction.mask_emails_deep(report)
 
     report_path = PROJECT_ROOT / "data" / "bot_selftest_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)

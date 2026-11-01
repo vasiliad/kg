@@ -1,8 +1,13 @@
 import json
 import os
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Any, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from harness import redaction
 
 class StateManager:
     """
@@ -35,9 +40,13 @@ class StateManager:
         Appends a timestamped line to history log with rolling FIFO buffer.
         Automatically truncates oldest lines when exceeding max_lines,
         preventing unbounded file bloat and Git repository packfile inflation.
+
+        The log is committed to a PUBLIC repository, so any address in the
+        message is replaced by a non-reversible fingerprint before it is
+        written (see harness/redaction.py).
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        new_entry = f"[{timestamp}] {message}\n"
+        new_entry = f"[{timestamp}] {redaction.mask_emails(message)}\n"
         
         lines = []
         if os.path.exists(self.history_file):

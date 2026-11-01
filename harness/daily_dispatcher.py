@@ -23,6 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness.email_sender import EmailSender
+from harness import redaction
 from harness.disk_guard import DiskGuard
 from harness.state_manager import StateManager
 from harness.api_healthcheck import APIHealthChecker
@@ -304,6 +305,9 @@ def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
     answer whether the daily reports were actually sent. The wording is
     natural language on purpose: the log is searched both semantically and
     lexically, so "отчёты отправлены?" must match the record literally.
+
+    The recipient is recorded as a FINGERPRINT, not an address: this log is
+    committed to a public repository (see harness/redaction.py).
     """
     status = (result or {}).get("status", "UNKNOWN")
     error = (result or {}).get("error") or (result or {}).get("message") or ""
@@ -314,9 +318,10 @@ def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
         headline = "ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ"
     try:
         StateManager().append_history_log(
-            f"{headline} | тип={label} | получатель={recipient or 'не задан'} | статус={status}{detail}"
+            f"{headline} | тип={label} | получатель={redaction.recipient_tag(recipient)} | "
+            f"статус={status}{detail}"
         )
-        print(f"[*] Dispatch logged: {label} -> {status} (recipient={recipient or 'unset'})")
+        print(f"[*] Dispatch logged: {label} -> {status} (recipient={redaction.recipient_tag(recipient)})")
     except Exception as e:
         print(f"[!] Could not log dispatch outcome: {e}")
 
