@@ -86,5 +86,31 @@
       "minimaxai/minimax-m3.1-flash": 88.95,
       "mistralai/mistral-large-4-1t-a52b": 97.88
     }
+  },
+  {
+    "tuned_at": "2026-11-01 22:10:23 UTC",
+    "fleet": [
+      "stepfun-ai/step-5-preview",
+      "deepseek-ai/deepseek-v4.1-flash",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "mistralai/mistral-large-4-1t-a52b",
+      "minimaxai/minimax-m3.1-flash"
+    ],
+    "primary": "stepfun-ai/step-5-preview",
+    "tasks": [
+      "reasoning",
+      "code",
+      "json",
+      "translation",
+      "toolcall"
+    ],
+    "scores": {
+      "nvidia/nemotron-3-ultra-550b-a55b": 94.55,
+      "minimaxai/minimax-m3.1-flash": 88.56,
+      "mistralai/mistral-large-4-1t-a52b": 92.42,
+      "deepseek-ai/deepseek-v4.1-flash": 95.12,
+      "z-ai/glm-5.3-flash": 65.92,
+      "stepfun-ai/step-5-preview": 99.7
+    }
   }
 ]
