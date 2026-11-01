@@ -6,14 +6,15 @@
   ],
   "last_update_id": 0,
   "health": {
-    "runs": 1,
-    "started_at": "2026-11-01T00:52:39Z",
-    "last_poll_at": "2026-11-01T01:44:00Z",
+    "runs": 2,
+    "started_at": "2026-11-01T01:44:36Z",
+    "last_poll_at": "2026-11-01T01:47:09Z",
     "last_update_at": null,
     "last_send_at": null,
     "updates_seen": 0,
     "messages_sent": 0,
     "errors": 0,
-    "last_error": null
+    "last_error": null,
+    "last_chat_id": null
   }
 }
