@@ -32,6 +32,8 @@ Suites:
      and never guessed.
  20. Duty: the dispatch order follows the measured task probes, not the
      static order of the roster.
+ 21. Bot: the status card shows the measured drift in words, and invents
+     nothing when there is no measurement.
 """
 
 import os
@@ -843,6 +845,51 @@ def test_20_dispatch_follows_measured_task_evidence():
     print("[+] Test 20 Passed: the duty order follows measured task evidence.")
 
 
+def test_21_status_card_shows_the_measured_drift():
+    """
+    A roster that quietly got worse must be visible in the operator's card,
+    said in words — not as a status code and not as a file nobody opens.
+    With nothing measured, the card must stay silent instead of inventing a
+    number.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 21: the status card shows the measured fleet drift")
+    print("=" * 60)
+    from harness.telegram_bot import fleet_drift_line
+
+    degraded = {
+        "status": "DEGRADED",
+        "mean_score_delta": -8.0,
+        "worst": {"id": "v/slow", "delta": -21.0},
+        "added": [],
+        "removed": [],
+    }
+    line = fleet_drift_line({"fleet_drift": degraded})
+    assert line, "a measured drift must produce a line in the card"
+    assert "Дрейф флота" in line, f"the card must name the drift, got {line!r}"
+    assert "хуже" in line, f"the operator must read the meaning, not a code: {line!r}"
+    assert "-21.00" in line, f"the measured number must be shown: {line!r}"
+
+    # Nothing measured — no line at all, and no invented number.
+    assert fleet_drift_line({}) == "", "no drift measured means no drift line"
+    assert fleet_drift_line({"fleet_drift": None}) == ""
+    assert fleet_drift_line({"fleet_drift": {"status": "FIRST"}}).strip(), \
+        "a known 'no comparison yet' must still say so"
+
+    # The line goes into the card as HTML — a model id must not break it.
+    escaped = fleet_drift_line({"fleet_drift": {
+        "status": "DEGRADED",
+        "worst": {"id": "v/<script>", "delta": -30.0},
+    }})
+    assert "<script>" not in escaped, "the card must escape what it prints"
+    assert "script" in escaped, f"the id must stay readable, got {escaped!r}"
+
+    # The card itself must actually carry the line.
+    source = (PROJECT_ROOT / "harness" / "telegram_bot.py").read_text(encoding="utf-8")
+    assert "fleet_drift_line(state)" in source, "the status card must render the drift"
+    print("[+] Test 21 Passed: the status card shows the drift and invents nothing.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -873,6 +920,7 @@ if __name__ == "__main__":
         test_18_multilingual_and_tool_use_probes_are_objective,
         test_19_fleet_drift_is_measured_not_guessed,
         test_20_dispatch_follows_measured_task_evidence,
+        test_21_status_card_shows_the_measured_drift,
     ]
     failed = []
     for t in tests:

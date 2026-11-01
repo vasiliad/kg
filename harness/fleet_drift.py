@@ -33,6 +33,17 @@ MODEL_DELTA_THRESHOLD = 12.0
 # How many cycles to keep. At one cycle every six hours this is six days.
 MAX_HISTORY_CYCLES = 24
 
+# Operator-facing names. The status codes stay in the data files; the card
+# the operator reads in Telegram shows the plain Russian sentence.
+STATUS_LABELS = {
+    "FIRST": "нет данных для сравнения (первый замер)",
+    "RESCALED": "набор проб изменился — баллы разных шкал не сравниваются",
+    "STABLE": "ростер в пределах шума",
+    "IMPROVING": "ростер измерен лучше",
+    "DEGRADED": "ростер измерен хуже",
+    "REPLACED": "основной дежурный заменён",
+}
+
 
 def _index(report: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """{model_id: measurement} for every MEASURED model in a report."""
@@ -220,13 +231,10 @@ def append_cycle(path: str, report: Dict[str, Any], max_cycles: int = MAX_HISTOR
     return history
 
 
-def summarize(drift: Optional[Dict[str, Any]]) -> str:
-    """One plain-Russian line for the operator. Never raises."""
-    if not isinstance(drift, dict):
-        return "Дрейф флота: нет данных."
-    status = drift.get("status", "FIRST")
+def _details(drift: Dict[str, Any]) -> List[str]:
+    """The measured numbers behind a drift, as plain parts."""
+    parts: List[str] = []
     mean = drift.get("mean_score_delta")
-    parts = [f"Дрейф флота: {status}"]
     if isinstance(mean, (int, float)):
         parts.append(f"средний сдвиг {mean:+.2f}")
     worst = drift.get("worst")
@@ -238,4 +246,26 @@ def summarize(drift: Optional[Dict[str, Any]]) -> str:
         parts.append(f"добавлено: {', '.join(added[:3])}")
     if removed:
         parts.append(f"выбыло: {', '.join(removed[:3])}")
+    return parts
+
+
+def summarize(drift: Optional[Dict[str, Any]]) -> str:
+    """One plain-Russian line for the operator. Never raises."""
+    if not isinstance(drift, dict):
+        return "Дрейф флота: нет данных."
+    status = drift.get("status", "FIRST")
+    parts = [f"Дрейф флота: {status}"] + _details(drift)
+    return "; ".join(parts) + "."
+
+
+def describe(drift: Optional[Dict[str, Any]]) -> str:
+    """
+    The same measurement, said in words instead of status codes — for the
+    operator's Telegram card. Never raises.
+    """
+    if not isinstance(drift, dict):
+        return "нет данных."
+    status = str(drift.get("status") or "FIRST")
+    label = STATUS_LABELS.get(status, str(drift.get("note") or status))
+    parts = [label] + _details(drift)
     return "; ".join(parts) + "."

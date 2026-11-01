@@ -53,6 +53,22 @@ from harness.tools import AgentToolbox
 from harness import runtime_settings
 from harness import operational_context
 
+
+def fleet_drift_line(state: Dict[str, Any]) -> str:
+    """
+    The measured fleet drift as one card line. Empty when nothing was
+    measured yet — the card must never invent a number.
+    """
+    drift = (state or {}).get("fleet_drift")
+    if not isinstance(drift, dict) or not drift.get("status"):
+        return ""
+    try:
+        from harness.fleet_drift import describe
+        return f"📉 <b>Дрейф флота:</b> {html.escape(describe(drift))}\n"
+    except Exception:
+        return ""
+
+
 class HarnessTelegramBot:
     def __init__(self, bot_token: Optional[str] = None):
         self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -312,6 +328,7 @@ class HarnessTelegramBot:
             "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n"
             f"👑 <b>Верховный арбитр (CPU):</b> <code>{state.get('local_arbiter', 'Qwen/Qwen2.5-1.5B-Instruct')}</code>\n"
             f"🧑‍💼 <b>Дежурная команда:</b> {len(state.get('active_fleet', []) or [])} моделей, источник: <code>{state.get('fleet_source', 'статический сид')}</code>\n"
+            f"{fleet_drift_line(state)}"
             "⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n"
             "🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n"
             f"🔑 <b>NVIDIA NIM API:</b> {key_res.get('message')} (HTTP {key_res.get('status_code', 0)})\n"
