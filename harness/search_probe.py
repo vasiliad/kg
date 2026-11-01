@@ -92,6 +92,24 @@ def probe(quest: str = QUESTION, num_results: int = 3) -> dict:
     return result
 
 
+def answer_with_live_web(question: str) -> dict:
+    """
+    The whole path, with the real model: the operator's sentence -> the live
+    web -> the duty model's answer. This is the proof that the question the
+    operator actually asked is answered from live facts, and not from memory.
+    """
+    from harness.minimax_executor import MiniMaxExecutor
+
+    executor = MiniMaxExecutor()
+    return executor.execute_task(
+        task_prompt=question,
+        context=("VERIFIED SYSTEM FACTS: this is a live probe of the complex's own "
+                 "web path. Answer the question only from the LIVE WEB FACTS block."),
+        enable_search=True,
+        max_tokens=2560,
+    )
+
+
 def main() -> int:
     result = probe()
     print(f"[probe] question : {result['question']}")
@@ -123,6 +141,16 @@ def main() -> int:
     if result["relevant"] == 0:
         print("[probe] WARNING: the web answered, but nothing mentions the topic — "
               "the query language or the tier index is the problem.")
+
+    if "--answer" in sys.argv:
+        answer = answer_with_live_web(QUESTION)
+        print(f"[probe] model    : status={answer.get('status')} "
+              f"model={answer.get('model')} elapsed={answer.get('elapsed_sec')}s")
+        for citation in (answer.get("citations") or [])[:5]:
+            print(f"[probe] cite    : {citation}")
+        content = str(answer.get("content") or answer.get("error") or "")
+        print(f"[probe] answer  : {content[:1500]}")
+
     print("[probe] OK: the operator's request reaches the live web.")
     return 0
 
