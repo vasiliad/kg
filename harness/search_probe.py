@@ -21,7 +21,6 @@ It sends nothing to Telegram, writes nothing, and prints no key.
 """
 
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -33,30 +32,21 @@ if str(PROJECT_ROOT) not in sys.path:
 QUESTION = ("Есть компания Атлас,которая делает генетические тесты."
             "Можешь найти её в интернете и узнать сколько стоит тест?")
 
-# Words that carry no topic, and must not be counted as a match.
-_NOISE = {
-    "есть", "можешь", "найти", "интернете", "узнать", "сколько", "стоит",
-    "тест", "тесты", "компания", "которая", "делает", "какая", "какой",
-    "которое", "который", "please", "the", "and", "for",
-}
 
-
-def topic_words(query: str) -> list:
-    """The content words of the query — what a relevant answer must mention."""
-    words = re.findall(r"[А-Яа-яЁёA-Za-z]{4,}", query or "")
-    return [w.lower() for w in words if w.lower() not in _NOISE]
-
-
-def relevance(results: list, words: list) -> int:
-    """How many results mention a topic word of the query."""
-    if not words:
+def on_topic_count(results: list, stems: list) -> int:
+    """How many results speak about the topic of the query."""
+    if not stems:
         return 0
-    hits = 0
-    for item in results:
-        blob = f"{item.get('title', '')} {item.get('snippet', '')}".lower()
-        if any(w in blob for w in words):
-            hits += 1
-    return hits
+    return sum(1 for item in results if _mentions(item, stems))
+
+
+def _mentions(item: dict, stems: list) -> bool:
+    blob = " ".join([
+        str(item.get("title", "")),
+        str(item.get("url", "")),
+        str(item.get("snippet", "")),
+    ]).lower()
+    return any(stem in blob for stem in stems)
 
 
 def probe(quest: str = QUESTION, num_results: int = 3) -> dict:
@@ -80,11 +70,11 @@ def probe(quest: str = QUESTION, num_results: int = 3) -> dict:
         return result
 
     executor = MiniMaxExecutor()
-    words = topic_words(plan["query"])
+    stems = search_query.topic_stems(plan["query"])
 
     # 2. Every tier on its own.
     for outcome in executor.search_each_tier(plan["query"], num_results=num_results):
-        hits = relevance(outcome["results"], words)
+        hits = on_topic_count(outcome["results"], stems)
         result["tiers"].append({
             "tier": outcome["tier"],
             "count": len(outcome["results"]),
@@ -97,7 +87,7 @@ def probe(quest: str = QUESTION, num_results: int = 3) -> dict:
     results = executor.search_web(plan["query"], num_results=num_results)
     result["tier"] = getattr(executor, "last_search_tier", "") or "none"
     result["results"] = results
-    result["relevant"] = relevance(results, words)
+    result["relevant"] = on_topic_count(results, stems)
     result["ok"] = bool(results)
     return result
 

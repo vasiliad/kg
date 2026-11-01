@@ -245,6 +245,67 @@ MAX_QUERY_LEN = 120
 # no more meaning than "is_palindrome".
 LEADING_PREPOSITIONS: tuple = ("про", "о", "об", "от", "по", "для")
 
+# The frame and the instruction are not the topic. Everything else in the
+# question is — "компания", "тест" and "генетические" are exactly what a
+# relevant answer has to be about.
+STOP_WORDS: frozenset = frozenset({
+    "есть", "можешь", "можете", "найди", "найдите", "найти", "найтите",
+    "поищи", "поищите", "загугли", "загуглите", "интернете", "интернет",
+    "узнать", "узнайте", "выясни", "выясните", "пожалуйста", "спасибо",
+    "сколько", "стоит", "какая", "какой", "какие", "которое", "который",
+    "которая", "делает", "делают", "имеет", "имеют",
+    "please", "search", "google", "lookup",
+})
+
+# How short a stem is cut so that close relatives still match each other:
+# «генетические» / «генетический», «тесты» / «тест».
+STEM_LEN = 4
+
+
+def topic_stems(query: str) -> List[str]:
+    """
+    The topic of the query, as short stems. A result that speaks about the
+    question mentions one of them: «Генетический тест «Атлас»: цена…»
+    answers a question about «генетические тесты» and «компания Атлас».
+
+    The stems are cut to four characters so that a word matches its close
+    relatives, and the frame words are dropped so that a page about «сколько
+    стоит сайт построить?» is not mistaken for an answer about the price of
+    a genetic test.
+    """
+    stems: List[str] = []
+    for word in re.findall(r"[А-Яа-яЁёA-Za-z]{4,}", query or ""):
+        low = word.lower()
+        if low in STOP_WORDS:
+            continue
+        stem = low[:STEM_LEN]
+        if stem not in stems:
+            stems.append(stem)
+    return stems
+
+
+def is_on_topic(results: List[Dict[str, Any]], stems: List[str]) -> bool:
+    """
+    Whether the results actually speak about the query's topic.
+
+    Measured in the cloud on 2026-11-01: the Keenable tier answered the
+    Russian question «стоимость генетического теста Атлас» with «SkyLink
+    (Los Angeles International Airport)» and «Crow (disambiguation)». A
+    tier that answers with noise is worse than a tier that is silent — the
+    duty model would cite an airport as a fact about a genetics company.
+    """
+    if not results or not stems:
+        return False
+    for item in results:
+        blob = " ".join([
+            str(item.get("title", "")),
+            str(item.get("url", "")),
+            str(item.get("snippet", "")),
+        ]).lower()
+        if any(stem in blob for stem in stems):
+            return True
+    return False
+
 
 def _strip_prefix(text: str, prefixes: tuple) -> str:
     """Removes the first matching prefix (case-insensitive) from the front."""

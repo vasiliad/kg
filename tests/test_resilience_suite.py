@@ -1663,6 +1663,37 @@ def test_29_the_web_is_asked_when_the_operator_asks_for_it():
     assert "does NOT mean the live web is unavailable" in text, \
         "one dead tier must never read as a dead web"
 
+    # ------------------------------------------------------------------
+    # 4. A tier that answers with noise is not an answer.
+    # ------------------------------------------------------------------
+    noise = [{"title": "SkyLink (Los Angeles International Airport)",
+              "url": "https://en.wikipedia.org/wiki/LAX_APM", "snippet": "airport"}]
+    topic = [{"title": "Генетический тест «Атлас»: цена, результаты",
+              "url": "https://lepekhin.ru/blog/atlas-test/", "snippet": "цена теста"}]
+    stems = search_query.topic_stems(plan["query"])
+    assert stems, "the question must have a topic"
+    assert search_query.is_on_topic(topic, stems), "a relevant answer must pass"
+    assert not search_query.is_on_topic(noise, stems), \
+        "noise must not pass as an answer"
+
+    # The chain must skip the noisy tier and serve the relevant one.
+    ex2 = MiniMaxExecutor.__new__(MiniMaxExecutor)
+    ex2.base_url = "https://example.invalid/v1"
+    ex2.model_id = "test/model"
+    ex2.key_pool = _FakeKeyPool()
+    ex2.last_search_tier = ""
+    ex2._last_search_time = 0.0
+    ex2._search_tinyfish = lambda query, num_results=3: list(noise)
+    ex2._search_langsearch = lambda query, num_results=3: list(topic)
+    ex2._search_keenable = lambda query, num_results=3: []
+    ex2._search_tavily = lambda query, num_results=3: []
+    ex2._search_duckduckgo = lambda query, num_results=3: []
+    served = ex2.search_web(plan["query"], num_results=3)
+    assert ex2.last_search_tier == "LangSearch", \
+        f"the noisy tier must be skipped, got {ex2.last_search_tier}"
+    assert served and served[0]["url"].endswith("atlas-test/"), \
+        "the relevant tier must serve"
+
     print("[+] Test 29 Passed: the operator's request reaches the live web, "
           "and the facts name their source.")
 

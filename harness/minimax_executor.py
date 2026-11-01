@@ -187,10 +187,17 @@ class MiniMaxExecutor:
                 results = getattr(self, method_name)(query, num_results) or []
             except Exception:
                 continue
-            if results:
-                self.last_search_tier = tier
-                print(f"[Search] served by {tier} ({len(results)} results)")
-                return results
+            if not results:
+                continue
+            # A tier that answers with noise is worse than a tier that is
+            # silent: the duty model would cite the noise as a fact.
+            stems = search_query.topic_stems(query)
+            if stems and not search_query.is_on_topic(results, stems):
+                print(f"[Search] {tier} answered off-topic ({len(results)} results); trying next tier.")
+                continue
+            self.last_search_tier = tier
+            print(f"[Search] served by {tier} ({len(results)} results)")
+            return results
         return []
 
     def search_each_tier(self, query: str, num_results: int = 3) -> List[Dict[str, Any]]:
