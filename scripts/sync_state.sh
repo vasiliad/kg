@@ -40,6 +40,20 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   echo "[sync] push rejected (attempt ${attempt}); rebasing onto origin/${TARGET_BRANCH}..."
   git fetch origin "${TARGET_BRANCH}" || true
 
+  # `git rebase` refuses to run with unstaged changes. The self-test writes
+  # data/.bot_sessions.json (its health block) and leaves it uncommitted, and
+  # that blocked the rebase — the transcript was then never pushed, and the
+  # cycle looked broken for a reason that had nothing to do with the cycle.
+  # So the local modifications are stashed around the rebase and restored
+  # afterwards; the committed snapshot stays the newest one either way.
+  stash_before=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
+  git stash push -m "sync-state-autostash" >/dev/null 2>&1 || true
+  stash_after=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
+  stash_ref=""
+  if [ "$stash_after" -gt "$stash_before" ]; then
+    stash_ref=$(git stash list --format="%gd" 2>/dev/null | head -1)
+  fi
+
   if ! git rebase "origin/${TARGET_BRANCH}"; then
     echo "[sync] conflict while rebasing — keeping this run's state files."
     for f in "${CONFLICT_FILES[@]}"; do
@@ -47,6 +61,19 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     done
     git add -A || true
     GIT_EDITOR=true git rebase --continue 2>&1 || git rebase --abort 2>&1 || true
+  fi
+
+  if [ -n "$stash_ref" ]; then
+    if git stash pop "$stash_ref" >/dev/null 2>&1; then
+      echo "[sync] local changes restored after the rebase."
+    else
+      # The stash did not apply cleanly: the committed snapshot wins, and the
+      # stash is kept so the next cycle can still read it.
+      git diff --name-only --diff-filter=U 2>/dev/null | while read -r f; do
+        git checkout HEAD -- "$f" 2>/dev/null || true
+      done
+      echo "[sync] local changes could not be re-applied; the committed snapshot wins."
+    fi
   fi
 done
 

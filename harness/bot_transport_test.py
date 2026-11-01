@@ -27,14 +27,40 @@ REPORT_PATH = PROJECT_ROOT / "data" / "bot_transport_report.json"
 
 
 def _authorized_chat() -> int:
-    """The operator's chat, persisted by the daemon's session store."""
+    """
+    The chat the test delivers to — chosen by measurement, not by the order
+    of a set. Three chats are authorized, and `authorized_chats[0]` used to be
+    whichever one the set happened to yield first: the test messages could
+    land in a chat the operator was not looking at.
+
+    So the target is, in order of evidence:
+      1. the chat the daemon last answered to (health.last_chat_id),
+      2. the chat where delivery last worked (the previous report),
+      3. the first authorized chat.
+    """
     sessions_file = PROJECT_ROOT / "data" / ".bot_sessions.json"
     try:
         data = json.loads(sessions_file.read_text(encoding="utf-8"))
-        chats = data.get("authorized_chats") or []
-        return int(chats[0]) if chats else 0
     except Exception:
-        return 0
+        data = {}
+
+    health = data.get("health") if isinstance(data.get("health"), dict) else {}
+    last_chat = health.get("last_chat_id")
+    if last_chat:
+        try:
+            return int(last_chat)
+        except Exception:
+            pass
+
+    try:
+        previous = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+        if previous.get("chat_id"):
+            return int(previous["chat_id"])
+    except Exception:
+        pass
+
+    chats = data.get("authorized_chats") or []
+    return int(chats[0]) if chats else 0
 
 
 def main() -> int:
@@ -79,9 +105,12 @@ def main() -> int:
 
     # 4. Edit — the placeholder becomes the real answer in place.
     editable_id = bot.send_message(chat_id, "🧪 Транспортный самотест 4/7: это сообщение будет отредактировано.", parse_mode="HTML")
+    bot.last_api_error = ""
     edited = bot.edit_message(chat_id, editable_id, "🧪 Транспортный самотест 4/7: <b>сообщение отредактировано</b> — editMessageText работает.", parse_mode="HTML")
+    reason = f", причина: {bot.last_api_error}" if bot.last_api_error else ""
+    mode = f", форма: {bot.last_edit_mode}" if getattr(bot, "last_edit_mode", "") else ""
     record("редактирование_сообщения", bool(edited) and bool(editable_id),
-           f"message_id={editable_id}, editMessageText ok={edited}")
+           f"message_id={editable_id}, editMessageText ok={edited}{mode}{reason}")
 
     # 5. Delete — the sensitive-message transport must still work.
     temp_id = bot.send_message(chat_id, "🧪 Транспортный самотест 5/7: это сообщение будет удалено.", parse_mode="HTML")

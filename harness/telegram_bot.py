@@ -139,6 +139,12 @@ class HarnessTelegramBot:
         self.health["runs"] = int(self.health.get("runs") or 0) + 1
         self.health["started_at"] = _now_iso()
         self._last_health_save: float = 0.0
+        # The last Telegram refusal, verbatim. A failed call that says nothing
+        # is a call that cannot be diagnosed.
+        self.last_api_error: str = ""
+        # Which form of the edit payload Telegram accepted ("markup", "plain",
+        # "bare") — a silent downgrade must be visible.
+        self.last_edit_mode: str = ""
 
         self.state_mgr = StateManager()
         self.disk_guard = DiskGuard()
@@ -216,6 +222,7 @@ class HarnessTelegramBot:
             "last_poll_at": None,
             "last_update_at": None,
             "last_send_at": None,
+            "last_chat_id": None,
             "updates_seen": 0,
             "messages_sent": 0,
             "errors": 0,
@@ -256,11 +263,14 @@ class HarnessTelegramBot:
             self.health["updates_seen"] = int(self.health.get("updates_seen") or 0) + 1
         self._save_health(force=True)
 
-    def _record_send(self) -> None:
+    def _record_send(self, chat_id: int = 0) -> None:
         """A message went out to the operator."""
         with self._state_lock:
             self.health["last_send_at"] = _now_iso()
             self.health["messages_sent"] = int(self.health.get("messages_sent") or 0) + 1
+            if chat_id:
+                # Which chat the bot actually answered — measured, not guessed.
+                self.health["last_chat_id"] = int(chat_id)
         self._save_health(force=True)
 
     def _record_error(self, error: str) -> None:
@@ -276,6 +286,56 @@ class HarnessTelegramBot:
         except Exception:
             return 0
 
+    def _merge_sessions_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Merges this run's state with what is on disk.
+
+        Two processes write this file: the daemon (which owns the cursor) and
+        the self-test (which only adds health numbers). A writer that started
+        earlier must never roll the cursor back — that would make Telegram
+        replay messages the operator has already seen, which is exactly the
+        duplicate-answer bug the cursor was introduced to kill. So the cursor
+        only ever moves forward, authorizations are a union, and the health
+        counters keep the largest value each side has seen.
+        """
+        disk = self._load_sessions()
+        merged = dict(payload)
+
+        def _int(value: Any) -> int:
+            try:
+                return int(value or 0)
+            except Exception:
+                return 0
+
+        merged["last_update_id"] = max(
+            _int(disk.get("last_update_id")), _int(payload.get("last_update_id"))
+        )
+
+        chats = list(disk.get("authorized_chats") or [])
+        for chat in payload.get("authorized_chats") or []:
+            if chat not in chats:
+                chats.append(chat)
+        merged["authorized_chats"] = chats
+
+        disk_health = disk.get("health") if isinstance(disk.get("health"), dict) else {}
+        own_health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+        health = dict(disk_health)
+        health.update(own_health)
+        for key in ("runs", "updates_seen", "messages_sent", "errors"):
+            health[key] = max(_int(disk_health.get(key)), _int(own_health.get(key)))
+        for key in ("started_at", "last_poll_at", "last_update_at", "last_send_at"):
+            # The stamps are UTC ISO-8601 — they compare correctly as text.
+            stamps = [str(v) for v in (disk_health.get(key), own_health.get(key)) if v]
+            health[key] = max(stamps) if stamps else None
+        # The chat the bot last answered to: keep whichever side knows it.
+        if not own_health.get("last_chat_id"):
+            health["last_chat_id"] = disk_health.get("last_chat_id")
+        health.setdefault("last_error", None)
+        if not own_health.get("last_error"):
+            health["last_error"] = disk_health.get("last_error")
+        merged["health"] = health
+        return merged
+
     def _save_authorized_sessions(self) -> None:
         """Persists authorized chats, the Telegram update cursor and the health block together."""
         try:
@@ -287,6 +347,7 @@ class HarnessTelegramBot:
                     # cursor must be persisted even if it is missing.
                     "health": dict(getattr(self, "health", {}) or {}),
                 }
+                payload = self._merge_sessions_payload(payload)
             with open(self.sessions_file, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
         except Exception:
@@ -424,6 +485,9 @@ class HarnessTelegramBot:
                     # Fallback to plain text if markdown formatting failed
                     payload.pop("parse_mode", None)
                     res = requests.post(f"{self.base_url}/sendMessage", json=payload, timeout=15)
+                if not res.ok:
+                    # A silent failure is not a delivery — say why.
+                    print(f"[!] sendMessage failed (HTTP {res.status_code}): {self._api_error(res)}")
                 if res.ok:
                     try:
                         mid = (res.json().get("result") or {}).get("message_id")
@@ -438,8 +502,29 @@ class HarnessTelegramBot:
         if last_id:
             # The operator actually received something — that is the answer
             # side of the health signal.
-            self._record_send()
+            self._record_send(chat_id)
         return last_id
+
+    def _api_error(self, res: Any) -> str:
+        """
+        The Telegram reason behind a non-OK response. "The edit failed" is not
+        a diagnosis — the description in the body is. The last reason is kept
+        so a report can carry it.
+        """
+        description = ""
+        try:
+            body = res.json()
+            if isinstance(body, dict):
+                description = str(body.get("description") or body.get("error_code") or "")
+        except Exception:
+            pass
+        if not description:
+            try:
+                description = str(res.text or "")[:200]
+            except Exception:
+                description = ""
+        self.last_api_error = description
+        return description
 
     def edit_message(
         self,
@@ -452,28 +537,45 @@ class HarnessTelegramBot:
         Edits a message that was already sent — the transport that turns a
         "the keeper is thinking" placeholder into the real answer without
         adding another message to the operator's chat.
+
+        editMessageText accepts a narrower parameter set than sendMessage:
+        `disable_web_page_preview` is a sendMessage field, and on this method
+        the request is rejected as it stands (measured in the cloud: HTTP 400,
+        the edit never landed). So the payload here is built for the method,
+        and the fallbacks strip one layer at a time — markup first, then the
+        preview options — because a failed edit must never cost the operator
+        the text: the caller falls back to sending it as a new message.
         """
         if not self.is_configured() or not message_id:
             return False
-        payload = {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "text": text,
-            "disable_web_page_preview": True,
-            "link_preview_options": {"is_disabled": True}
-        }
+        base = {"chat_id": chat_id, "message_id": message_id, "text": text}
+        attempts: List[Dict[str, Any]] = []
         if parse_mode:
-            payload["parse_mode"] = parse_mode
-        try:
-            res = requests.post(f"{self.base_url}/editMessageText", json=payload, timeout=15)
-            if not res.ok and parse_mode:
-                # Same rescue as sendMessage: broken markup must not lose the text.
-                payload.pop("parse_mode", None)
+            attempts.append({**base, "parse_mode": parse_mode,
+                             "link_preview_options": {"is_disabled": True}})
+            # Same rescue as sendMessage: broken markup must not lose the text.
+            attempts.append({**base, "link_preview_options": {"is_disabled": True}})
+        else:
+            attempts.append({**base, "link_preview_options": {"is_disabled": True}})
+        attempts.append(dict(base))  # the bare minimum — always legal
+
+        for payload in attempts:
+            try:
                 res = requests.post(f"{self.base_url}/editMessageText", json=payload, timeout=15)
-            return bool(res.ok)
-        except Exception as e:
-            print(f"[!] Error editing message {message_id} in {chat_id}: {e}")
-            return False
+            except Exception as e:
+                print(f"[!] Error editing message {message_id} in {chat_id}: {e}")
+                return False
+            if res.ok:
+                # Which form Telegram accepted: the markup, the plain text, or
+                # the bare request. A silent downgrade to plain text must be
+                # visible, not invisible.
+                self.last_edit_mode = ("markup" if payload.get("parse_mode")
+                                       else ("plain" if payload.get("link_preview_options")
+                                             else "bare"))
+                return True
+            print(f"[!] editMessageText failed (HTTP {res.status_code}): {self._api_error(res)}")
+        self.last_edit_mode = ""
+        return False
 
     def answer_callback_query(self, callback_query_id: str, text: str = "") -> bool:
         """

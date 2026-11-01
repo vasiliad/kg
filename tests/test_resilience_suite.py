@@ -40,6 +40,10 @@ Suites:
      blob of the prompt; our own questions never cost a search.
  24. Bot: a measured health trace survives a restart, and an absent bot is
      distinguishable from a broken one.
+ 25. Bot: the cursor is monotonic — a second writer cannot roll it back and
+     make Telegram replay answers the operator already saw.
+ 26. Bot: the edit verb strips the payload until Telegram accepts it, and
+     reports the refusal instead of swallowing it.
 """
 
 import os
@@ -1128,6 +1132,145 @@ def test_24_the_bot_reports_its_own_health():
     print("[+] Test 24 Passed: the bot leaves a measured health trace.")
 
 
+def test_25_the_cursor_never_rolls_back():
+    """
+    Two processes write the session file: the daemon owns the cursor, the
+    self-test only adds health numbers. A writer that started earlier must
+    not roll the cursor back — that would make Telegram replay the answers
+    the operator has already seen, which is the duplicate-answer bug the
+    cursor was introduced to kill.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 25: the cursor is monotonic — a stale writer cannot replay")
+    print("=" * 60)
+    import threading
+    from harness.telegram_bot import HarnessTelegramBot
+
+    tmp = Path(tempfile.mkdtemp(prefix="monotonic-test-"))
+    sessions = tmp / ".bot_sessions.json"
+
+    def bare_bot(cursor: int = 0, chats=None):
+        bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
+        bot.sessions_file = sessions
+        bot.authorized_chats = set(chats or [846947027])
+        bot.last_update_id = cursor
+        bot._pending_update_ids = set()
+        bot._dispatched_max = cursor
+        bot._state_lock = threading.RLock()
+        bot.health = {
+            "runs": 1, "started_at": "2026-11-01T00:00:00Z", "last_poll_at": None,
+            "last_update_at": None, "last_send_at": None,
+            "updates_seen": 0, "messages_sent": 0, "errors": 0,
+            "last_error": None,
+        }
+        bot._last_health_save = 0.0
+        return bot
+
+    # The daemon advances the cursor and authorizes a second chat.
+    daemon = bare_bot()
+    daemon.authorized_chats.add(111222333)
+    daemon._mark_update_dispatched(500)
+    daemon._mark_update_handled(500)
+    on_disk = json.loads(sessions.read_text(encoding="utf-8"))
+    assert on_disk["last_update_id"] == 500, "the daemon must persist its cursor"
+
+    # A second writer that started before the daemon advanced the cursor.
+    stale = bare_bot(cursor=0, chats=[846947027])
+    stale._record_send(846947027)
+    on_disk = json.loads(sessions.read_text(encoding="utf-8"))
+    assert on_disk["last_update_id"] == 500, \
+        "a stale writer must never roll the cursor back"
+    assert 111222333 in on_disk["authorized_chats"], \
+        "an authorization must not be dropped by another writer"
+    assert on_disk["health"]["messages_sent"] >= 1, \
+        "the health block must survive the merge"
+    assert on_disk["health"]["last_chat_id"] == 846947027, \
+        "the chat the bot answered must be measured, not guessed"
+
+    # The cursor may only move forward, never back.
+    ahead = bare_bot(cursor=0)
+    ahead._mark_update_dispatched(900)
+    ahead._mark_update_handled(900)
+    on_disk = json.loads(sessions.read_text(encoding="utf-8"))
+    assert on_disk["last_update_id"] == 900, "the cursor must move forward"
+
+    print("[+] Test 25 Passed: the cursor is monotonic and authorizations survive.")
+
+
+def test_26_the_edit_strips_the_payload_until_telegram_accepts():
+    """
+    editMessageText accepts a narrower parameter set than sendMessage — the
+    cloud measured the difference: a sendMessage field in the edit payload
+    made Telegram refuse the call (HTTP 400, the edit never landed). The bot
+    must therefore strip the payload layer by layer and must report the
+    refusal instead of swallowing it.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 26: the edit strips the payload until Telegram accepts it")
+    print("=" * 60)
+    import threading
+    from harness import telegram_bot as tb
+
+    class FakeResponse:
+        def __init__(self, ok, status_code=200, payload=None):
+            self.ok = ok
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = json.dumps(self._payload)
+
+        def json(self):
+            return self._payload
+
+    def run_with(failures: int):
+        """Fails the first `failures` attempts, then accepts."""
+        calls = []
+
+        def fake_post(url, json=None, timeout=None):
+            calls.append((url.rsplit("/", 1)[-1], dict(json or {})))
+            if len(calls) <= failures:
+                return FakeResponse(False, 400, {
+                    "ok": False, "error_code": 400,
+                    "description": "Bad Request: unsupported parameter",
+                })
+            return FakeResponse(True, 200, {"ok": True, "result": {"message_id": 7}})
+
+        bot = tb.HarnessTelegramBot.__new__(tb.HarnessTelegramBot)
+        bot.bot_token = "test-token-0123456789"
+        bot.base_url = "https://api.telegram.org/bottest-token-0123456789"
+        bot.last_api_error = ""
+        bot._state_lock = threading.RLock()
+
+        original = tb.requests.post
+        tb.requests.post = fake_post
+        try:
+            ok = bot.edit_message(1, 2, "привет", parse_mode="HTML")
+        finally:
+            tb.requests.post = original
+        return ok, calls, bot.last_api_error
+
+    ok, calls, reason = run_with(failures=1)
+    assert ok, "the edit must succeed on the next attempt"
+    assert calls[0][0] == "editMessageText", "the edit must use editMessageText"
+    assert "disable_web_page_preview" not in calls[0][1], \
+        "the edit payload must not carry sendMessage-only fields"
+    assert calls[1][1].get("parse_mode") is None, \
+        "the markup must be dropped before the preview options"
+
+    ok, calls, reason = run_with(failures=2)
+    assert ok, "the bare request must be tried last"
+    assert set(calls[2][1].keys()) == {"chat_id", "message_id", "text"}, \
+        f"the last attempt must be the bare request, got {calls[2][1]}"
+    assert "link_preview_options" not in calls[2][1], \
+        "the preview options must be dropped as the last layer"
+
+    ok, calls, reason = run_with(failures=99)
+    assert ok is False, "a refused edit must not be reported as delivered"
+    assert "unsupported parameter" in reason, \
+        f"the Telegram reason must be kept, got {reason!r}"
+
+    print("[+] Test 26 Passed: the edit strips the payload and keeps the reason.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -1162,6 +1305,8 @@ if __name__ == "__main__":
         test_22_transport_covers_button_press_edit_and_delete,
         test_23_search_query_is_formulated_not_truncated,
         test_24_the_bot_reports_its_own_health,
+        test_25_the_cursor_never_rolls_back,
+        test_26_the_edit_strips_the_payload_until_telegram_accepts,
     ]
     failed = []
     for t in tests:
