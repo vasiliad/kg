@@ -8,7 +8,7 @@
   "health": {
     "runs": 42,
     "started_at": "2026-11-02T10:31:30Z",
-    "last_poll_at": "2026-11-02T11:03:35Z",
+    "last_poll_at": "2026-11-02T11:05:41Z",
     "last_update_at": "2026-11-01T15:30:05Z",
     "last_send_at": "2026-11-01T15:30:07Z",
     "updates_seen": 16,
