@@ -2956,6 +2956,102 @@ def test_48_failures_heal_instead_of_only_being_seen():
 
     print("[+] Test 48 Passed: failures heal in-run, and the strain reaches the second pipe.")
 
+def test_49_when_every_nvidia_model_dies_the_keeper_holds():
+    """
+    Симуляция по требованию оператора: «все модели nvidia которые у нас
+    в пуле — отказали или исчезли. что делает хранитель».
+
+    Инварианты, измеренные в симуляции на реальном коде:
+    - тюнер на пустом каталоге НЕ трогает файл состояния: ростер Хранителя
+      переживает катастрофу, даже когда отчёт показывает пустоту;
+    - ротация: сломавший смену исключается, выбирается лучший из остальных;
+    - пустой ростер — честное «не измерены», а не выдуманный ответ;
+    - дайджест при мёртвой модели деградирует с явной пометкой;
+    - упавшая доставка делает daily_dispatch «due today» — супервизор
+      переигрывает её в тот же день.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 49: All NVIDIA models die — the keeper holds the line")
+    print("=" * 60)
+    import tempfile
+    from datetime import datetime, timedelta, timezone
+    import harness.fleet_tuner as ft
+    import harness.cycle_supervisor as cs
+    from harness.fleet_tuner import FleetTuner
+    from harness import duty_shift
+    from harness.daily_dispatcher import _ask_model
+
+    tmp = Path(tempfile.mkdtemp(prefix="outage-test-"))
+    (tmp / "data").mkdir()
+    saved = (ft.PROJECT_ROOT, cs.PROJECT_ROOT, cs.REPORT_PATH)
+    ft.PROJECT_ROOT, cs.PROJECT_ROOT = tmp, tmp
+    cs.REPORT_PATH = tmp / "data" / ".cycle_supervisor.json"
+    shift_path = tmp / "data" / "duty_shift.json"
+
+    roster = {"duty": [
+        {"id": "n/a", "roles": ["duty_primary"], "score": 96.0, "verified": True, "latency_sec": 9.0},
+        {"id": "m/b", "roles": ["duty_fast"], "score": 88.0, "verified": True, "latency_sec": 6.0},
+        {"id": "m/c", "roles": ["duty_code"], "score": 68.0, "verified": True, "latency_sec": 21.0},
+    ]}
+    (tmp / "active_models.json").write_text(json.dumps(
+        {"active_fleet": [{"id": m["id"], "tier": "t", "roles": m["roles"],
+                           "quality_score": m["score"], "score_verified": True,
+                           "measured": {"latency_sec": m["latency_sec"]}} for m in roster["duty"]]},
+        ensure_ascii=False), encoding="utf-8")
+
+    try:
+        # 1. The keeper chooses from the measured roster.
+        shift, _ = duty_shift.current_duty(roster, path=shift_path)
+        assert shift.get("model_id"), "a healthy roster must yield a duty model"
+        first = shift["model_id"]
+
+        # 2. CATASTROPHE: the catalogue is empty. The tuner keeps the
+        #    previous fleet — in the STATE FILE, not just in the report.
+        report = FleetTuner(api_key="").run(dry_run=False, offline_catalog=[])
+        assert report.get("status") == "NO_QUALIFIED"
+        disk = json.loads((tmp / "active_models.json").read_text(encoding="utf-8"))
+        assert (disk.get("active_fleet") or []),             "the state file must survive an empty catalogue — the keeper's roster is the memory"
+        assert not report.get("active_fleet"),             f"the report must not invent a fleet ({(report.get('active_fleet') or [])[:2]})"
+
+        # 3. The duty model does not answer: the shift breaks, the keeper
+        #    picks the best of the REST (the broken one excluded).
+        duty_shift.note_outcome(first, 5.0, ok=False, path=shift_path)
+        nxt, _ = duty_shift.current_duty(roster, path=shift_path)
+        assert nxt["model_id"] != first, "the broken holder must lose the shift"
+        assert nxt.get("started_because") == "дежурная модель перестала отвечать быстро"
+        remaining_best = max((m for m in roster["duty"] if m["id"] != first),
+                             key=lambda m: m["score"])
+        assert nxt["model_id"] == remaining_best["id"],             f"the keeper must pick the best survivor ({nxt['model_id']})"
+
+        # 4. The roster is GONE and there is no live shift: the honest
+        #    answer, no invention. (A LIVE shift survives an empty roster
+        #    read on purpose — the 6-hour TTL governs the holder, and a
+        #    transiently unreadable roster must not strip a working model.)
+        empty, _ = duty_shift.current_duty(
+            {"duty": []}, path=tmp / "data" / "fresh_shift.json")
+        assert empty.get("model_id") == "" and "не измерены" in empty.get("chosen_by", ""),             f"an empty roster without a shift must be reported honestly ({empty})"
+
+        # 5. The digest with a dead model degrades with an explicit note.
+        class DeadNIM:
+            model_id = "n/a"
+            def execute_task(self, **kw):
+                return {"status": "ERROR", "error": "HTTP 503: service unavailable"}
+        res, note = _ask_model(DeadNIM(), task_prompt="x")
+        assert res.get("status") == "ERROR" and "503" in note, "the failure must be named"
+
+        # 6. A failed delivery makes the dispatch DUE today: the supervisor
+        #    re-plays it the same day instead of waiting 24 hours.
+        old = (datetime.now(timezone.utc) - timedelta(hours=20)).strftime("%Y-%m-%d %H:%M:%S")
+        (tmp / "nim_history.log").write_text(
+            f"[{old} UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Дайджест\n", encoding="utf-8")
+        sup = cs.supervise(repo="", now=datetime.now(timezone.utc), root=tmp, dry_run=True)
+        entry = next(c for c in sup["cycles"] if c["name"] == "daily_dispatch")
+        assert entry.get("due_today") is True and entry["stale"],             f"a failed delivery must be re-played today ({entry})"
+    finally:
+        ft.PROJECT_ROOT, cs.PROJECT_ROOT, cs.REPORT_PATH = saved
+
+    print("[+] Test 49 Passed: the keeper holds the line on a total NVIDIA outage.")
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -3015,6 +3111,7 @@ if __name__ == "__main__":
         test_46_the_canary_measures_the_letter_task,
         test_47_the_state_vault_keeps_yesterdays_picture,
         test_48_failures_heal_instead_of_only_being_seen,
+        test_49_when_every_nvidia_model_dies_the_keeper_holds,
     ]
     failed = []
     for t in tests:
