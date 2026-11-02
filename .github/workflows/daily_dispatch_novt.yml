@@ -26,7 +26,12 @@ permissions:
 jobs:
   dispatch-emails:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The digest now reads the source pages and writes every news out in
+    # full: measured in the cloud on 2026-11-02, the two model calls took
+    # 295s and 478s — 13 minutes in total, close to the old 25-minute
+    # limit. Public repositories get free Actions minutes, so the limit is
+    # raised rather than the letter being cut short.
+    timeout-minutes: 45
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

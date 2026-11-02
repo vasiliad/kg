@@ -344,13 +344,22 @@ def render_digest(
     # to be a curated digest is the old lie in a new dress.
     if selection_mode and selection_mode != "модель отобрала":
         detail = f" ({selection_note})" if selection_note else ""
+        written = full_count is not None and int(full_count) > 0
+        if written:
+            # The news were written out from the pages, but nobody chose
+            # which of them matter — say exactly that, not the opposite.
+            text = ("<b>Отбор новостей не выполнен</b> — список не отобран моделью, "
+                    "но каждая новость расписана по своему источнику.")
+            plain = "[!] Отбор новостей не выполнен — список не отобран моделью, но каждая новость расписана по своему источнику."
+        else:
+            text = ("<b>Отбор новостей не выполнен</b> — показаны найденные источники как есть.")
+            plain = "[!] Отбор новостей не выполнен — источники показаны как есть."
         rows.append(
             f'<div style="padding:11px 14px; background:#fffbeb; border-left:4px solid #b45309; '
             f'font-size:13px; line-height:1.5; color:{INK}; margin:0 0 16px 0;">'
-            f"<b>Отбор новостей не выполнен</b> — показаны найденные источники как есть."
-            f"{escape(detail)}</div>"
+            f"{text}{escape(detail)}</div>"
         )
-        plain_lines.append(f"[!] Отбор новостей не выполнен — источники показаны как есть{detail}.")
+        plain_lines.append(f"{plain}{detail}.")
         plain_lines.append("")
 
     # The operator asked for the news itself, not for a brief. If not one

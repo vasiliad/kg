@@ -2483,7 +2483,92 @@ def test_41_the_news_is_written_out_in_full():
     assert "Полные описания не удались" in html2, \
         "six briefs must not be passed off as news"
 
+    # A failed selection must be described accurately: if the news were
+    # written out from the pages, the letter says that the list was not
+    # curated — not that the sources were shown as they are.
+    html3, _ = email_render.render_digest(described, {
+        "subject": "Ежедневный дайджест ИИ",
+        "date_label": "02.11.2026",
+        "selection_mode": "источники показаны как есть",
+        "selection_note": "модель не ответила (HTTP 429)",
+        "full_news_count": 1,
+        "items_count": 2,
+    })
+    assert "список не отобран моделью" in html3, \
+        "the letter must say what actually happened"
+    assert "показаны найденные источники как есть" not in html3, \
+        "the letter must not claim the sources were shown as they are"
+
+    html4, _ = email_render.render_digest(described, {
+        "subject": "Ежедневный дайджест ИИ",
+        "date_label": "02.11.2026",
+        "selection_mode": "источники показаны как есть",
+        "full_news_count": 0,
+        "items_count": 2,
+    })
+    assert "показаны найденные источники как есть" in html4, \
+        "without full texts the letter must say the sources are as they are"
+
     print("[+] Test 41 Passed: the news is written out, the link only confirms the source.")
+
+
+def test_42_a_rate_limit_is_not_a_bad_answer():
+    """
+    Measured in the cloud on 2026-11-02: the second dispatch run was
+    answered with «HTTP 429: Too Many Requests» and the letter lost the
+    curation — the selection was simply given up on. A rate limit is not a
+    bad answer, so the harness waits and asks again.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 42: A rate limit is retried, not taken as a failed answer")
+    print("=" * 60)
+    import harness.daily_dispatcher as dd
+    from harness.daily_dispatcher import _ask_model, RATE_LIMIT_PAUSE
+
+    class _RateLimited:
+        model_id = "fake/model"
+
+        def __init__(self):
+            self.calls = 0
+
+        def execute_task(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return {"status": "ERROR",
+                        "error": 'HTTP 429: {"status":429,"title":"Too Many Requests"}'}
+            return {"status": "SUCCESS", "content": '{"items": []}'}
+
+    class _AlwaysLimited:
+        model_id = "fake/model"
+
+        def __init__(self):
+            self.calls = 0
+
+        def execute_task(self, **kwargs):
+            self.calls += 1
+            return {"status": "ERROR", "error": "HTTP 429: Too Many Requests"}
+
+    slept = []
+    original_sleep = dd.time.sleep
+    dd.time.sleep = lambda seconds: slept.append(seconds)
+    try:
+        executor = _RateLimited()
+        res, note = _ask_model(executor, task_prompt="p")
+        assert not note, f"the retry must recover the answer ({note})"
+        assert res.get("status") == "SUCCESS", "the second answer must be taken"
+        assert executor.calls == 2, f"the model must be asked twice ({executor.calls})"
+        assert slept == [RATE_LIMIT_PAUSE], f"the wait must be {RATE_LIMIT_PAUSE}s ({slept})"
+
+        # A permanent limit must not turn into an endless wait.
+        slept.clear()
+        hard = _AlwaysLimited()
+        res2, note2 = _ask_model(hard, task_prompt="p")
+        assert note2, "a permanent rate limit must be reported"
+        assert hard.calls == 2, f"only one retry is allowed ({hard.calls})"
+    finally:
+        dd.time.sleep = original_sleep
+
+    print("[+] Test 42 Passed: the rate limit is waited out, not surrendered to.")
 
 
 if __name__ == "__main__":
@@ -2537,6 +2622,7 @@ if __name__ == "__main__":
         test_39_selection_reads_every_json_shape_and_lies_never,
         test_40_the_letter_survives_a_phone_screen,
         test_41_the_news_is_written_out_in_full,
+        test_42_a_rate_limit_is_not_a_bad_answer,
     ]
     failed = []
     for t in tests:

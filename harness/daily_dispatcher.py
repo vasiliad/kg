@@ -42,6 +42,7 @@ The new pipeline is the plan's Workstream B:
 import os
 import sys
 import json
+import time
 import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -446,6 +447,53 @@ def _map_items(raw_items: List[Dict[str, Any]], candidates: List[Dict[str, Any]]
     return items
 
 
+# A rate limit is not a bad answer. Measured in the cloud on 2026-11-02:
+# the second dispatch run was answered with «HTTP 429: Too Many Requests»
+# and the letter lost the curation. So the harness waits and asks again.
+RATE_LIMIT_PAUSE = 45
+
+
+def _ask_model(
+    executor: MiniMaxExecutor,
+    task_prompt: str,
+    context: str = "",
+    max_tokens: int = 8192,
+    temperature: float = 0.2,
+    model_id: Optional[str] = None,
+) -> Tuple[Dict[str, Any], str]:
+    """
+    One model call, with ONE extra try after a rate limit.
+
+    Returns (result, note). The note is empty when the model answered.
+    """
+    res: Dict[str, Any] = {}
+    for attempt in range(2):
+        try:
+            res = executor.execute_task(
+                task_prompt=task_prompt,
+                context=context,
+                enable_search=False,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                model_id=model_id,
+            )
+        except Exception as e:
+            return {}, f"модель недоступна ({type(e).__name__})"
+
+        if res.get("status") == "SUCCESS":
+            return res, ""
+
+        error = str(res.get("error", "") or "")
+        if "429" in error and attempt == 0:
+            print(f"[!] The provider rate-limited us ({error[:70]}); "
+                  f"waiting {RATE_LIMIT_PAUSE}s and asking again...")
+            time.sleep(RATE_LIMIT_PAUSE)
+            continue
+        return res, f"модель не ответила ({error or 'unknown'})"
+
+    return res, "модель не ответила (лимит запросов)"
+
+
 def select_digest_items(
     executor: MiniMaxExecutor,
     candidates: List[Dict[str, Any]],
@@ -477,21 +525,16 @@ def select_digest_items(
     ]
     last_note = ""
     for attempt_index, (task_prompt, task_context) in enumerate(attempts):
-        try:
-            res = executor.execute_task(
-                task_prompt=task_prompt,
-                context=task_context,
-                enable_search=False,
-                max_tokens=8192,
-                temperature=0.2,
-                model_id=model_id,
-            )
-        except Exception as e:
-            last_note = f"модель недоступна ({type(e).__name__})"
-            break
-
-        if res.get("status") != "SUCCESS":
-            last_note = f"модель не ответила ({res.get('error', 'unknown')})"
+        res, note = _ask_model(
+            executor,
+            task_prompt=task_prompt,
+            context=task_context,
+            max_tokens=8192,
+            temperature=0.2,
+            model_id=model_id,
+        )
+        if note:
+            last_note = note
             break
 
         answer = res.get("content", "")
@@ -664,20 +707,16 @@ def write_full_news(
 
     prompt = FULL_NEWS_PROMPT.format(context=_full_sources_block(items, pages))
     print(f"[*] Writing the news in full via {model_id or executor.model_id}...")
-    try:
-        res = executor.execute_task(
-            task_prompt=prompt,
-            context="",
-            enable_search=False,
-            max_tokens=12288,
-            temperature=0.3,
-            model_id=model_id,
-        )
-    except Exception as e:
-        return items, f"модель недоступна ({type(e).__name__})"
-
-    if res.get("status") != "SUCCESS":
-        return items, f"модель не ответила ({res.get('error', 'unknown')})"
+    res, note = _ask_model(
+        executor,
+        task_prompt=prompt,
+        context="",
+        max_tokens=12288,
+        temperature=0.3,
+        model_id=model_id,
+    )
+    if note:
+        return items, note
 
     answer = res.get("content", "")
     raw_items = parse_selection(answer)
