@@ -718,8 +718,11 @@ def test_18_multilingual_and_tool_use_probes_are_objective():
     assert "translation" in fleet_probes.PROBE_TASKS and "toolcall" in fleet_probes.PROBE_TASKS
     assert "prose" in fleet_probes.PROBE_TASKS, \
         "the prose probe must exist: a model that cannot talk to a human must lose points"
-    assert DEFAULT_POLICY["quality_tasks"] == ["reasoning", "code", "json", "translation", "toolcall", "prose"], \
-        "every quality candidate must get the same probes, or the composite is not comparable"
+    assert "canary_news" in fleet_probes.PROBE_TASKS, \
+        "the canary must exist: a model that cannot write the letter must lose points"
+    assert DEFAULT_POLICY["quality_tasks"] == [
+        "reasoning", "code", "json", "translation", "toolcall", "prose", "canary_news",
+    ], "every quality candidate must get the same probes, or the composite is not comparable"
     weights = fleet_probes.probe_weights(DEFAULT_POLICY["quality_tasks"] + ["instruction"])
     assert abs(sum(weights.values()) - 1.0) < 1e-9, "probe weights must sum to 1"
     assert weights["instruction"] > 0, "the operator's language must keep a share"
@@ -2758,6 +2761,56 @@ def test_45_the_digest_reaches_telegram_as_a_control_copy():
 
     print("[+] Test 45 Passed: the digest is control-delivered through Telegram, once a day.")
 
+def test_46_the_canary_measures_the_letter_task():
+    """
+    The generic probes measure reasoning and code, but the operator's daily
+    letter depends on ONE shape of work: read a source, write the news out
+    in full, keep the facts. The canary measures exactly that on a fixture
+    text with deliberately checkable numbers — a model that drops or
+    invents them is a model that would fabricate the morning letter.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 46: The canary scores the digest's own task")
+    print("=" * 60)
+    from harness import fleet_probes
+
+    good = ("Лаборатория Пример открыла веса модели Пример-440, насчитывающей "
+            "440 миллиардов параметров, и выложила чекпойнты в публичный каталог. "
+            "Перед открытием модель прошла проверку на 94 бенчмарках и показала "
+            "результат на 12 процентов выше предыдущей версии. Окно контекста "
+            "выросло в восемь раз и достигло одного миллиона токенов, поэтому "
+            "модель применима к длинным документам без промежуточного сжатия. "
+            "Лицензия разрешает коммерческое использование, но для развёртывания "
+            "требуется восемь графических ускорителей. Веса открыты для "
+            "разработчиков, которым важен локальный запуск и контроль над данными.")
+    score, verdict = fleet_probes.check_canary_news(good)
+    assert score == 1.0 and verdict == "full_news", f"a full news must score 1.0 ({score}, {verdict})"
+
+    score, verdict = fleet_probes.check_canary_news("Модель Пример-440 открыта.")
+    assert verdict == "brief", f"a teaser is a brief ({verdict})"
+
+    score, verdict = fleet_probes.check_canary_news('{"tool": "live_search", "arguments": {}}')
+    assert score == 0.0 and verdict == "tool_call", f"a machine shape scores zero ({verdict})"
+
+    score, verdict = fleet_probes.check_canary_news(good.replace("94 бенчмарках", "множестве проверок"))
+    assert verdict.startswith("missing_facts") and "94" in verdict,         f"a dropped fact must be caught ({verdict})"
+
+    score, verdict = fleet_probes.check_canary_news("Вот подробный рассказ. " + good)
+    assert verdict == "wrapped", f"commentary around the news must be caught ({verdict})"
+
+    # The weights ARE the distribution and the canary carries a real share.
+    total = sum(v["weight"] for v in fleet_probes.PROBE_TASKS.values())
+    assert abs(total - 1.0) < 0.001, f"raw weights must sum to 1.0 ({total})"
+    assert fleet_probes.PROBE_TASKS["canary_news"]["weight"] >= 0.10,         "the canary must carry a real share, not a token one"
+    assert "canary_news" in fleet_probes.PROBE_TASKS and "canary_news" in fleet_probes.CHECKERS
+
+    # The offline stub must exercise the canary path end-to-end.
+    import harness.fleet_tuner as ft
+    source = (PROJECT_ROOT / "harness" / "fleet_tuner.py").read_text(encoding="utf-8")
+    assert "440 миллиардов" in source, "the offline stub must answer the canary"
+
+    print("[+] Test 46 Passed: the fleet tuner measures the letter task itself.")
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -2814,6 +2867,7 @@ if __name__ == "__main__":
         test_43_state_writes_are_atomic,
         test_44_a_failed_letter_raises_a_backup_alert,
         test_45_the_digest_reaches_telegram_as_a_control_copy,
+        test_46_the_canary_measures_the_letter_task,
     ]
     failed = []
     for t in tests:

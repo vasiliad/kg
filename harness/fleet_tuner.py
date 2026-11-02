@@ -64,7 +64,7 @@ from harness import fleet_drift
 DEFAULT_POLICY = {
     "max_candidates": 18,        # pinged
     "quality_candidates": 6,     # get the full objective probe set
-    "quality_tasks": ["reasoning", "code", "json", "translation", "toolcall", "prose"],
+    "quality_tasks": ["reasoning", "code", "json", "translation", "toolcall", "prose", "canary_news"],
     "param_sweep": True,         # tune sampling parameters by measurement
     "min_score": 55.0,           # below this a model is not duty-eligible
     "min_params_b": 150.0,       # hard floor: models under 150B never enter the pool
@@ -687,6 +687,21 @@ class FleetTuner:
                                  "    except Exception:\n        pass\n```")}
             if "грузополучатель" in low:
                 return {"ok": True, "status": "OK", "latency_sec": 3.0, "text": "Consignee"}
+            if "развёрнутое описание" in low and "440 миллиардов" in low:
+                # The canary probe: the digest's own task on the fixture.
+                return {"ok": True, "status": "OK", "latency_sec": 6.0,
+                        "text": ("Лаборатория Пример открыла веса модели Пример-440, насчитывающей "
+                                 "440 миллиардов параметров, и выложила чекпойнты в публичный каталог. "
+                                 "Перед открытием модель прошла внутреннюю проверку на 94 бенчмарках и "
+                                 "показала результат на 12 процентов выше предыдущей версии, что делает "
+                                 "её одним из заметных событий среди открытых моделей этого сезона. "
+                                 "Окно контекста выросло в восемь раз и достигло одного миллиона токенов, "
+                                 "поэтому модель теперь применима к длинным документам без промежуточного "
+                                 "сжатия. Лицензия разрешает коммерческое использование, однако для "
+                                 "развёртывания требуется восемь графических ускорителей, что задаёт "
+                                 "нижнюю границу железа для локального запуска. Весам открытие даёт "
+                                 "разработчикам, которым важны локальный запуск и контроль над данными, "
+                                 "прямой доступ к модели без обращения к внешнему API.")}
             if "дежурный оператор" in low:
                 # The prose probe: the answer a human may read.
                 return {"ok": True, "status": "OK", "latency_sec": 5.0,
