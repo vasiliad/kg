@@ -179,5 +179,27 @@
       "nvidia/nemotron-3-ultra-550b-a55b": 96.25,
       "mistralai/mistral-large-4-1t-a52b": 81.18
     }
+  },
+  {
+    "tuned_at": "2026-11-02 14:37:44 UTC",
+    "fleet": [
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "minimaxai/minimax-m3.1-flash",
+      "mistralai/mistral-large-4-1t-a52b"
+    ],
+    "primary": "nvidia/nemotron-3-ultra-550b-a55b",
+    "tasks": [
+      "reasoning",
+      "code",
+      "json",
+      "translation",
+      "toolcall",
+      "prose"
+    ],
+    "scores": {
+      "nvidia/nemotron-3-ultra-550b-a55b": 96.25,
+      "minimaxai/minimax-m3.1-flash": 88.7,
+      "mistralai/mistral-large-4-1t-a52b": 68.57
+    }
   }
 ]
