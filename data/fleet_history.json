@@ -112,5 +112,28 @@
       "z-ai/glm-5.3-flash": 65.92,
       "stepfun-ai/step-5-preview": 99.7
     }
+  },
+  {
+    "tuned_at": "2026-11-02 05:20:14 UTC",
+    "fleet": [
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "minimaxai/minimax-m3.1-flash",
+      "mistralai/mistral-large-4-1t-a52b",
+      "stepfun-ai/step-5-preview"
+    ],
+    "primary": "nvidia/nemotron-3-ultra-550b-a55b",
+    "tasks": [
+      "reasoning",
+      "code",
+      "json",
+      "translation",
+      "toolcall"
+    ],
+    "scores": {
+      "nvidia/nemotron-3-ultra-550b-a55b": 96.25,
+      "minimaxai/minimax-m3.1-flash": 84.08,
+      "mistralai/mistral-large-4-1t-a52b": 81.24,
+      "stepfun-ai/step-5-preview": 59.55
+    }
   }
 ]
