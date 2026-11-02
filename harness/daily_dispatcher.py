@@ -225,6 +225,16 @@ def build_health_report_email() -> Dict[str, str]:
     now_novt = datetime.now(timezone(timedelta(hours=7))).strftime("%d.%m.%Y %H:%M НСК")
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    # The RED LINE: the strain the complex counts in ITSELF. Errors over
+    # 24h and the Actions load of the day, so the operator sees the
+    # degradation coming instead of reading about it after it happened.
+    # The run count is measured by the workflow (one gh api call) and
+    # passed in; locally it honestly says "не посчитано".
+    errors_24h = sum(1 for log in recent_logs if log["is_error"])
+    delivered_24h = sum(1 for log in recent_logs if "ОТЧЁТЫ ОТПРАВЛЕНЫ" in log["message"].upper())
+    failed_24h = sum(1 for log in recent_logs if "НЕ ОТПРАВЛЕНЫ" in log["message"].upper())
+    actions_runs = os.getenv("ACTIONS_RUNS_24H", "").strip()
+
     report = {
         "subject": "Проверка связи",
         "now_label": f"{now_novt} ({now_utc})",
@@ -236,6 +246,12 @@ def build_health_report_email() -> Dict[str, str]:
         "arbiter": {
             "model": state.get("local_arbiter") or "не зафиксирован",
             "mode": mode,
+        },
+        "strain": {
+            "errors_24h": errors_24h,
+            "delivered_24h": delivered_24h,
+            "failed_24h": failed_24h,
+            "actions_runs_24h": actions_runs,
         },
         "incidents": [
             {

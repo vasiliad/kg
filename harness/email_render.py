@@ -532,6 +532,32 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         f"</td></tr></table>"
     )
 
+    # --- the RED LINE: the strain the complex counts in itself ------------
+    strain = report.get("strain") or {}
+    errors_24h = int(strain.get("errors_24h") or 0)
+    if errors_24h == 0:
+        line_color, line_bg = GOOD, "#f0fdf4"
+    elif errors_24h <= 5:
+        line_color, line_bg = "#b45309", "#fffbeb"
+    else:
+        line_color, line_bg = BAD, "#fef2f2"
+    delivered = int(strain.get("delivered_24h") or 0)
+    failed = int(strain.get("failed_24h") or 0)
+    budget = str(strain.get("actions_runs_24h") or "").strip()
+    budget_line = f"запусков Actions за сутки: {escape(budget)}" if budget else "запусков Actions за сутки: не посчитано"
+    body.append(
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="border-collapse:collapse; margin:0 0 18px 0;">'
+        f'<tr><td style="padding:12px 14px; background:{line_bg}; border:1px solid {LINE}; '
+        f'border-left:4px solid {line_color};">'
+        f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">Красная линия</div>'
+        f'<div style="font-size:16px; font-weight:700; color:{line_color}; padding-top:3px;">'
+        f"{'Ошибок за 24 часа' if errors_24h != 1 else 'Ошибка за 24 часа'}: {errors_24h}</div>"
+        f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">'
+        f"Писем доставлено {delivered}, не доставлено {failed} · {budget_line}</div>"
+        f"</td></tr></table>"
+    )
+
     # --- the arbiter -------------------------------------------------------
     body.append(
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
@@ -630,6 +656,9 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         f"2. Диск: {disk.get('free_gb')} ГБ свободно ({disk.get('percent_used')}% занято)",
         f"3. Арбитр: {arbiter.get('model') or '—'}",
         f"   Режим: {arbiter.get('mode') or '—'}",
+        f"4. Красная линия: ошибок за 24 часа {errors_24h}"
+        f" · писем доставлено {delivered}, не доставлено {failed}"
+        f" · {'запусков Actions за сутки: ' + budget if budget else 'запусков Actions за сутки: не посчитано'}",
         "",
         "События за 24 часа:",
     ]
