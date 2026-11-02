@@ -26,6 +26,9 @@ STATE_FILES=(
   "data/telegram_history.txt"
   "active_models.json"
   "data/fleet_report.json"
+  # The duty shift outlives the 50-minute runner window: without this file
+  # the next window would pick a new model every time.
+  "data/duty_shift.json"
   "nim_history.log"
 )
 

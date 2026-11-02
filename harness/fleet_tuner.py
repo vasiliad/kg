@@ -63,7 +63,7 @@ from harness import fleet_drift
 DEFAULT_POLICY = {
     "max_candidates": 18,        # pinged
     "quality_candidates": 6,     # get the full objective probe set
-    "quality_tasks": ["reasoning", "code", "json", "translation", "toolcall"],
+    "quality_tasks": ["reasoning", "code", "json", "translation", "toolcall", "prose"],
     "param_sweep": True,         # tune sampling parameters by measurement
     "min_score": 55.0,           # below this a model is not duty-eligible
     "min_params_b": 150.0,       # hard floor: models under 150B never enter the pool
@@ -686,6 +686,11 @@ class FleetTuner:
                                  "    except Exception:\n        pass\n```")}
             if "грузополучатель" in low:
                 return {"ok": True, "status": "OK", "latency_sec": 3.0, "text": "Consignee"}
+            if "дежурный оператор" in low:
+                # The prose probe: the answer a human may read.
+                return {"ok": True, "status": "OK", "latency_sec": 5.0,
+                        "text": ("Я нашёл генетический тест «Атлас» на Ozon: около 12 000 ₽. "
+                                 "Источник: карточка товара на Ozon.")}
             if "get_weather" in low:
                 return {"ok": True, "status": "OK", "latency_sec": 4.0,
                         "text": '{"tool": "get_weather", "arguments": {"city": "Новосибирск"}}'}

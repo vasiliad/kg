@@ -444,6 +444,23 @@ class MemoryEngine:
         except Exception:
             return ""
 
+    def get_previous_user_turn(self) -> str:
+        """
+        The operator's last message — the topic a continuation refers to.
+
+        Measured on 2026-11-01: «Ищи дальше» carries no topic of its own, so
+        the search planner had nothing to inherit and the live web was never
+        asked. The topic sits in the previous turn of the conversation log.
+        """
+        try:
+            blocks = self._parse_history_blocks()
+        except Exception:
+            return ""
+        for block in reversed(blocks):
+            if block.get("role") == "user":
+                return str(block.get("text") or "").strip()
+        return ""
+
     @staticmethod
     def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
         return vector_codec.cosine(vec_a, vec_b)

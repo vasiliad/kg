@@ -95,6 +95,101 @@ LOOKUP_OBJECTS: tuple = (
     "валю",
 )
 
+# A named site is as explicit as «в интернете».
+#
+# Measured on 2026-11-01: the operator wrote «Найди на озон», and because
+# «озон» was in no lookup vocabulary the planner answered «вопрос отвечается
+# собственным состоянием комплекса» — the live web was never asked, and the
+# duty model answered with a tool call instead of with a result.
+#
+# The alias is what the operator writes; the canonical domain is what the
+# search engine and the relevance guard understand.
+SITE_ALIASES: tuple = tuple(sorted((
+    ("яндекс маркет", "market.yandex.ru"),
+    ("яндекс.маркет", "market.yandex.ru"),
+    ("yandex market", "market.yandex.ru"),
+    ("сбермегамаркет", "megamarket.ru"),
+    ("мегамаркет", "megamarket.ru"),
+    ("wildberries", "wildberries.ru"),
+    ("dns-shop", "dns-shop.ru"),
+    ("dns shop", "dns-shop.ru"),
+    ("leroy merlin", "leroymerlin.ru"),
+    ("ozon", "ozon.ru"),
+    ("озон", "ozon.ru"),
+    ("авито", "avito.ru"),
+    ("avito", "avito.ru"),
+    ("днс", "dns-shop.ru"),
+    ("dns", "dns-shop.ru"),
+    ("ситилинк", "citilink.ru"),
+    ("citilink", "citilink.ru"),
+    ("эльдорадо", "eldorado.ru"),
+    ("aliexpress", "aliexpress.ru"),
+    ("amazon", "amazon.com"),
+    ("ebay", "ebay.com"),
+    ("lamoda", "lamoda.ru"),
+    ("лабода", "lamoda.ru"),
+    ("вб", "wildberries.ru"),
+    ("habr", "habr.com"),
+    ("хабр", "habr.com"),
+    ("github", "github.com"),
+    ("gitlab", "gitlab.com"),
+    ("arxiv", "arxiv.org"),
+    ("wikipedia", "wikipedia.org"),
+    ("википедия", "wikipedia.org"),
+    ("youtube", "youtube.com"),
+    ("ютуб", "youtube.com"),
+    ("skillbox", "skillbox.ru"),
+    ("скилбокс", "skillbox.ru"),
+), key=lambda pair: -len(pair[0])))
+
+# A bare domain is a site too. The label must start with a letter so that
+# «100.рублей» is not read as a domain.
+DOMAIN_RE = re.compile(
+    r"(?<![\w-])[A-Za-zА-Яа-яЁё][\w-]{1,}"
+    r"\.(?:ru|com|net|org|io|co|ai|dev|app|shop|store|market|info|рф)"
+    r"(?![\w-])",
+    re.IGNORECASE,
+)
+
+# «найди на Озон» — the site follows the verb and a preposition. The token is
+# checked in the ORIGINAL text: a capitalised name is a site, a lowercase one
+# («найди на дежурного») is our own complex.
+SITE_AFTER_PREPOSITION_RE = re.compile(
+    r"(?:найди|найдите|поищи|поищите|поискать|загугли|загуглите|посмотри|"
+    r"посмотрите|открой|открыть)\s+(?:на|в|во)\s+(?:сайте\s+)?([^\s,.;!?]+)",
+    re.IGNORECASE,
+)
+
+# A continuation carries no topic of its own: «Ищи дальше» only makes sense
+# next to the previous question.
+CONTINUATION_PHRASES: tuple = (
+    "ищи дальше",
+    "ищи еще",
+    "ищи ещё",
+    "ищите дальше",
+    "дальше ищи",
+    "продолжай",
+    "продолжить поиск",
+    "продолжи поиск",
+    "еще варианты",
+    "ещё варианты",
+    "другие варианты",
+    "ищи еще раз",
+    "ищи ещё раз",
+    "следующая страница",
+    "more",
+    "next page",
+)
+
+CONTINUATION_WORDS: frozenset = frozenset({
+    "дальше", "еще", "ещё", "варианты", "вариант", "ищи", "ищите", "искать",
+    "продолжай", "продолжить", "more", "next", "страница", "ещёраз", "ещераз",
+})
+
+# The tail a continuation adds, so that the second search is not a repeat of
+# the first one.
+CONTINUATION_TAIL = "другие варианты"
+
 # The question frame: "что нового в X" carries the topic in X, not in the
 # frame. The frame is stripped only from the front — inside the sentence it
 # may be the very word that matters.
@@ -357,6 +452,104 @@ def _strip_leading_preposition(text: str) -> str:
     return text
 
 
+def detect_site(prompt: str) -> Optional[Dict[str, Any]]:
+    """
+    The site the operator named, or None.
+
+    The alias is what was written («озон»), the canonical is the domain the
+    search engine and the relevance guard understand («ozon.ru»).
+    """
+    text = (prompt or "").strip()
+    if not text:
+        return None
+    low = text.lower()
+    for alias, canonical in SITE_ALIASES:
+        if re.search(rf"(?<![\w-]){re.escape(alias)}(?![\w-])", low):
+            return {"alias": alias, "canonical": canonical}
+    match = DOMAIN_RE.search(text)
+    if match:
+        return {"alias": match.group(0), "canonical": match.group(0).lower()}
+    return None
+
+
+def _strip_site_preposition(text: str, site: Optional[Dict[str, Any]]) -> str:
+    """
+    Removes the preposition that introduces the site: «на озон» must reach
+    the engine as «озон», not as «на озон».
+    """
+    if not site:
+        return text
+    alias = re.escape(site["alias"])
+    return re.sub(
+        rf"(?:на|в|во|у)\s+(?:сайте\s+)?(?={alias}(?![\w-]))",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+def _replace_site(text: str, site: Optional[Dict[str, Any]]) -> str:
+    """Puts the canonical domain in place of the alias the operator wrote."""
+    if not site:
+        return text
+    canonical = site["canonical"]
+    if canonical.lower() in text.lower():
+        return text
+    alias = re.escape(site["alias"])
+    return re.sub(
+        rf"(?<![\w-]){alias}(?![\w-])",
+        canonical,
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+def _strip_site(text: str, site: Optional[Dict[str, Any]]) -> str:
+    """Removes the site from a query, leaving only its topic."""
+    if not site:
+        return text
+    cleaned = re.sub(
+        rf"(?<![\w-]){re.escape(site['canonical'])}(?![\w-])",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        rf"(?<![\w-]){re.escape(site['alias'])}(?![\w-])",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", cleaned).strip(" ,;:.—–-")
+
+
+def _topic_words(text: str) -> List[str]:
+    """
+    The topical words of a query — no question words, no continuation noise.
+    """
+    words = re.findall(r"[\w-]+", (text or "").lower())
+    return [
+        word for word in words
+        if len(word) >= 2 and word not in STOP_WORDS and word not in CONTINUATION_WORDS
+    ]
+
+
+def is_continuation(prompt: str) -> bool:
+    """
+    Whether the operator continues the previous search instead of starting a
+    new one («Ищи дальше»). A continuation has no topic of its own.
+    """
+    low = (prompt or "").strip().lower()
+    if not low:
+        return False
+    for phrase in CONTINUATION_PHRASES:
+        if phrase in low:
+            return True
+    query = formulate(prompt)
+    words = re.findall(r"[\w-]+", query.lower())
+    return bool(words) and all(word in CONTINUATION_WORDS for word in words)
+
+
 def formulate(prompt: str, max_len: int = MAX_QUERY_LEN) -> str:
     """
     The topical core of the operator's question — what the search engine
@@ -367,11 +560,16 @@ def formulate(prompt: str, max_len: int = MAX_QUERY_LEN) -> str:
     if not raw:
         return ""
 
+    site = detect_site(raw)
     text = _fix_spacing(raw)
     text = _strip_prefix(text, INTENT_PREFIXES)
     text = _drop_fillers(text)
     text = _strip_prefix(text, QUESTION_FRAMES)
     text = _strip_leading_preposition(text)
+    # A named site keeps its place in the query — only the preposition that
+    # introduces it («на озон») is grammar, not topic.
+    text = _strip_site_preposition(text, site)
+    text = _replace_site(text, site)
     text = text.strip(" \t\n?!.«»\"'")
     text = re.sub(r"\s+", " ", text).strip(" ,;:.—–-")
 
@@ -405,15 +603,29 @@ def has_intent(prompt: str) -> bool:
 def lookup_request(prompt: str) -> bool:
     """
     A lookup request whose object the live web actually knows ("найди
-    компанию", "поищи сайт"). The verb alone is not enough: «найди дежурного»
-    is a question about our own roster, not about the world.
+    компанию", "поищи сайт", "найди на Озон"). The verb alone is not enough:
+    «найди дежурного» is a question about our own roster, not about the
+    world.
+
+    A named site is enough on its own: the operator named the place where
+    the answer lives, which is exactly what «в интернете» says without
+    naming it.
     """
-    low = (prompt or "").strip().lower()
-    if not low:
+    raw = (prompt or "").strip()
+    if not raw:
         return False
+    low = raw.lower()
+    if detect_site(raw) or DOMAIN_RE.search(raw):
+        return True
     if not any(re.search(rf"(?<!\w){re.escape(v)}(?!\w)", low) for v in REQUEST_VERBS):
         return False
-    return any(obj in low for obj in LOOKUP_OBJECTS)
+    if any(obj in low for obj in LOOKUP_OBJECTS):
+        return True
+    # «Найди на Озон» — a capitalised name after the preposition is a site.
+    match = SITE_AFTER_PREPOSITION_RE.search(raw)
+    if match and match.group(1)[:1].isupper():
+        return True
+    return False
 
 
 def needs_search(prompt: str) -> bool:
@@ -429,29 +641,90 @@ def needs_search(prompt: str) -> bool:
     # 1. An explicit request for the web outranks everything else.
     if has_intent(text):
         return True
+    # 2. A named site is as explicit as «в интернете». It outranks our own
+    #    state as well: «найди работу на ozon.ru» carries «бот» inside
+    #    «работа» and was therefore answered from our own memory.
+    if detect_site(text) or DOMAIN_RE.search(text):
+        return True
     low = text.lower()
-    # 2. Our own state answers our own questions.
-    if any(marker in low for marker in LOCAL_MARKERS):
+    # 3. Our own state answers our own questions.
+    if any(marker in low for marker in LOCAL_MARKERS if marker != "бот"):
         return False
-    # 3. A lookup request, or a question about fresh / priced facts.
-    if lookup_request(low):
+    # «бот» as a word, not as a piece of a word: «работа» and «ботинки»
+    # are not about the complex.
+    if re.search(r"(?<!\w)бот(?!\w)", low):
+        return False
+    # 4. A lookup request, or a question about fresh / priced facts.
+    if lookup_request(text):
         return True
     return any(marker in low for marker in RECENCY_MARKERS)
 
 
-def plan(prompt: str) -> Dict[str, Any]:
+def plan(prompt: str, previous: Optional[str] = None) -> Dict[str, Any]:
     """
     What the search layer should do with this question: the query to send,
     whether the live web is needed at all, and why (for the log).
+
+    `previous` is the operator's last message. A question that names only a
+    place («Найди на озон») or is only a continuation («Ищи дальше») carries
+    no topic of its own — the topic is inherited from the previous turn.
     """
-    query = formulate(prompt)
-    search = needs_search(prompt)
-    if has_intent(prompt):
-        reason = "оператор явно запросил интернет"
-    elif search and lookup_request(prompt):
-        reason = "оператор попросил найти в вебе"
-    elif search:
-        reason = "вопрос о свежих или рыночных данных"
+    raw = (prompt or "").strip()
+    site = detect_site(raw)
+    query = formulate(raw)
+    continued = is_continuation(raw)
+
+    inherited = ""
+    previous_site = None
+    if previous:
+        previous_raw = (previous or "").strip()
+        previous_site = detect_site(previous_raw)
+        previous_query = formulate(previous_raw)
+        previous_topic = _topic_words(_strip_site(previous_query, previous_site))
+        if previous_topic:
+            inherited = " ".join(previous_topic)
+
+    own_topic = _topic_words(_strip_site(query, site))
+    if not own_topic and inherited:
+        # The question named a place but no topic: the topic is the previous
+        # one. Without it the search engine receives «ozon.ru» and answers
+        # with the marketplace's home page.
+        # A continuation keeps the site of the previous turn as well — the
+        # operator is looking for MORE of the same thing, on the same site.
+        place = site["canonical"] if site else (
+            previous_site["canonical"] if previous_site else ""
+        )
+        parts = [place, inherited]
+        query = " ".join(part for part in parts if part).strip()
+        if continued:
+            query = f"{query} {CONTINUATION_TAIL}".strip()
+        search = True
+        reason = ("продолжение темы предыдущей реплики" if continued
+                  else "оператор назвал сайт, тема взята из предыдущей реплики")
     else:
-        reason = "вопрос отвечается собственным состоянием комплекса"
-    return {"query": query, "search": search, "reason": reason, "raw": (prompt or "").strip()}
+        search = needs_search(raw)
+        if continued:
+            search = True
+        if has_intent(raw):
+            reason = "оператор явно запросил интернет"
+        elif site:
+            reason = "оператор назвал сайт"
+        elif search and lookup_request(raw):
+            reason = "оператор попросил найти в вебе"
+        elif search:
+            reason = "вопрос о свежих или рыночных данных"
+        else:
+            reason = "вопрос отвечается собственным состоянием комплекса"
+
+    if len(query) > MAX_QUERY_LEN:
+        query = query[:MAX_QUERY_LEN].rsplit(" ", 1)[0].strip(" ,;:.—–-")
+
+    return {
+        "query": query,
+        "search": search,
+        "reason": reason,
+        "raw": raw,
+        "site": site["canonical"] if site else "",
+        "continued": continued,
+        "inherited": inherited if not own_topic else "",
+    }

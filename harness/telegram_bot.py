@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
+from urllib.parse import urlsplit
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -54,6 +55,7 @@ from harness.tools import AgentToolbox
 from harness import runtime_settings
 from harness import redaction
 from harness import operational_context
+from harness import tool_call
 
 
 class _NoMarkup:
@@ -77,6 +79,73 @@ NO_MARKUP = _NoMarkup()
 def _now_iso() -> str:
     """UTC timestamp, second precision — the unit the health block speaks in."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _operator_safe_text(text: str) -> str:
+    """
+    The answer a human may read.
+
+    Measured on 2026-11-01: the duty model answered «Найди на озон» with a raw
+    JSON tool call and the operator received "only curly braces". The executor
+    now runs such a call and asks again, but the bot is the last door to the
+    operator: whatever comes out of a model is checked here. A machine-shaped
+    answer becomes a sentence about what the model wanted to do.
+    """
+    if not text:
+        return ""
+    call = tool_call.parse_tool_call(text)
+    if not call:
+        return text
+
+    wanted = tool_call.tool_query(call) or tool_call.tool_url(call) or "—"
+    warning = (
+        "⚠️ Модель вернула вызов инструмента вместо ответа "
+        f"({tool_call.describe_call(call)}).\n"
+        f"Запрос, который она хотела выполнить: {wanted}"
+    )
+    prose = tool_call.strip_tool_calls(text)
+    if prose:
+        # The answer carried prose AND a call: the prose is the answer.
+        return f"{prose}\n\n{warning}"
+    return warning
+
+
+def _short_link(url: str) -> str:
+    """`https://ozon.ru/item/1234567890/` -> `ozon.ru/item/1234567890`."""
+    try:
+        parsed = urlsplit(url)
+        host = parsed.netloc.replace("www.", "")
+        path = parsed.path.rstrip("/")
+        if not path:
+            return host or url[:60]
+        return f"{host}{path[-48:]}"
+    except Exception:
+        return url[:60]
+
+
+def _sources_block(citations: List[Any]) -> str:
+    """
+    The links the duty model actually used — clickable, and honest.
+
+    `res["citations"]` used to be dropped on the floor: the operator got a
+    claim about the live web with no way to check it. Only http(s) links are
+    rendered; anything else is not a source.
+    """
+    seen: List[str] = []
+    for raw in citations or []:
+        url = str(raw or "").strip()
+        if not url.lower().startswith(("http://", "https://")):
+            continue
+        if url not in seen:
+            seen.append(url)
+    if not seen:
+        return ""
+    lines = ["🔗 <b>Источники</b>"]
+    for url in seen[:10]:
+        lines.append(f'<a href="{html.escape(url, quote=True)}">{html.escape(_short_link(url))}</a>')
+    if len(seen) > 10:
+        lines.append(f"…ещё {len(seen) - 10}")
+    return "\n".join(lines)
 
 
 def health_line(health: Optional[Dict[str, Any]]) -> str:
@@ -748,19 +817,25 @@ class HarnessTelegramBot:
     def handle_keenable_search(self, chat_id: int, query: str) -> None:
         """Handles /search command."""
         self.send_chat_action(chat_id, "typing")
-        self.send_message(chat_id, f"🔍 <i>Выполняю немодифицированный поиск через Keenable:</i>\n<code>{query}</code>", parse_mode="HTML")
-        
+        self.send_message(chat_id, f"🔍 <i>Ищу в живом вебе:</i>\n<code>{html.escape(query)}</code>", parse_mode="HTML")
+
         results = self.executor.search_web(query, num_results=3)
         if not results:
             self.send_message(chat_id, "[-] По вашему запросу ничего не найдено.")
             return
 
-        resp = [f"🌐 <b>Результаты поиска Keenable ({len(results)} источника):</b>\n"]
+        # The tier that actually served the answer — not a hardcoded brand.
+        tier = getattr(self.executor, "last_search_tier", "") or "неизвестный тир"
+        resp = [f"🌐 <b>Результаты поиска ({len(results)} источника, тир: {html.escape(str(tier))}):</b>\n"]
         for idx, r in enumerate(results, 1):
             title = r.get("title", "Источник")
-            url = r.get("url", "")
+            url = str(r.get("url", "") or "")
             snip = r.get("snippet", "").strip()[:500]
-            resp.append(f"<b>{idx}. {html.escape(title)}</b>\n🔗 {url}\n{html.escape(snip)}\n")
+            link = (
+                f'<a href="{html.escape(url, quote=True)}">{html.escape(_short_link(url))}</a>'
+                if url.lower().startswith(("http://", "https://")) else ""
+            )
+            resp.append(f"<b>{idx}. {html.escape(title)}</b>\n{link}\n{html.escape(snip)}\n")
 
         self.send_message(chat_id, "\n".join(resp), parse_mode="HTML")
 
@@ -812,7 +887,8 @@ class HarnessTelegramBot:
             max_tokens=16384,
             temperature=0.6
         )
-        content = minimax_res.get("content", arbiter_output)
+        content = _operator_safe_text(minimax_res.get("content", arbiter_output))
+        arbiter_output = _operator_safe_text(arbiter_output)
         self.memory_engine.append_message("minimax", content, {"chat_id": chat_id})
 
         reply = (
@@ -840,7 +916,7 @@ class HarnessTelegramBot:
         self.send_chat_action(chat_id, "typing")
         placeholder_id = self.send_message(
             chat_id,
-            "🧠 <i>Хранитель распределяет задачу дежурной команде...</i>",
+            "🧠 <i>Хранитель передаёт задачу дежурной модели смены...</i>",
             parse_mode="HTML",
             # No reply keyboard: Telegram refuses to edit a message that
             # carries one ("Bad Request: message can't be edited" — measured
@@ -849,35 +925,67 @@ class HarnessTelegramBot:
             reply_markup=NO_MARKUP,
         )
 
-        # 2. Append user prompt to eternal memory log
+        # 2. Append user prompt to eternal memory log. The previous turn is
+        #    read BEFORE the append: «Ищи дальше» and «Найди на озон» refer to
+        #    the topic of the turn before them.
+        previous_user = self.memory_engine.get_previous_user_turn()
         self.memory_engine.append_message("user", prompt, {"chat_id": chat_id})
 
         # 3. Web search: only when the question actually needs the live web.
         #    A question about our own complex is answered by our own state.
         from harness import search_query as query_formulation
-        search_plan = query_formulation.plan(prompt)
+        search_plan = query_formulation.plan(prompt, previous=previous_user)
         needs_search = enable_search or search_plan["search"]
         if needs_search:
             print(f"[Bot] Поиск: '{search_plan['query']}' ({search_plan['reason']})")
 
+        # 3b. The model gets the inherited topic too — otherwise it repeats
+        #     the same question as the planner did.
+        effective_prompt = prompt
+        if search_plan.get("inherited"):
+            effective_prompt = (
+                f"{prompt}\n\n"
+                f"(Предыдущая тема оператора: {search_plan['inherited']}. "
+                "Если реплика сама темы не содержит, продолжай именно её.)"
+            )
+
         # 4. Verified system facts + semantic memory envelope
-        memory_envelope = self.memory_engine.build_memory_envelope(prompt)
+        memory_envelope = self.memory_engine.build_memory_envelope(effective_prompt)
         operational = operational_context.build_operational_context(
             query=prompt,
             event_memory=self.event_memory,
         )
         task_context = f"{operational}\n\n{memory_envelope}"
 
-        # 5. The keeper's dispatch plan over the measured duty roster.
+        # 5. THE DUTY SHIFT. The operator's rule (2026-11-02): ONE model serves
+        #    every task for six hours; the keeper picks it; it changes only if
+        #    it stops answering quickly. No distribution across models, no
+        #    second opinion — the same voice answers everything.
         from harness.duty_team import DutyTeam, ROLE_TITLES
-        plan = DutyTeam().dispatch(prompt, max_calls=3)
-        calls = plan.get("calls") or []
-        bench = plan.get("bench") or []
+        from harness import duty_shift
+
+        team = DutyTeam()
+        roster = team.load_roster()
+        task_type = team.classify(prompt)
+        shift, _shift_info = duty_shift.current_duty(roster)
+
+        duty_model_id = str(shift.get("model_id") or "")
+        # The holder of the shift, with its measured evidence.
+        duty_entry = next(
+            (m for m in (roster.get("duty") or []) if str(m.get("id")) == duty_model_id),
+            {},
+        )
+        # The bench is NOT a distribution: it is the replacement used only
+        # when the holder stopped answering.
+        bench = [
+            m for m in (roster.get("duty") or [])
+            if str(m.get("id")) != duty_model_id
+        ][:2]
 
         # Answer budget follows the task type: a quick question gets a crisp
         # reply, code/analysis get room to work.
         budget = {"quick": 4096, "general": 8192, "code": 16384, "analysis": 16384}.get(
-            plan.get("task_type", "general"), 8192
+            task_type, 8192
         )
 
         answers: List[Dict[str, Any]] = []
@@ -885,46 +993,76 @@ class HarnessTelegramBot:
         def run_call(idx: int, call: Dict[str, Any]) -> Dict[str, Any]:
             params = call.get("params") or {}
             res = self.executor.execute_task(
-                task_prompt=prompt,
+                task_prompt=effective_prompt,
                 context=task_context,
                 enable_search=(needs_search and idx == 0),
                 max_tokens=budget if idx == 0 else min(budget, 8192),
                 temperature=float(params.get("temperature", 0.6)),
                 top_p=float(params.get("top_p", 0.9)),
                 model_id=call["id"],
+                # The planner's query wins: the executor would otherwise
+                # re-formulate the prompt and lose the inherited topic.
+                search_query=search_plan["query"] if needs_search else "",
+                num_results=5,
+            )
+            raw_content = res.get("content", "") or ""
+            safe_content = _operator_safe_text(raw_content)
+            is_call = bool(tool_call.parse_tool_call(raw_content))
+            elapsed = res.get("elapsed_sec")
+            ok = res.get("status") == "SUCCESS" and bool(safe_content) and not is_call
+            # The shift breaks only when the model failed or answered slowly.
+            duty_shift.note_outcome(
+                call["id"],
+                elapsed,
+                ok,
+                measured_latency=(call.get("measured") or {}).get("latency_sec")
+                or call.get("latency_sec"),
             )
             return {
                 "model": call["id"],
                 "role": call.get("primary_role", ""),
                 "score": call.get("score"),
                 "verified": call.get("verified"),
-                "ok": res.get("status") == "SUCCESS" and bool(res.get("content")),
+                # A raw tool call is NOT an answer: it must never reach the
+                # operator as an answer.
+                "ok": ok,
                 "status": res.get("status"),
-                "elapsed": res.get("elapsed_sec"),
-                "content": res.get("content", ""),
+                "elapsed": elapsed,
+                "content": safe_content,
+                "tool_call": is_call,
+                "citations": [c for c in (res.get("citations") or []) if str(c or "").strip()],
             }
 
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=min(3, max(len(calls), 1)), thread_name_prefix="duty") as pool:
-            futures = [pool.submit(run_call, i, c) for i, c in enumerate(calls)]
-            for fut in futures:
-                try:
-                    answers.append(fut.result())
-                except Exception as e:
-                    answers.append({"model": "?", "ok": False, "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
+        if duty_model_id:
+            try:
+                answers.append(run_call(0, {
+                    **duty_entry,
+                    "id": duty_model_id,
+                    "primary_role": "duty_primary",
+                }))
+            except Exception as e:
+                answers.append({"model": duty_model_id, "ok": False,
+                                "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
+        else:
+            answers.append({"model": "?", "ok": False,
+                            "status": "NO_DUTY_MODEL", "content": ""})
 
-        # 5b. Total failure: the keeper does not give up — it calls the bench
-        # (next measured models) before reporting degradation.
+        # 5b. The holder did not answer (or answered too slowly): the shift is
+        #     broken and the bench replaces it. This is the ONE case where a
+        #     second model speaks — a replacement, not a second opinion.
         if not any(a.get("ok") for a in answers) and bench:
             self.send_chat_action(chat_id, "typing")
-            retry_calls = [(len(answers) + i, c) for i, c in enumerate(bench[:2])]
-            with ThreadPoolExecutor(max_workers=min(2, len(retry_calls)), thread_name_prefix="duty-retry") as pool:
-                futures = [pool.submit(run_call, i, c) for i, c in retry_calls]
-                for fut in futures:
-                    try:
-                        answers.append(fut.result())
-                    except Exception as e:
-                        answers.append({"model": "?", "ok": False, "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
+            replacement = bench[0]
+            try:
+                answers.append(run_call(1, {
+                    **replacement,
+                    "id": str(replacement.get("id")),
+                    "primary_role": "duty_fallback",
+                }))
+            except Exception as e:
+                answers.append({"model": str(replacement.get("id")), "ok": False,
+                                "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
+
 
         # 6. Persist duty answers into eternal memory (the event protocol).
         for a in answers:
@@ -934,7 +1072,7 @@ class HarnessTelegramBot:
                 )
 
         # 7. Compose the honest reply: who answered, on what evidence. The
-        # keeper's plan line is the only "verdict" — the deterministic CPU
+        # keeper's shift line is the only "verdict" — the deterministic CPU
         # kernel's canned English reports proved to be noise here.
         ok_answers = [a for a in answers if a.get("ok")]
         if ok_answers:
@@ -946,16 +1084,44 @@ class HarnessTelegramBot:
 
             primary = ok_answers[0]
             parts = [
-                f"🧑‍💼 <i>Хранитель:</i> {html.escape(plan.get('rationale', ''))}",
+                f"🧑‍💼 <i>Хранитель:</i> {html.escape(duty_shift.describe_shift(shift))}",
                 f"\n⚡ <b>{label(primary)}</b>\n\n{html.escape(primary['content'])}",
             ]
+            sources = _sources_block(primary.get("citations") or [])
+            if sources:
+                parts.append(f"\n\n{sources}")
             if len(ok_answers) > 1:
+                # The holder was replaced because it stopped answering quickly.
                 alt = ok_answers[1]
                 alt_body = alt["content"][:600] + ("…" if len(alt["content"]) > 600 else "")
-                parts.append(f"\n\n🔁 <b>Второе мнение</b> — {label(alt)}:\n{html.escape(alt_body)}")
+                parts.append(
+                    f"\n\n🔁 <b>Смена дежурного</b> — {label(alt)}:\n{html.escape(alt_body)}"
+                )
             self._deliver_answer(chat_id, placeholder_id, "\n".join(parts), parse_mode="HTML")
         else:
             failed = ", ".join(a.get("model", "?") for a in answers) or "нет измеренных дежурных"
+            # A model that answered with a tool call instead of an answer is
+            # not a silent failure: the operator must see what it wanted.
+            call_notes = [
+                a for a in answers
+                if a.get("tool_call") and str(a.get("content") or "").strip()
+            ]
+            if call_notes:
+                # The models DID answer — with a machine-shaped answer. Saying
+                # "the network models are unavailable" here would be a lie.
+                notes = "\n".join(
+                    f"• {html.escape(a.get('model', '?'))}: {html.escape(a['content'])}"
+                    for a in call_notes
+                )
+                self._deliver_answer(
+                    chat_id,
+                    placeholder_id,
+                    "[-] <b>Дежурные ответили вызовом инструмента вместо ответа.</b>\n"
+                    f"Попытки: {html.escape(failed)}\n\n{notes}\n\n"
+                    "Запрос уже сформулирован — повторите его, и я выполню поиск сам.",
+                    parse_mode="HTML",
+                )
+                return
             self._deliver_answer(
                 chat_id,
                 placeholder_id,

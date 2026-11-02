@@ -56,6 +56,10 @@ TEST_CASES = [
      [], ["ОТЧЁТЫ", "нет записей"]),
     ("поиск", "найди в интернете: что нового в NVIDIA NIM за последние дни",
      [], ["http"]),
+    # Measured failure of 2026-11-01: «Найди на озон» came back as a raw JSON
+    # tool call ("only curly braces") because the live web was never asked.
+    ("поиск_на_сайте", "найди на озон генетический тест",
+     [], ["http"]),
 ]
 
 

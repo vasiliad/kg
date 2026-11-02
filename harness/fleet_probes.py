@@ -15,6 +15,7 @@ Three task families:
   4. instruction  - answers in Russian (the operator's language)
   5. translation  - answers in English, for a term with one canonical form
   6. toolcall     - emits a well-formed tool call with the right argument
+  7. prose        - answers a human in Russian prose, NOT a machine call
 
 The reasoning task is deliberately small: a 12-ball urn gives exactly one
 correct fraction (47/66), so "smart" is distinguishable from "confident".
@@ -25,7 +26,15 @@ means a short probe, and the tuner runs on a wall-clock budget.
 import ast
 import json
 import re
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+try:
+    from harness import tool_call
+except ImportError:  # pragma: no cover - direct file import
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from harness import tool_call
 
 # --------------------------------------------------------------------------
 # Task definitions
@@ -79,12 +88,26 @@ TOOLCALL_PROMPT = (
 TOOLCALL_NAME = "get_weather"
 TOOLCALL_CITIES = ("новосибирск", "novosibirsk")
 
+# --- Prose -----------------------------------------------------------------
+# The duty path must ANSWER, not call a tool.
+# Measured on 2026-11-01: the model that became `duty_primary` answered
+# «Найди на озон» with a raw JSON tool call and the operator received
+# "only curly braces". The tool-call probe REWARDED that behaviour; this
+# probe punishes it, so a model that cannot talk to a human loses points.
+PROSE_PROMPT = (
+    "Ты дежурный оператор автономного комплекса. Оператор спросил: "
+    "«найди на озон генетический тест Атлас». "
+    "Ответь по-русски обычным текстом: что ты нашёл, где искал и в каком "
+    "источнике. Не возвращай машинный вызов инструмента — ответь словами."
+)
+
 PROBE_TASKS: Dict[str, Dict[str, Any]] = {
     "reasoning": {"prompt": REASONING_PROMPT, "max_tokens": 3072, "weight": 0.30},
-    "code": {"prompt": CODE_PROMPT, "max_tokens": 2048, "weight": 0.30},
-    "json": {"prompt": JSON_PROMPT, "max_tokens": 1024, "weight": 0.15},
-    "translation": {"prompt": TRANSLATION_PROMPT, "max_tokens": 256, "weight": 0.125},
-    "toolcall": {"prompt": TOOLCALL_PROMPT, "max_tokens": 512, "weight": 0.125},
+    "code": {"prompt": CODE_PROMPT, "max_tokens": 2048, "weight": 0.28},
+    "json": {"prompt": JSON_PROMPT, "max_tokens": 1024, "weight": 0.12},
+    "translation": {"prompt": TRANSLATION_PROMPT, "max_tokens": 256, "weight": 0.10},
+    "toolcall": {"prompt": TOOLCALL_PROMPT, "max_tokens": 512, "weight": 0.10},
+    "prose": {"prompt": PROSE_PROMPT, "max_tokens": 1024, "weight": 0.10},
 }
 
 # The instruction check rides on the cheap ping: it is the only place where
@@ -116,14 +139,15 @@ def _extract_code(text: str) -> str:
 
 
 def _extract_json(text: str) -> str:
-    """Pulls the outermost JSON object out of a model answer."""
-    if not text:
-        return ""
-    cleaned = re.sub(r"```(?:json)?", "", text, flags=re.I)
-    cleaned = cleaned.replace("```", "")
-    start = cleaned.find("{")
-    end = cleaned.rfind("}")
-    return cleaned[start:end + 1] if start != -1 and end > start else ""
+    """
+    Pulls the outermost JSON object out of a model answer.
+
+    One parser, one behaviour: `harness/tool_call.py` is the canonical
+    JSON-span reader, and every probe that needs JSON goes through it.
+    The span is returned RAW so a malformed payload keeps its
+    «invalid_json» verdict.
+    """
+    return tool_call.outermost_json_span(text)
 
 
 # --------------------------------------------------------------------------
@@ -272,6 +296,36 @@ def check_toolcall(text: str) -> Tuple[float, str]:
     return round(score, 3), f"{verdict} tool={tool or 'none'}"
 
 
+def check_prose(text: str) -> Tuple[float, str]:
+    """
+    The duty path must deliver PROSE. A machine-shaped answer scores zero.
+
+    The measured failure of 2026-11-01 was exactly this: the duty model
+    answered «Найди на озон» with a raw tool call, and the operator received
+    "only curly braces". The tool-call probe rewarded that behaviour — this
+    probe is its counterweight.
+    """
+    if not text or not text.strip():
+        return 0.0, "empty"
+
+    if tool_call.parse_tool_call(text):
+        return 0.0, "tool_call"
+
+    span = tool_call.outermost_json_span(text)
+    if span:
+        # Raw JSON is not prose — even when its values are Russian.
+        remainder = text.replace(span, " ")
+        if len([c for c in remainder if c.isalpha()]) < 3:
+            return 0.0, "json"
+
+    ratio = _cyrillic_ratio(text)
+    if ratio > 0.5:
+        return 1.0, "prose_ru"
+    if ratio > 0.2:
+        return 0.5, "mixed"
+    return 0.0, "not_russian"
+
+
 CHECKERS = {
     "reasoning": check_reasoning,
     "code": check_code,
@@ -279,6 +333,7 @@ CHECKERS = {
     "instruction": check_instruction,
     "translation": check_translation,
     "toolcall": check_toolcall,
+    "prose": check_prose,
 }
 
 
