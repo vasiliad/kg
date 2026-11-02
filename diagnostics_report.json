@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-02T15:39:01.845216+00:00",
+  "timestamp": "2026-11-02T22:39:27.623764+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -132,9 +132,9 @@
   "state": {
     "ok": true,
     "files": {
-      "data/.bot_sessions.json": 536,
+      "data/.bot_sessions.json": 574,
       "data/telegram_history.txt": 41757,
-      "active_models.json": 17274,
+      "active_models.json": 19459,
       "data/.memory_vault.json": null
     }
   },
@@ -154,11 +154,11 @@
   },
   "bot_health": {
     "ok": true,
-    "last_poll_at": "2026-11-02T15:36:05Z",
-    "age_min": 3.0,
-    "last_send_at": "2026-11-02T13:18:27Z",
+    "last_poll_at": "2026-11-02T22:38:28Z",
+    "age_min": 1.1,
+    "last_send_at": "2026-11-02T21:47:50Z",
     "updates_seen": 17,
-    "messages_sent": 18,
+    "messages_sent": 23,
     "errors": 1,
     "last_chat_id": 846947027,
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
