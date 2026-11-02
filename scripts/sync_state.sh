@@ -26,6 +26,8 @@ CONFLICT_FILES=(
   "data/fleet_report.json"
   "data/fleet_history.json"
   "data/model_sizes.json"
+  "data/daily_digest.json"
+  "data/duty_shift.json"
 )
 
 git config --global user.name "vasiliad"
@@ -59,7 +61,12 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     for f in "${CONFLICT_FILES[@]}"; do
       git checkout --theirs -- "$f" 2>/dev/null || true
     done
-    git add -A || true
+    # Only the KNOWN state files are staged. A blanket `git add -A` would
+    # publish anything that happened to be lying in the workspace of a
+    # PUBLIC repository — a stray download, a temporary file, a local .env.
+    for f in "${CONFLICT_FILES[@]}"; do
+      [ -e "$f" ] && git add -- "$f" 2>/dev/null || true
+    done
     GIT_EDITOR=true git rebase --continue 2>&1 || git rebase --abort 2>&1 || true
   fi
 

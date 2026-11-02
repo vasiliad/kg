@@ -2237,6 +2237,239 @@ def test_38_duty_shift_rules():
     print("[+] Test 38 Passed: duty shift rules verified.")
 
 
+def test_39_selection_reads_every_json_shape_and_lies_never():
+    """
+    Measured in the cloud on 2026-11-02: the selection model answered with a
+    bare JSON ARRAY, the parser only knew about `{...}`, and the letter fell
+    back to raw snippets WITHOUT saying so — a curated digest in the form,
+    a list of search results in the content.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 39: Selection reads every JSON shape; the letter admits a fallback")
+    print("=" * 60)
+    from harness.daily_dispatcher import parse_selection, _describe_shape, fallback_items
+    from harness import email_render
+
+    item = {"n": 1, "title": "Заголовок", "summary": "Суть новости", "category": "Модели"}
+
+    shapes = [
+        ('bare array', f"[{json.dumps(item, ensure_ascii=False)}]"),
+        ('object items', json.dumps({"items": [item]}, ensure_ascii=False)),
+        ('object news', json.dumps({"news": [item]}, ensure_ascii=False)),
+        ('fenced', "```json\n" + json.dumps({"items": [item]}, ensure_ascii=False) + "\n```"),
+        ('prose around it', "Вот отбор:\n" + json.dumps({"items": [item]}, ensure_ascii=False)),
+    ]
+    for name, text in shapes:
+        parsed = parse_selection(text)
+        assert parsed, f"{name}: the shape must be read ({_describe_shape(text)})"
+        assert parsed[0].get("n") == 1, f"{name}: the item must survive"
+
+    # A broken answer must yield nothing (not a wrong guess).
+    assert parse_selection('{"items": [{"n": 1, "title": "X", "summary"') == [], \
+        "a truncated answer must not be half-read"
+    assert parse_selection("Новостей сегодня нет.") == [], \
+        "prose is not a selection"
+
+    # The fallback letter must SAY it is a fallback.
+    candidates = [{
+        "title": "Тестовая новость",
+        "url": "https://example.org/article",
+        "snippet": "Текст источника.",
+        "category": "Модели",
+        "tier": "TinyFish",
+    }]
+    items = fallback_items(candidates)
+    html, plain = email_render.render_digest(items, {
+        "subject": "Дайджест",
+        "date_label": "02.11.2026",
+        "tier": "TinyFish",
+        "queries": ["q"],
+        "sources_count": 1,
+        "recipient_tag": "настроен (sha256:00000000)",
+        "selection_mode": "источники показаны как есть",
+        "selection_note": "модель ответила нечитаемым форматом",
+    })
+    assert "Отбор новостей не выполнен" in html, "the letter must admit the fallback"
+    assert "источники показаны как есть" in html, "the letter must name the mode"
+    assert not email_render.validate_html(html), "the letter must stay well-formed"
+
+    # A curated letter must NOT carry the warning.
+    html2, _ = email_render.render_digest(items, {
+        "subject": "Дайджест",
+        "date_label": "02.11.2026",
+        "tier": "TinyFish",
+        "selection_mode": "модель отобрала",
+    })
+    assert "Отбор новостей не выполнен" not in html2, \
+        "a curated letter must not claim a fallback"
+
+    print("[+] Test 39 Passed: every JSON shape is read, and the letter admits a fallback.")
+
+
+def test_40_the_letter_survives_a_phone_screen():
+    """
+    Measured on 390px in a real browser on 2026-11-02: the fleet table gave
+    the model id a 53px column, so «minimaxai/minimax-m3.1-flash» broke into
+    six lines and every row was 107px tall. The letter has to read on a
+    phone — so the records are cards, and the counts are spelled right.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 40: The letter survives a phone screen and speaks Russian right")
+    print("=" * 60)
+    from harness import email_render
+    import re
+
+    report = {
+        "subject": "Проверка связи",
+        "now_label": "02.11.2026 12:00 НСК",
+        "api": {"state": "Ключ действителен", "ok": True},
+        "disk": {"free_gb": 12.4, "percent_used": 63},
+        "arbiter": {"model": "minimaxai/minimax-m3.1-flash", "mode": "Штатный сетевой режим"},
+        "incidents": [{
+            "timestamp": "2026-11-02 05:00",
+            "message": "ОТЧЁТЫ ОТПРАВЛЕНЫ: письмо «Проверка связи» доставлено",
+            "state": "Доставлено",
+        }],
+        "fleet": [{
+            "id": "nvidia/nemotron-3-ultra-550b-a55b",
+            "roles": ["Дежурный резерв"],
+            "score_text": "79.81 (живой замер)",
+            "latency": "6.13с",
+        }],
+        "recipient_tag": "настроен (sha256:00000000)",
+    }
+    html, plain = email_render.render_health(report)
+    assert not email_render.validate_html(html), "the health letter must stay well-formed"
+
+    # No table may squeeze the text into a narrow column: on a phone the
+    # incident record and the fleet record are cards, not grid cells.
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S):
+        cols = len(re.findall(r"<t[dh]\b", row))
+        assert cols <= 2, f"a row of {cols} columns does not fit a phone: {row[:80]}"
+
+    # The model id must be readable text, not a 53px sliver.
+    assert "font-size:14px; font-weight:700" in html, \
+        "the model id must be a readable heading"
+    assert "word-break:break-word" in html, "a long id must break, not overflow"
+
+    # The plain-text twin must carry the same facts.
+    assert "nvidia/nemotron-3-ultra-550b-a55b" in plain, "the plain letter must carry the fleet"
+    assert "Доставлено" in plain, "the plain letter must carry the state"
+
+    # Russian plural: the letter said «3 новостей».
+    assert email_render._plural_news(1) == "новость", "1 → новость"
+    assert email_render._plural_news(2) == "новости", "2 → новости"
+    assert email_render._plural_news(3) == "новости", "3 → новости"
+    assert email_render._plural_news(5) == "новостей", "5 → новостей"
+    assert email_render._plural_news(11) == "новостей", "11 → новостей"
+    assert email_render._plural_news(21) == "новость", "21 → новость"
+    assert email_render._plural_news(22) == "новости", "22 → новости"
+
+    items = [{
+        "title": "Новость", "summary": "Суть", "url": "https://example.org/a",
+        "source": "example.org", "date": "02.11.2026", "category": "Модели",
+    }] * 3
+    html3, _ = email_render.render_digest(items, {"subject": "Дайджест", "date_label": "02.11.2026"})
+    assert "3 новости" in html3, "the preheader must say «3 новости»"
+    assert "3 новостей" not in html3, "the preheader must not say «3 новостей»"
+
+    print("[+] Test 40 Passed: the letter fits a phone and counts in Russian.")
+
+
+def test_41_the_news_is_written_out_in_full():
+    """
+    The operator: «в дайджесте нужно полностью расписывать новость и только
+    оставлять ссылку для подтверждения источника, а не бриф».
+
+    So the source page is READ (as text, never executed) and the news is
+    written from what the page says. A link that cannot be read leaves a
+    brief — and the brief is marked as a brief.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 41: The news is written out in full; the link only confirms the source")
+    print("=" * 60)
+    from harness.daily_dispatcher import (
+        read_source_pages, write_full_news, MIN_FULL_CHARS,
+    )
+    from harness import email_render
+
+    class _FakeExecutor:
+        model_id = "fake/model"
+
+        def __init__(self):
+            self.fetched = []
+
+        def read_source_text(self, url, max_chars=8000):
+            self.fetched.append(url)
+            if "blocked" in url:
+                return "The page could not be read: HTTP 403."
+            return "Полный текст источника. " * 200
+
+        def execute_task(self, **kwargs):
+            answer = json.dumps({"items": [
+                {
+                    "n": 1,
+                    "title": "Развёрнутый заголовок",
+                    "summary": "Подробное описание новости со всеми деталями. " * 12,
+                    "date": "01.11.2026",
+                },
+                {"n": 2, "title": "Короткий заголовок", "summary": "Коротко."},
+            ]}, ensure_ascii=False)
+            return {"status": "SUCCESS", "content": answer}
+
+    items = [
+        {"title": "A", "summary": "кратко", "url": "https://a.example/1",
+         "source": "a.example", "category": "Модели", "date": "", "tier": "TinyFish"},
+        {"title": "B", "summary": "кратко", "url": "https://b.example/2",
+         "source": "b.example", "category": "Агенты", "date": "", "tier": "TinyFish"},
+    ]
+    executor = _FakeExecutor()
+    pages = read_source_pages(executor, items)
+    assert len(pages) == 2, f"both source pages must be read ({pages.keys()})"
+    assert executor.fetched, "the executor must be asked for the page text"
+
+    described, note = write_full_news(executor, items, pages)
+    assert not note, f"the news must be written in full ({note})"
+    assert len(described[0]["summary"]) >= MIN_FULL_CHARS, "the full news must be long"
+    assert described[0]["detail"] == "full", "a long description is a full news item"
+    assert described[1]["detail"] == "brief", "a two-word description is a brief"
+    # The link, the source and the category stay ours — the model writes text only.
+    assert described[0]["url"] == "https://a.example/1", "the URL stays ours"
+    assert described[0]["source"] == "a.example", "the source stays ours"
+
+    # A page that cannot be read is not a page.
+    blocked = [{"title": "C", "summary": "s", "url": "https://blocked.example/x",
+                "source": "blocked.example", "category": "Модели", "date": ""}]
+    assert read_source_pages(executor, blocked) == {}, \
+        "a page that could not be read must not become source text"
+
+    html, plain = email_render.render_digest(described, {
+        "subject": "Ежедневный дайджест ИИ",
+        "date_label": "02.11.2026",
+        "tier": "TinyFish",
+        "selection_mode": "модель отобрала",
+        "full_news_count": 1,
+        "items_count": 2,
+    })
+    assert "Источник: a.example" in html, "the link must name the source it confirms"
+    assert "краткое изложение" in html, "a brief must be marked in the letter"
+    assert "полных описаний: 1 из 2" in html, "the footer must count the full ones"
+    assert not email_render.validate_html(html), "the letter must stay well-formed"
+
+    # If not one news could be written in full, the letter says so.
+    html2, _ = email_render.render_digest(described, {
+        "subject": "Ежедневный дайджест ИИ",
+        "date_label": "02.11.2026",
+        "selection_mode": "модель отобрала",
+        "full_news_count": 0,
+        "items_count": 2,
+    })
+    assert "Полные описания не удались" in html2, \
+        "six briefs must not be passed off as news"
+
+    print("[+] Test 41 Passed: the news is written out, the link only confirms the source.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -2285,6 +2518,9 @@ if __name__ == "__main__":
         test_36_email_wellformed_honest_private,
         test_37_prose_probe_scores,
         test_38_duty_shift_rules,
+        test_39_selection_reads_every_json_shape_and_lies_never,
+        test_40_the_letter_survives_a_phone_screen,
+        test_41_the_news_is_written_out_in_full,
     ]
     failed = []
     for t in tests:

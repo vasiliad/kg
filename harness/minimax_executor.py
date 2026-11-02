@@ -418,6 +418,18 @@ class MiniMaxExecutor:
         except Exception as e:
             return f"The page could not be read: {type(e).__name__}."
 
+    def read_source_text(self, url: str, max_chars: int = 8000) -> str:
+        """
+        The text of a source page, for the digest.
+
+        Same contract as `_fetch_page_text`: untrusted data, read as text,
+        never executed. It is public because the dispatcher needs it — the
+        operator asked for the news to be written out IN FULL, and a full
+        account can only come from the page itself, not from a search
+        snippet.
+        """
+        return self._fetch_page_text(url, max_chars=max_chars)
+
     def _run_tool(self, call: Dict[str, Any], num_results: int = 5) -> Dict[str, Any]:
         """
         Runs the tool the duty model asked for.

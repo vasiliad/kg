@@ -65,7 +65,11 @@ jobs:
         run: |
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
-          git add nim_history.log || true
+          # The digest artefact holds the letter's own content, so the bot
+          # can quote it later ("что было в утреннем дайджесте?"). It is
+          # masked before writing (harness/redaction.py) — the repository is
+          # public.
+          git add nim_history.log data/daily_digest.json || true
           if ! git diff --staged --quiet; then
             git commit -m "chore(dispatch): record report dispatch outcome [skip ci]"
             echo "Dispatch outcome committed."

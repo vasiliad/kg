@@ -66,6 +66,15 @@ def safe_url(url: Any) -> str:
     return text if SAFE_URL_RE.match(text) else ""
 
 
+def _source_host(url: Any) -> str:
+    """The host of a URL — what the operator sees next to the link."""
+    text = str(url or "")
+    host = text.split("//", 1)[-1].split("/", 1)[0]
+    if host.startswith("www."):
+        host = host[4:]
+    return host or "источник"
+
+
 # --------------------------------------------------------------------------
 # Markdown -> HTML (the fallback path, done properly)
 # --------------------------------------------------------------------------
@@ -293,6 +302,21 @@ DIGEST_CATEGORIES = (
 )
 
 
+def _plural_news(count: int) -> str:
+    """
+    Russian plural for «новость»: 1 новость, 2 новости, 5 новостей.
+
+    The letter said «3 новостей» — a small thing, but it is the kind of
+    sloppiness that makes the operator stop reading.
+    """
+    n = abs(int(count))
+    if n % 10 == 1 and n % 100 != 11:
+        return "новость"
+    if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "новости"
+    return "новостей"
+
+
 def render_digest(
     items: List[Dict[str, Any]],
     meta: Dict[str, Any],
@@ -317,9 +341,39 @@ def render_digest(
     recipient_tag = str(meta.get("recipient_tag") or "")
     sender_name = str(meta.get("sender_name") or "")
     elapsed = meta.get("elapsed")
+    selection_mode = str(meta.get("selection_mode") or "")
+    selection_note = str(meta.get("selection_note") or "")
+    full_count = meta.get("full_news_count")
+    items_count = int(meta.get("items_count") or len(items))
 
     rows: List[str] = []
     plain_lines: List[str] = []
+
+    # How the letter was assembled. A digest of raw snippets that pretends
+    # to be a curated digest is the old lie in a new dress.
+    if selection_mode and selection_mode != "модель отобрала":
+        detail = f" ({selection_note})" if selection_note else ""
+        rows.append(
+            f'<div style="padding:11px 14px; background:#fffbeb; border-left:4px solid #b45309; '
+            f'font-size:13px; line-height:1.5; color:{INK}; margin:0 0 16px 0;">'
+            f"<b>Отбор новостей не выполнен</b> — показаны найденные источники как есть."
+            f"{escape(detail)}</div>"
+        )
+        plain_lines.append(f"[!] Отбор новостей не выполнен — источники показаны как есть{detail}.")
+        plain_lines.append("")
+
+    # The operator asked for the news itself, not for a brief. If not one
+    # news could be written out in full, the letter says so instead of
+    # passing six teasers off as news.
+    if items and full_count is not None and int(full_count) == 0:
+        rows.append(
+            f'<div style="padding:11px 14px; background:#fffbeb; border-left:4px solid #b45309; '
+            f'font-size:13px; line-height:1.5; color:{INK}; margin:0 0 16px 0;">'
+            f"<b>Полные описания не удались</b> — показаны краткие изложения источников."
+            f"</div>"
+        )
+        plain_lines.append("[!] Полные описания не удались — показаны краткие изложения.")
+        plain_lines.append("")
 
     if not items:
         rows.append(
@@ -338,21 +392,24 @@ def render_digest(
             date = str(item.get("date") or "").strip()
             category = str(item.get("category") or "").strip()
             url = safe_url(item.get("url"))
+            detail = str(item.get("detail") or "")
 
             meta_bits = [bit for bit in (category, source, date) if bit]
+            if detail == "brief":
+                meta_bits.append("краткое изложение")
             meta_line = escape(" · ".join(meta_bits))
 
+            # The link is there to CONFIRM the source, not to be the news:
+            # the operator asked for the story itself and left the link as
+            # the reference. So the headline is plain text.
+            head_html = escape(head)
             if url:
-                head_html = (
-                    f'<a href="{escape(url, quote=True)}" style="color:{INK}; text-decoration:none;">'
-                    f"{escape(head)}</a>"
-                )
                 link_html = (
-                    f'<div style="padding-top:6px; font-size:13px;">'
-                    f'<a href="{escape(url, quote=True)}" style="color:{ACCENT};">Открыть источник →</a></div>'
+                    f'<div style="padding-top:8px; font-size:13px;">'
+                    f'<a href="{escape(url, quote=True)}" style="color:{ACCENT};">'
+                    f"Источник: {_source_host(url)}</a></div>"
                 )
             else:
-                head_html = escape(head)
                 link_html = ""
 
             rows.append(
@@ -385,6 +442,10 @@ def render_digest(
         facts.append(f"запросов: {len(queries)}")
     if sources_count:
         facts.append(f"источников просмотрено: {sources_count}")
+    if selection_mode:
+        facts.append(f"отбор: {selection_mode}")
+    if items and full_count is not None:
+        facts.append(f"полных описаний: {int(full_count)} из {items_count}")
     if elapsed is not None:
         facts.append(f"сбор занял {elapsed}с")
     facts_line = " · ".join(facts)
@@ -402,7 +463,7 @@ def render_digest(
     body = "".join(rows)
     html_document = _shell(
         title,
-        f"{len(items)} новостей · {date_label}" if items else f"Нет новостей · {date_label}",
+        f"{len(items)} {_plural_news(len(items))} · {date_label}" if items else f"Нет новостей · {date_label}",
         body,
         "".join(footer),
     )
@@ -493,25 +554,24 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
             state = str(incident.get("state") or "Требует внимания")
             good = state in ("Доставлено", "Штатно")
             color = GOOD if good else (BAD if state == "Не отправлено" else "#b45309")
+            # Measured on 390px: a three-column table gave the «Событие»
+            # column 131px and the timestamp 101px — the event text broke
+            # into five lines. So the record is stacked: time and state on
+            # one line, the event text under them at full width.
             rows.append(
-                f'<tr>'
-                f'<td style="padding:9px 8px 9px 0; border-bottom:1px solid {LINE}; '
-                f'font-size:12px; color:{MUTED}; white-space:nowrap; vertical-align:top;">'
-                f'{escape(incident.get("timestamp"))}</td>'
-                f'<td style="padding:9px 8px 9px 0; border-bottom:1px solid {LINE}; '
-                f'font-size:14px; color:{INK}; vertical-align:top;">{escape(incident.get("message"))}</td>'
-                f'<td style="padding:9px 0; border-bottom:1px solid {LINE}; font-size:13px; '
-                f'font-weight:700; color:{color}; vertical-align:top;">{escape(state)}</td>'
+                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+                f'style="border-collapse:collapse; margin:0 0 12px 0;">'
+                f"<tr>"
+                f'<td style="padding:0 0 3px 0; font-size:12px; color:{MUTED}; '
+                f'white-space:nowrap; vertical-align:top;">{escape(incident.get("timestamp"))}</td>'
+                f'<td style="padding:0 0 3px 0; font-size:13px; font-weight:700; color:{color}; '
+                f'text-align:right; white-space:nowrap; vertical-align:top;">{escape(state)}</td>'
                 f"</tr>"
+                f'<tr><td colspan="2" style="padding:0; font-size:14px; line-height:1.5; '
+                f'color:{INK};">{escape(incident.get("message"))}</td></tr>'
+                f"</table>"
             )
-        body.append(
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-            f'style="border-collapse:collapse; margin:0 0 20px 0;">'
-            f'<tr><td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Время UTC</td>'
-            f'<td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Событие</td>'
-            f'<td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Состояние</td></tr>'
-            + "".join(rows) + "</table>"
-        )
+        body.append("".join(rows))
     else:
         body.append(
             f'<div style="padding:12px 14px; background:{BG}; border-left:4px solid {GOOD}; '
@@ -529,27 +589,24 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         for model in fleet:
             model = model or {}
             roles = ", ".join(model.get("roles") or []) or "—"
+            # Measured on 390px: a four-column table gave the model id a
+            # 53px column — «minimaxai/minimax-m3.1-flash» broke into six
+            # lines and every row became 107px tall. The fleet is a list
+            # of models, not a spreadsheet, so each model is a card.
+            meta_bits = [f"оценка: {model.get('score_text') or '—'}"]
+            latency = str(model.get("latency") or "")
+            if latency:
+                meta_bits.append(f"задержка {latency}")
             rows.append(
-                f'<tr>'
-                f'<td style="padding:9px 8px 9px 0; border-bottom:1px solid {LINE}; '
-                f'font-size:13px; color:{INK}; word-break:break-word;">{escape(model.get("id"))}</td>'
-                f'<td style="padding:9px 8px 9px 0; border-bottom:1px solid {LINE}; '
-                f'font-size:13px; color:{MUTED};">{escape(roles)}</td>'
-                f'<td style="padding:9px 8px 9px 0; border-bottom:1px solid {LINE}; '
-                f'font-size:13px; color:{INK}; white-space:nowrap;">{escape(model.get("score_text"))}</td>'
-                f'<td style="padding:9px 0; border-bottom:1px solid {LINE}; font-size:13px; '
-                f'color:{MUTED}; white-space:nowrap;">{escape(model.get("latency") or "—")}</td>'
-                f"</tr>"
+                f'<div style="padding:10px 0 11px 0; border-bottom:1px solid {LINE};">'
+                f'<div style="font-size:14px; font-weight:700; color:{INK}; word-break:break-word;">'
+                f'{escape(model.get("id"))}</div>'
+                f'<div style="font-size:13px; color:{MUTED}; padding-top:2px;">{escape(roles)}</div>'
+                f'<div style="font-size:13px; color:{INK}; padding-top:4px;">'
+                f'{escape(" · ".join(meta_bits))}</div>'
+                f"</div>"
             )
-        body.append(
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-            f'style="border-collapse:collapse; margin:0 0 8px 0;">'
-            f'<tr><td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Модель</td>'
-            f'<td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Роль</td>'
-            f'<td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Оценка</td>'
-            f'<td style="padding:0 0 6px 0; font-size:12px; color:{MUTED};">Задержка</td></tr>'
-            + "".join(rows) + "</table>"
-        )
+        body.append("".join(rows))
     else:
         body.append(
             f'<div style="padding:12px 14px; background:{BG}; border-left:4px solid {MUTED}; '
@@ -579,9 +636,9 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         for incident in incidents:
             incident = incident or {}
             plain.append(
-                f"- {incident.get('timestamp')} · {incident.get('message')} · "
-                f"{incident.get('state') or 'Требует внимания'}"
+                f"- {incident.get('timestamp')} — {incident.get('state') or 'Требует внимания'}"
             )
+            plain.append(f"    {incident.get('message')}")
     else:
         plain.append("- событий не зафиксировано")
     plain.append("")
@@ -590,10 +647,12 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         for model in fleet:
             model = model or {}
             roles = ", ".join(model.get("roles") or []) or "—"
-            plain.append(
-                f"- {model.get('id')} | {roles} | {model.get('score_text')} | "
-                f"{model.get('latency') or '—'}"
-            )
+            meta_bits = [f"оценка: {model.get('score_text') or '—'}"]
+            latency = str(model.get("latency") or "")
+            if latency:
+                meta_bits.append(f"задержка {latency}")
+            plain.append(f"- {model.get('id')}")
+            plain.append(f"    {roles} · " + " · ".join(meta_bits))
     else:
         plain.append("- флот не измерен")
     if recipient_tag:

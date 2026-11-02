@@ -185,6 +185,59 @@ def iter_json_objects(text: str) -> List[Dict[str, Any]]:
     return objects
 
 
+def _array_spans(text: str) -> Iterator[str]:
+    """
+    Yields every balanced ``[...]`` span of the text, outermost first.
+
+    Measured on 2026-11-02: the digest selection model answered with a bare
+    JSON ARRAY, and the parser — which only knew about ``{...}`` — found
+    nothing, so the letter fell back to raw snippets without saying why.
+    The bracket counting is string-aware, exactly like the object counter.
+    """
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "[":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "]" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                yield text[start:index + 1]
+                start = -1
+
+
+def iter_json_values(text: str) -> List[Any]:
+    """
+    Every JSON payload in the answer that actually parses — objects AND arrays.
+
+    A model that answers ``[{"n": 1}, ...]`` is as valid as one that answers
+    ``{"items": [{"n": 1}, ...]}``; the caller decides what shape it wanted.
+    """
+    values: List[Any] = []
+    cleaned = _strip_fences(text)
+    for span in list(_json_spans(cleaned)) + list(_array_spans(cleaned)):
+        try:
+            values.append(json.loads(span))
+        except Exception:
+            continue
+    return values
+
+
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
     """The first object in the answer that parses as JSON, or None."""
     objects = iter_json_objects(text)
