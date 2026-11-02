@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-02T05:53:08.422767+00:00",
+  "timestamp": "2026-11-02T13:07:19.927988+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -134,7 +134,7 @@
     "files": {
       "data/.bot_sessions.json": 437,
       "data/telegram_history.txt": 41757,
-      "active_models.json": 18951,
+      "active_models.json": 17886,
       "data/.memory_vault.json": null
     }
   },
@@ -154,8 +154,8 @@
   },
   "bot_health": {
     "ok": true,
-    "last_poll_at": "2026-11-02T05:50:11Z",
-    "age_min": 3.0,
+    "last_poll_at": "2026-11-02T13:06:25Z",
+    "age_min": 1.0,
     "last_send_at": "2026-11-01T15:30:07Z",
     "updates_seen": 16,
     "messages_sent": 17,
