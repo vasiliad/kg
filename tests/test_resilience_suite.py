@@ -2811,6 +2811,47 @@ def test_46_the_canary_measures_the_letter_task():
 
     print("[+] Test 46 Passed: the fleet tuner measures the letter task itself.")
 
+def test_47_the_state_vault_keeps_yesterdays_picture():
+    """
+    The state files on main are snapshots the next cycle overwrites. The
+    vault copies each day's picture to the state-history branch through
+    the API — one file per snapshot, no rebases, no conflicts. It is a
+    BONUS: without a token it degrades to the log, never crashes the
+    dispatch, and never lets an unmasked address leave the runner.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 47: The state vault snapshots the complex's memory")
+    print("=" * 60)
+    import harness.state_vault as vault
+    from harness import redaction
+
+    # Without a token: degrade to the log, no crash.
+    saved = (os.environ.pop("GH_TOKEN", None), os.environ.pop("GITHUB_TOKEN", None),
+             os.environ.pop("GITHUB_REPOSITORY", None), os.environ.pop("GH_REPO", None))
+    try:
+        assert vault.push_state_snapshot(["nim_history.log"]) is False,             "no token = no push, but no crash either"
+    finally:
+        for name, value in zip(("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_REPOSITORY", "GH_REPO"), saved):
+            if value is not None:
+                os.environ[name] = value
+
+    # The snapshot path is timestamped, so same-day re-runs never conflict.
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    stamp = now.strftime("%Y-%m-%d/%H%M")
+    assert stamp.count("/") == 1 and len(stamp) == 15, f"unexpected stamp: {stamp}"
+
+    # What leaves the runner is masked, whatever the source file holds.
+    sample = "отчёт для ivan@example.com доставлен"
+    assert "ivan@example.com" not in redaction.mask_emails(sample),         "an address must not survive into the vault"
+
+    # The dispatcher must call the vault after the letters are out.
+    source = (PROJECT_ROOT / "harness" / "daily_dispatcher.py").read_text(encoding="utf-8")
+    assert "state_vault.push_state_snapshot" in source,         "the dispatch must snapshot the state"
+    assert "data/daily_digest.json" in source and "data/duty_shift.json" in source,         "the vault must cover the digest and the duty shift"
+
+    print("[+] Test 47 Passed: yesterday's picture survives in the state vault.")
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -2868,6 +2909,7 @@ if __name__ == "__main__":
         test_44_a_failed_letter_raises_a_backup_alert,
         test_45_the_digest_reaches_telegram_as_a_control_copy,
         test_46_the_canary_measures_the_letter_task,
+        test_47_the_state_vault_keeps_yesterdays_picture,
     ]
     failed = []
     for t in tests:

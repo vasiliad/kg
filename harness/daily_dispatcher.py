@@ -58,6 +58,7 @@ from harness.email_sender import EmailSender
 from harness import alert_channel
 from harness import atomic_io
 from harness import redaction
+from harness import state_vault
 from harness import email_render
 from harness import runtime_settings
 from harness import tool_call
@@ -1015,6 +1016,20 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
             print(f"[-] Error generating news digest: {e}")
             results["news_digest"] = {"status": "ERROR", "error": str(e)}
             _log_dispatch("Ежедневный дайджест ИИ", recipient, results["news_digest"])
+
+    # The state vault: point-in-time snapshots of the complex's memory on
+    # the state-history branch. main shows only the LATEST picture; the
+    # vault keeps every day's. A bonus, never a precondition: its failure
+    # must not colour the dispatch result.
+    try:
+        state_vault.push_state_snapshot([
+            "data/daily_digest.json",
+            "active_models.json",
+            "data/duty_shift.json",
+            "nim_history.log",
+        ])
+    except Exception as e:
+        print(f"[!] State vault failed: {type(e).__name__}: {e}")
 
     print("\n" + "=" * 72)
     print("✅ DAILY DISPATCH PIPELINE COMPLETE.")
