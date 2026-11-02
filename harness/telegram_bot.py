@@ -1066,6 +1066,16 @@ class HarnessTelegramBot:
                 answers.append({"model": str(replacement.get("id")), "ok": False,
                                 "status": f"HANDLER_ERROR:{type(e).__name__}", "content": ""})
 
+        # 5c. The network tier is GONE (both duty models failed, or there
+        #     was no roster at all): the complex TAKES OVER with the local
+        #     sovereign engine. Survival protocol, stage 1 — the operator
+        #     gets an answer, not a shrug; the reply is labelled with the
+        #     engine that produced it.
+        if not any(a.get("ok") for a in answers):
+            takeover = self.sovereign_takeover_answer(effective_prompt, search_plan["query"])
+            if takeover:
+                answers.append(takeover)
+
 
         # 6. Persist duty answers into eternal memory (the event protocol).
         for a in answers:
@@ -1252,6 +1262,45 @@ class HarnessTelegramBot:
         except Exception as e:
             self._record_error(f"digest push: {type(e).__name__}: {e}")
             print(f"[!] Control digest push failed: {e}")
+
+    def sovereign_takeover_answer(self, task: str, query: str = "") -> Optional[Dict[str, Any]]:
+        """
+        Survival protocol, stage 1: the local sovereign engine answers a
+        duty task when the network tier is gone.
+
+        The reply is labelled with the engine that produced it: a neural
+        GGUF/transformers answer is a real answer; the deterministic kernel
+        produces an honest «сеть недоступна» frame instead of pretending.
+        """
+        try:
+            sov = self.arbiter_engine.execute_sovereign_mission(
+                task_description=task,
+                context={"mode": "duty_takeover", "query": query},
+            )
+        except Exception as e:
+            self._record_error(f"sovereign takeover: {type(e).__name__}: {e}")
+            return None
+
+        engine = str(sov.get("engine") or "")
+        text = str(sov.get("output") or "").strip()
+        if engine == "deterministic_kernel":
+            text = (
+                "Сетевые модели недоступны, локальная нейросеть не загружена — "
+                "отвечает детерминированное ядро Хранителя. "
+                "Полный ответ появится, когда сетевой тир восстановится: "
+                "супервизор переиграет циклы, дайджест уйдёт с честной пометкой."
+            )
+        if not text:
+            return None
+        self._record_error("duty takeover: сеть недоступна, отвечает локальное ядро")
+        return {
+            "model": f"локальное ядро ({engine})",
+            "ok": True,
+            "status": "SOVEREIGN_TAKEOVER",
+            "content": _operator_safe_text(text),
+            "elapsed": sov.get("elapsed_sec"),
+            "sovereign": True,
+        }
 
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""

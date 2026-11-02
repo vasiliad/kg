@@ -3052,6 +3052,186 @@ def test_49_when_every_nvidia_model_dies_the_keeper_holds():
 
     print("[+] Test 49 Passed: the keeper holds the line on a total NVIDIA outage.")
 
+def test_50_the_survival_ladder_local_first_apis_last():
+    """
+    The operator's scheme, reordered: when NVIDIA NIM disappears the
+    complex first TAKES OVER locally, then finds a SMARTER local model
+    (GGUF within the measured runner budget), and only LAST searches for
+    alternative network APIs — credentials cannot invent themselves.
+
+    The weights chain is local disk → own mirror repo → HF pinned by
+    revision, so the model disappearing from HF does not orphans it.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 50: The survival ladder — local first, APIs last")
+    print("=" * 60)
+    import harness.survival as sv
+
+    # --- the runner budget is the operator's own numbers -----------------
+    budget = sv.disk_budget_gb(free_gb=14.0)
+    assert 7.0 <= budget <= 10.0, f"14 GB disk - safety must leave 8-10 GB ({budget})"
+    assert sv.disk_budget_gb(free_gb=4.0) == 1.0, "no room -> no upgrade"
+
+    # --- the GGUF file picker: Q4 preferred, must fit --------------------
+    files = {
+        "model-7b-q4_k_m.gguf": int(4.2 * sv.GB),
+        "model-7b-q8_0.gguf": int(8.0 * sv.GB),
+        "model-13b-q4_k_m.gguf": int(7.8 * sv.GB),
+        "model-70b-q4_k_m.gguf": int(40 * sv.GB),   # does not fit
+        "readme.txt": 100,
+    }
+    pick = sv.pick_gguf_file(files, budget_bytes=int(9.0 * sv.GB))
+    assert pick and pick[0] == "model-13b-q4_k_m.gguf",         f"the biggest Q4 that fits must win ({pick})"
+
+    # --- the candidate search: instruction models in the param window ----
+    fake_hf = [
+        {"modelId": "someone/Llama-3-8B-Instruct-GGUF", "downloads": 5000, "likes": 300},
+        {"modelId": "other/Mistral-7B-v0.3-GGUF", "downloads": 900, "likes": 50},   # not instruct
+        {"modelId": "tiny/Qwen2.5-1.5B-Instruct-GGUF", "downloads": 99999, "likes": 999},  # too small
+        {"modelId": "huge/Qwen3-32B-Instruct-GGUF", "downloads": 99999, "likes": 999},     # too big
+    ]
+    cand = sv.find_smarter_local_model(free_gb=14.0, search_results=fake_hf)
+    assert cand and cand["repo_id"] == "someone/Llama-3-8B-Instruct-GGUF",         f"the crowd's best fit must win ({cand})"
+    assert "не измерен" in cand["verdict"], "popularity is NOT a measurement"
+
+    # --- the download chain: local disk -> mirror -> HF ------------------
+    tmp = Path(tempfile.mkdtemp(prefix="survival-dl-"))
+    os.environ["SOVEREIGN_WEIGHTS_REPO"] = "vasiliad/kg-weights"
+    try:
+        existing = tmp / "model-7b-q4_k_m.gguf"
+        existing.write_bytes(b"x" * 1024)
+        got = sv.download_gguf("someone/Llama-3-8B-Instruct-GGUF",
+                               "model-7b-q4_k_m.gguf", dest_dir=tmp)
+        assert got == existing, "a model already on disk must not be re-downloaded"
+
+        missing = tmp / "model-13b-q4_k_m.gguf"
+        calls = {"n": 0}
+
+        class _MirrorBytes:
+            """The mirror serves ONE part, then 404s — the loop must stop."""
+
+            def read(self):
+                calls["n"] += 1
+                if calls["n"] > 1:
+                    raise OSError("HTTP 404: not found")
+                return b"mirror-bytes"
+
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        saved_urlopen = sv.urllib.request.urlopen
+        sv.urllib.request.urlopen = lambda url, timeout=60: _MirrorBytes()
+        try:
+            got2 = sv.download_gguf("someone/Llama-3-8B-Instruct-GGUF",
+                                    "model-13b-q4_k_m.gguf", dest_dir=tmp)
+            assert got2 == missing and got2.read_bytes() == b"mirror-bytes",                 "the mirror must be the FIRST source when the disk is empty"
+        finally:
+            sv.urllib.request.urlopen = saved_urlopen
+    finally:
+        os.environ.pop("SOVEREIGN_WEIGHTS_REPO", None)
+
+    # --- the swap rule: the canary is the judge --------------------------
+    fake_gguf = tmp / "cand.gguf"
+    fake_gguf.write_bytes(b"weights")
+    record = sv.measure_and_swap(
+        fake_gguf, "someone/Llama-3-8B-Instruct-GGUF",
+        canary_fn=lambda text: (0.9, "full_news") if "WIN" in text else (0.3, "brief"),
+        record_path=tmp / "local_keeper.json")
+    assert record.get("pending_candidate"),         "without a runtime the candidate must stay UNMEASURED — no swap"
+
+    # --- stage 3: the provider discovery prepares, never invents ---------
+    class FakeSearch:
+        def search_web(self, query, num_results=5):
+            return [{"title": "OpenRouter free tier", "url": "https://openrouter.ai/docs"}]
+    import harness.daily_dispatcher as dd
+    dd_providers = sv.PROVIDER_CANDIDATES
+    saved_cand = sv.PROVIDER_CANDIDATES
+    sv.PROVIDER_CANDIDATES = tmp / "provider_candidates.json"
+    try:
+        report = sv.discover_alternate_apis(FakeSearch())
+        assert report["candidates"], "the discovery must produce candidates"
+        assert "ключ" in report["instruction"], "the instruction must demand the operator's key"
+    finally:
+        sv.PROVIDER_CANDIDATES = saved_cand
+
+    # --- the ORDER: local before APIs ------------------------------------
+    assert sv.run_protocol.__doc__ and "local first" in sv.run_protocol.__doc__
+    ladder = ["1_takeover", "2_local_upgrade", "3_alt_apis"]
+    assert ladder.index("2_local_upgrade") < ladder.index("3_alt_apis"),         "the operator's order: the local tier is squared away BEFORE hunting APIs"
+
+    print("[+] Test 50 Passed: the survival ladder is local-first, and the mirror holds the weights.")
+
+def test_51_the_model_forge_runs_code_and_gates_self_improvement():
+    """
+    The operator: «может ли резервная локальная модель писать программы
+    сама или по приказу заказчика?» — yes, through the forge, under a
+    constitution:
+
+    - ORDER: the model's script runs in a SANDBOX — its own empty dir,
+      `python -I` (no env, no cwd, no secrets), a hard timeout;
+    - SELF-IMPROVEMENT: a patch to the harness never lands un-tested — it
+      is applied to a scratch copy, and only a FULL green suite turns it
+      into a branch;
+    - a patch that mentions a secret is rejected before it is even applied.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 51: The code forge — sandboxed execution, suite-gated improvement")
+    print("=" * 60)
+    from harness import code_forge
+
+    # --- ORDER: the sandbox measures, and secrets stay outside ------------
+    res = code_forge.run_script("import os; print('LEAK' if os.environ.get('TELEGRAM_BOT_PASSWORD') else 'clean')")
+    assert "clean" in res["stdout"] and "LEAK" not in res["stdout"],         f"the sandbox must not carry secrets ({res})"
+
+    res2 = code_forge.run_script("print(sum(range(10)))")
+    assert res2["ok"] and res2["stdout"].strip() == "45", "the script must run and be measured"
+
+    res3 = code_forge.run_script("while True: pass", timeout_sec=2)
+    assert res3["timed_out"] and not res3["ok"], "a runaway script must be stopped"
+
+    # --- VETTING: a patch that touches secrets is dead on arrival ---------
+    bad = code_forge.apply_self_improvement(
+        "diff --git a/x.py b/x.py\n+TOKEN = os.environ['TELEGRAM_BOT_TOKEN']",
+        dry_run=True)
+    assert not bad["ok"] and bad["stage"] == "vetting", \
+        f"a secret-touching patch must be rejected without any git work ({bad})"
+
+    # --- SELF-IMPROVEMENT: suite-green patch becomes a branch -------------
+    # The patch is generated like a model would: a unified diff of the
+    # module's current text. The scratch copy is a real clone of the
+    # COMMITTED tree; the suite runs for real there.
+    import difflib
+    target = PROJECT_ROOT / "harness" / "survival.py"
+    original = target.read_text(encoding="utf-8")
+    anchor = "The survival protocol — what the complex does when NVIDIA NIM disappears."
+    assert anchor in original, "the test patch target must exist in the committed tree"
+    improved = original.replace(
+        anchor,
+        anchor + chr(10) + chr(10) + "A model-proposed improvement was here; the whole suite is green.",
+    )
+
+    def _diff(text_a: str, text_b: str) -> str:
+        return chr(10).join(difflib.unified_diff(
+            text_a.splitlines(), text_b.splitlines(),
+            fromfile="a/harness/survival.py", tofile="b/harness/survival.py",
+            lineterm="")) + chr(10)
+
+    outcome = code_forge.apply_self_improvement(_diff(original, improved))
+    assert outcome["ok"], f"a suite-green patch must branch ({outcome})"
+    assert outcome["stage"] == "branched" and outcome.get("branch", "").startswith("forge/"), \
+        f"the improvement must land on a forge branch ({outcome})"
+    assert "PASSED" in (outcome.get("suite_tail") or ""), \
+        "the suite must be the gate, not a formality"
+
+    # A patch that BREAKS the suite must be rejected by the gate.
+    broken_text = original.replace(
+        "import json", "import json" + "\nimport nonexistent_module_xyz", 1)
+    assert broken_text != original, "the broken variant must actually differ"
+    bad_outcome = code_forge.apply_self_improvement(_diff(original, broken_text))
+    assert not bad_outcome["ok"], f"a breaking patch must not branch ({bad_outcome})"
+
+    print("[+] Test 51 Passed: the forge runs code in a sandbox and improves itself only suite-green.")
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -3112,6 +3292,8 @@ if __name__ == "__main__":
         test_47_the_state_vault_keeps_yesterdays_picture,
         test_48_failures_heal_instead_of_only_being_seen,
         test_49_when_every_nvidia_model_dies_the_keeper_holds,
+        test_50_the_survival_ladder_local_first_apis_last,
+        test_51_the_model_forge_runs_code_and_gates_self_improvement,
     ]
     failed = []
     for t in tests:

@@ -31,13 +31,18 @@ class SovereignCPUEngine:
         backup_model_id: str = "Qwen/Qwen2.5-0.5B-Instruct",
         max_memory_gb: float = 4.0,
         temperature: float = 0.6,
-        top_p: float = 0.9
+        top_p: float = 0.9,
+        gguf_path: str = "",
     ):
         self.model_id = model_id
         self.backup_model_id = backup_model_id
         self.max_memory_gb = max_memory_gb
         self.temperature = temperature
         self.top_p = top_p
+        # The upgraded local tier (survival protocol stage 2): a GGUF file
+        # on disk. GGUF is pure weights — no code comes from the network
+        # with it, unlike a transformers checkpoint with trust_remote_code.
+        self.gguf_path = str(gguf_path or "")
         self.system_prompt = (
             "You are the Sovereign Autonomous Systems Arbiter operating in air-gapped CPU fallback mode.\n"
             "All external APIs are offline. You run locally on standard CPU (4 vCPU / 16GB RAM).\n"
@@ -134,6 +139,46 @@ class SovereignCPUEngine:
             "report": status_report
         }
 
+    def execute_gguf_cpu(self, task_description: str, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        The upgraded local tier: a GGUF model through llama-cpp-python on CPU.
+
+        Returns None when the runtime or the file is missing, so the caller
+        falls through the ladder (transformers → deterministic kernel).
+        Measured budget: 7-13B at Q4 on 4 vCPU ≈ units of tokens per second
+        — batch work, not live dialogue.
+        """
+        if not self.gguf_path or not Path(self.gguf_path).exists():
+            return None
+        try:
+            from llama_cpp import Llama
+        except ImportError:
+            return None
+        try:
+            start_time = time.time()
+            llm = Llama(
+                model_path=self.gguf_path,
+                n_ctx=4096,
+                n_threads=4,
+                verbose=False,
+            )
+            prompt = (
+                f"System: {self.system_prompt}\n\n"
+                f"Task: {task_description}\n\nAnswer:"
+            )
+            out = llm(prompt, max_tokens=512, temperature=self.temperature, top_p=self.top_p)
+            text = str((out or {}).get("choices", [{}])[0].get("text", "")).strip()
+            return {
+                "engine": "llama_cpp_gguf",
+                "model_id": Path(self.gguf_path).name,
+                "status": "SUCCESS" if text else "EMPTY",
+                "elapsed_sec": round(time.time() - start_time, 2),
+                "output": text,
+            }
+        except Exception as e:
+            print(f"[!] GGUF runtime failed: {type(e).__name__}: {e}. Falling down the ladder.")
+            return None
+
     def execute_neural_cpu(self, task_description: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Tier 1: Neural SLM generation via Transformers on CPU.
@@ -187,6 +232,10 @@ class SovereignCPUEngine:
         Prioritizes Neural CPU if available, instantly falls back to Deterministic Kernel if not.
         """
         ctx = context or {}
+        if self.gguf_path:
+            gguf_res = self.execute_gguf_cpu(task_description, ctx)
+            if gguf_res is not None:
+                return gguf_res
         if self.is_neural_runtime_available():
             return self.execute_neural_cpu(task_description, ctx)
         else:
