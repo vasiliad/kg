@@ -2627,6 +2627,60 @@ def test_43_state_writes_are_atomic():
     print("[+] Test 43 Passed: the complex's memory cannot be truncated by a crash.")
 
 
+def test_44_a_failed_letter_raises_a_backup_alert():
+    """
+    The letter IS the primary alarm channel. When Gmail refuses it, an
+    alarm that lives only in the log next to the failure is read after
+    the damage — so the failure opens a GitHub Issue instead. The Issue
+    is PUBLIC: the error text must be masked before it goes there.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 44: A failed delivery raises a backup alert (and masks the error)")
+    print("=" * 60)
+    from datetime import datetime, timezone
+    from harness import alert_channel
+
+    # The dedupe key: one issue per label per UTC day.
+    t1 = alert_channel.issue_title("Проверка связи")
+    assert t1 == alert_channel.issue_title("Проверка связи"), "same day = same title"
+    t2 = alert_channel.issue_title(
+        "Проверка связи", datetime(2026, 11, 3, 10, 0, tzinfo=timezone.utc)
+    )
+    assert t1 != t2, "a new day must be a new alert"
+    assert alert_channel.ALERT_MARKER in t1, "the title must be findable"
+
+    # Without a token the alert must degrade to the log, not crash the cycle.
+    saved = (os.environ.pop("GH_TOKEN", None), os.environ.pop("GITHUB_TOKEN", None),
+             os.environ.pop("GITHUB_REPOSITORY", None), os.environ.pop("GH_REPO", None))
+    try:
+        assert alert_channel.raise_delivery_alert(
+            "Проверка связи", "SMTP error: ivan@example.com gone"
+        ) is False, "no token = no alert, but no crash either"
+    finally:
+        for name, value in zip(("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_REPOSITORY", "GH_REPO"), saved):
+            if value is not None:
+                os.environ[name] = value
+
+    # Dry-run: the alert path is exercised without touching GitHub.
+    os.environ["GH_TOKEN"] = "x" * 10
+    os.environ["GITHUB_REPOSITORY"] = "vasiliad/kg"
+    try:
+        assert alert_channel.raise_delivery_alert(
+            "Проверка связи", "SMTP error", dry_run=True
+        ) is True, "dry-run must pass the guard rails"
+    finally:
+        os.environ.pop("GH_TOKEN", None)
+        os.environ.pop("GITHUB_REPOSITORY", None)
+
+    # The dispatcher must call the alert on a non-DELIVERED result.
+    source = (PROJECT_ROOT / "harness" / "daily_dispatcher.py").read_text(encoding="utf-8")
+    assert "raise_delivery_alert" in source, "the dispatcher must raise the backup alert"
+    assert "issues: write" in (PROJECT_ROOT / ".github/workflows/daily_dispatch_novt.yml").read_text(encoding="utf-8"), \
+        "the workflow must be allowed to open issues"
+
+    print("[+] Test 44 Passed: a failed letter raises a masked, deduplicated backup alert.")
+
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -2681,6 +2735,7 @@ if __name__ == "__main__":
         test_41_the_news_is_written_out_in_full,
         test_42_a_rate_limit_is_not_a_bad_answer,
         test_43_state_writes_are_atomic,
+        test_44_a_failed_letter_raises_a_backup_alert,
     ]
     failed = []
     for t in tests:

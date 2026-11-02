@@ -22,6 +22,9 @@ permissions:
   # Required so the cycle supervisor can dispatch this workflow when the
   # scheduler skips its slot (the 12:00 NOVT report, dispatched by the cycle supervisor).
   actions: write
+  # The backup alert channel: a delivery failure opens an Issue, because
+  # the letter itself is the channel that just failed.
+  issues: write
 
 jobs:
   dispatch-emails:
@@ -66,6 +69,7 @@ jobs:
 
       - name: Execute Daily Dispatcher (12:00 NOVT)
         env:
+          GH_TOKEN: ${{ github.token }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}

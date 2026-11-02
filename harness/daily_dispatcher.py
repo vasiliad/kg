@@ -55,6 +55,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness.email_sender import EmailSender
+from harness import alert_channel
 from harness import atomic_io
 from harness import redaction
 from harness import email_render
@@ -958,6 +959,14 @@ def _dispatch_one(
         plain_text_content=mail["plain"],
     )
     _log_dispatch(label, recipient, result)
+    # The letter IS the primary alarm channel — when it fails, the failure
+    # must not live only in the log next to it.
+    if result.get("status") != "DELIVERED":
+        alert_channel.raise_delivery_alert(
+            label,
+            str(result.get("error") or result.get("status") or "неизвестная причина"),
+            recipient_tag=redaction.recipient_tag(recipient),
+        )
     return result
 
 
