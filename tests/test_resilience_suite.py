@@ -2681,6 +2681,83 @@ def test_44_a_failed_letter_raises_a_backup_alert():
     print("[+] Test 44 Passed: a failed letter raises a masked, deduplicated backup alert.")
 
 
+def test_45_the_digest_reaches_telegram_as_a_control_copy():
+    """
+    The email says «DELIVERED» only to SMTP. The bot pushes a control copy
+    of the digest artefact to the operator's chat once a day — a second
+    pipe with a different failure mode, and the proof that the artefact
+    the operator quotes later actually exists.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 45: The digest artefact is control-delivered through Telegram")
+    print("=" * 60)
+    import harness.telegram_bot as tb
+
+    tmp = Path(tempfile.mkdtemp(prefix="digest-push-test-"))
+    (tmp / "data").mkdir()
+    (tmp / "data" / "daily_digest.json").write_text(json.dumps({
+        "subject": "Ежедневный дайджест ИИ: 02.11.2026",
+        "items": [
+            {"title": "Полная новость", "url": "https://a.example/1", "detail": "full"},
+            {"title": "Краткая новость", "url": "https://b.example/2", "detail": "brief"},
+            {"title": "Без ссылки", "url": "", "detail": "full"},
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    saved_root = tb.PROJECT_ROOT
+    tb.PROJECT_ROOT = tmp
+    sent = {}
+
+    class _FakeBot:
+        health = {"last_chat_id": 424242}
+
+        def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
+            sent["chat"], sent["text"] = chat_id, text
+
+        def _save_health(self, force=False):
+            sent["saved"] = True
+
+        def _record_error(self, error):
+            sent["error"] = error
+
+    bot = _FakeBot()
+    try:
+        tb.HarnessTelegramBot.maybe_push_daily_digest(bot)
+        assert sent.get("chat") == 424242, "the copy must go to the operator's chat"
+        assert "Контрольная копия" in sent["text"], "the copy must be labelled as such"
+        assert "Полная новость" in sent["text"], "the titles must be there"
+        assert "краткое изложение" in sent["text"], "a brief must be marked in the copy too"
+        assert "Полных описаний: 2 из 3" in sent["text"], "the honest count must be there"
+        assert bot.health.get("last_digest_push"), "the push date must be recorded"
+
+        # The throttle: the same day must not push twice.
+        sent.clear()
+        tb.HarnessTelegramBot.maybe_push_daily_digest(bot)
+        assert "chat" not in sent, "the same-day second push must be suppressed"
+
+        # No artefact — no push, no crash.
+        (tmp / "data" / "daily_digest.json").unlink()
+        bot.health.pop("last_digest_push")
+        sent.clear()
+        tb.HarnessTelegramBot.maybe_push_daily_digest(bot)
+        assert "chat" not in sent, "an empty artefact must not be pushed"
+
+        # No chat yet — nothing happens.
+        bot.health["last_chat_id"] = None
+        (tmp / "data" / "daily_digest.json").write_text(json.dumps(
+            {"subject": "s", "items": [{"title": "t", "detail": "full"}]}, ensure_ascii=False),
+            encoding="utf-8")
+        tb.HarnessTelegramBot.maybe_push_daily_digest(bot)
+        assert "chat" not in sent, "no chat means no push"
+    finally:
+        tb.PROJECT_ROOT = saved_root
+
+    # The polling loop must call the push.
+    loop = (PROJECT_ROOT / "harness" / "telegram_bot.py").read_text(encoding="utf-8")
+    assert "maybe_push_daily_digest()" in loop, "the loop must push the control copy"
+
+    print("[+] Test 45 Passed: the digest is control-delivered through Telegram, once a day.")
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -2736,6 +2813,7 @@ if __name__ == "__main__":
         test_42_a_rate_limit_is_not_a_bad_answer,
         test_43_state_writes_are_atomic,
         test_44_a_failed_letter_raises_a_backup_alert,
+        test_45_the_digest_reaches_telegram_as_a_control_copy,
     ]
     failed = []
     for t in tests:

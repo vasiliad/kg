@@ -1156,6 +1156,59 @@ class HarnessTelegramBot:
             # The placeholder is noise once the answer is out.
             self.delete_message(chat_id, placeholder_id)
 
+    def maybe_push_daily_digest(self) -> None:
+        """
+        Once a day, sends the digest artefact to the operator's chat as a
+        CONTROL copy.
+
+        The email says «DELIVERED» only to SMTP. This is the second pipe:
+        the artefact must also be quotable through the bot, or the
+        "что было в утреннем дайджесте?" question answers from nothing. A
+        failure here is recorded in the bot's own error counters and never
+        interrupts polling.
+        """
+        chat_id = int(self.health.get("last_chat_id") or 0)
+        if not chat_id:
+            return  # nobody to confirm to yet
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if self.health.get("last_digest_push") == today:
+            return  # already pushed today
+        artefact = PROJECT_ROOT / "data" / "daily_digest.json"
+        try:
+            data = json.loads(artefact.read_text(encoding="utf-8")) if artefact.exists() else {}
+        except Exception:
+            data = {}
+        items = data.get("items") or []
+        if not items:
+            return  # nothing generated yet today
+        subject = str(data.get("subject") or "Ежедневный дайджест ИИ")
+        lines = [f"📰 <b>Контрольная копия — {html.escape(subject)}</b>", ""]
+        for index, item in enumerate(items[:6], 1):
+            item = item or {}
+            title = str(item.get("title") or "").strip() or "без заголовка"
+            url = str(item.get("url") or "").strip()
+            mark = "" if str(item.get("detail") or "") == "full" else " (краткое изложение)"
+            if url and url.startswith(("http://", "https://")):
+                lines.append(f"{index}. <a href=\"{html.escape(url, quote=True)}\">{html.escape(title)}</a>{mark}")
+            else:
+                lines.append(f"{index}. {html.escape(title)}{mark}")
+        full = sum(1 for i in items if str((i or {}).get("detail") or "") == "full")
+        lines.append("")
+        lines.append(
+            html.escape(
+                f"Полных описаний: {full} из {len(items)}. "
+                "Письмо ушло отдельно; это контроль доставки через Telegram."
+            )
+        )
+        try:
+            self.send_message(chat_id, "\n".join(lines), parse_mode="HTML", reply_markup=NO_MARKUP)
+            self.health["last_digest_push"] = today
+            self._save_health()
+            print(f"[*] Control digest copy pushed to Telegram ({today}).")
+        except Exception as e:
+            self._record_error(f"digest push: {type(e).__name__}: {e}")
+            print(f"[!] Control digest push failed: {e}")
+
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""
         self.send_chat_action(chat_id, "typing")
@@ -1385,6 +1438,12 @@ class HarnessTelegramBot:
                 res = requests.get(f"{self.base_url}/getUpdates", params=params, timeout=30)
                 if res.status_code == 200:
                     self._record_poll()
+                    # The daily control copy of the digest: throttled to
+                    # once per UTC day inside, never blocks polling.
+                    try:
+                        self.maybe_push_daily_digest()
+                    except Exception as e:
+                        self._record_error(f"digest push: {type(e).__name__}: {e}")
                     data = res.json()
                     for update in data.get("result", []):
                         update_id = int(update.get("update_id", 0))
