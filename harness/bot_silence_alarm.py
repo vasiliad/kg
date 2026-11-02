@@ -43,6 +43,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from harness import atomic_io
+
 SESSIONS_FILE = PROJECT_ROOT / "data" / ".bot_sessions.json"
 MARKER_FILE = PROJECT_ROOT / "data" / ".bot_silence_alarm.json"
 
@@ -320,14 +322,10 @@ def read_marker(path: Optional[Any] = None) -> Dict[str, Any]:
 
 def write_marker(payload: Dict[str, Any], path: Optional[Any] = None) -> None:
     target = Path(path) if path else MARKER_FILE
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    except Exception as exc:
-        print(f"[!] Could not write the alarm marker: {exc}")
+    # Atomic: the marker says "the alarm already fired" — a half-written
+    # marker would make the alarm forget itself and flood the operator.
+    if not atomic_io.write_json_atomic(target, payload):
+        print("[!] Could not write the alarm marker")
 
 
 def resolve_recipient() -> str:

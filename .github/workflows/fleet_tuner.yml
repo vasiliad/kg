@@ -22,6 +22,12 @@ permissions:
 jobs:
   tune:
     runs-on: ubuntu-latest
+    # Two tuners at once would double-measure the same roster and fight
+    # over active_models.json. Queue instead of racing; a 40-minute
+    # measurement must not be cancelled halfway.
+    concurrency:
+      group: fleet-tuner
+      cancel-in-progress: false
     # Measured: the tuner takes 9m30s–20m29s per cycle (12 pings + 6 models x
     # 3 quality probes + a parameter sweep). The multilingual and tool-call
     # probes add 12 short calls, so the cap was raised from 25 to 40 minutes

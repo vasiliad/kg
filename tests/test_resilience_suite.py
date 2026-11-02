@@ -2571,6 +2571,63 @@ def test_42_a_rate_limit_is_not_a_bad_answer():
     print("[+] Test 42 Passed: the rate limit is waited out, not surrendered to.")
 
 
+def test_43_state_writes_are_atomic():
+    """
+    The runner can die mid-write. The state files are the complex's memory:
+    a truncated `data/.cycle_supervisor.json` reads as "nothing ran" and the
+    supervisor re-dispatches everything; a truncated duty shift reads as
+    "no shift" and the keeper silently starts a new term.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 43: State writes are atomic — a crash cannot truncate them")
+    print("=" * 60)
+    from harness.atomic_io import write_json_atomic, write_text_atomic
+
+    tmp = Path(tempfile.mkdtemp(prefix="atomic-test-"))
+    target = tmp / "state.json"
+
+    assert write_json_atomic(target, {"v": 1}) is True, "a simple write must succeed"
+    assert json.loads(target.read_text(encoding="utf-8")) == {"v": 1}
+
+    # An unserializable payload must fail WITHOUT touching the old file and
+    # without leaving the temp file behind.
+    assert write_json_atomic(target, {"bad": object()}) is False, \
+        "an unserializable payload must fail"
+    assert json.loads(target.read_text(encoding="utf-8")) == {"v": 1}, \
+        "the old state must survive a failed write"
+    assert not (tmp / "state.json.tmp").exists(), "the temp file must be cleaned up"
+
+    assert write_json_atomic(target, {"v": 2}) is True
+    assert json.loads(target.read_text(encoding="utf-8")) == {"v": 2}, \
+        "the next successful write must replace the file"
+
+    text_target = tmp / "log.txt"
+    assert write_text_atomic(text_target, "строка\n") is True
+    assert text_target.read_text(encoding="utf-8") == "строка\n"
+    assert write_text_atomic(text_target, "вторая\n") is True
+    assert text_target.read_text(encoding="utf-8") == "вторая\n"
+
+    # The writers the complex lives on must go through atomic_io.
+    atomic_users = {
+        "harness/state_manager.py": ["atomic_io.write_json_atomic", "atomic_io.write_text_atomic"],
+        "harness/cycle_supervisor.py": ["atomic_io.write_json_atomic"],
+        "harness/duty_shift.py": ["atomic_io.write_json_atomic"],
+        "harness/telegram_bot.py": ["write_json_atomic"],
+        "harness/diagnostics.py": ["atomic_io.write_json_atomic"],
+        "harness/fleet_tuner.py": ["atomic_io.write_json_atomic"],
+        "harness/fleet_drift.py": ["atomic_io.write_json_atomic"],
+        "harness/daily_dispatcher.py": ["atomic_io.write_json_atomic"],
+        "harness/bot_silence_alarm.py": ["atomic_io.write_json_atomic"],
+    }
+    for rel, calls in atomic_users.items():
+        body = (PROJECT_ROOT / rel).read_text(encoding="utf-8")
+        for call in calls:
+            assert call in body, f"{rel} must use {call} for its state writes"
+
+    print("[+] Test 43 Passed: the complex's memory cannot be truncated by a crash.")
+
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -2623,6 +2680,7 @@ if __name__ == "__main__":
         test_40_the_letter_survives_a_phone_screen,
         test_41_the_news_is_written_out_in_full,
         test_42_a_rate_limit_is_not_a_bad_answer,
+        test_43_state_writes_are_atomic,
     ]
     failed = []
     for t in tests:

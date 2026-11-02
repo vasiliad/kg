@@ -57,6 +57,7 @@ from harness.nim_pacer import nim_pacer
 from harness.nim_scanner import NIMScanner, LOCAL_ONLY_MODEL_IDS
 from harness.benchmark_tracker import BenchmarkTracker
 from harness.state_manager import StateManager
+from harness import atomic_io
 from harness import fleet_probes
 from harness import fleet_drift
 
@@ -856,9 +857,9 @@ class FleetTuner:
             self.state_mgr.append_history_log(f"ДРЕЙФ ФЛОТА | {fleet_drift.summarize(report['drift'])}")
 
         report_path = PROJECT_ROOT / "data" / "fleet_report.json"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
+        # Atomic: the supervisor reads this file's timestamp to decide
+        # whether the fleet cycle is alive.
+        atomic_io.write_json_atomic(report_path, report)
         fleet_drift.append_cycle(str(PROJECT_ROOT / "data" / "fleet_history.json"), report)
         self.say(f"Report written to {report_path}")
         return report

@@ -38,6 +38,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from harness import atomic_io
+
 # Each cycle: the workflow that runs it, the artefact that proves it ran,
 # how old that artefact may get, and how long the supervisor must wait after
 # an attempt before trying again.
@@ -348,10 +350,10 @@ def supervise(
 def write_report(report: Dict[str, Any], path: Optional[Path] = None) -> Optional[Path]:
     """Writes the report next to the other state files."""
     target = path or REPORT_PATH
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
+    # Atomic: THIS file is the supervisor's own memory of what it dispatched.
+    # A half-written report reads as "no cycles ran" and the next heartbeat
+    # would re-dispatch everything.
+    if not atomic_io.write_json_atomic(target, report):
         return None
     return target
 

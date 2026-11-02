@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from harness import atomic_io
 from harness import redaction
 
 class StateManager:
@@ -31,8 +32,10 @@ class StateManager:
     def save_local_state(self, state_data: Dict[str, Any]) -> None:
         """Saves updated state data locally."""
         state_data["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
-        with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump(state_data, f, indent=2, ensure_ascii=False)
+        # Atomic: a runner dying mid-write must not corrupt the fleet state
+        # the next cycle inherits.
+        if not atomic_io.write_json_atomic(self.state_file, state_data):
+            raise OSError(f"could not save state to {self.state_file}")
         print(f"[+] State successfully saved to {self.state_file}.")
 
     def append_history_log(self, message: str, max_lines: int = 300) -> None:
@@ -59,9 +62,10 @@ class StateManager:
         lines.append(new_entry)
         if len(lines) > max_lines:
             lines = lines[-max_lines:]
-            
-        with open(self.history_file, "w", encoding="utf-8") as f:
-            f.writelines(lines)
+
+        # Atomic: the log is committed, a half-written file would poison the
+        # public history the next cycle appends to.
+        atomic_io.write_text_atomic(self.history_file, "".join(lines))
 
 
     def sync_to_github(

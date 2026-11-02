@@ -55,6 +55,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness.email_sender import EmailSender
+from harness import atomic_io
 from harness import redaction
 from harness import email_render
 from harness import runtime_settings
@@ -868,13 +869,13 @@ def write_digest_artifact(mail: Dict[str, Any]) -> None:
             for item in (mail.get("items") or [])
         ],
     }
-    try:
-        DIGEST_ARTIFACT.parent.mkdir(parents=True, exist_ok=True)
-        with open(DIGEST_ARTIFACT, "w", encoding="utf-8") as f:
-            json.dump(redaction.mask_emails_deep(payload), f, ensure_ascii=False, indent=2)
+    masked = redaction.mask_emails_deep(payload)
+    # Atomic: the bot quotes this file; a truncated artefact would be a
+    # half-news quoted at the operator.
+    if atomic_io.write_json_atomic(DIGEST_ARTIFACT, masked):
         print(f"[*] Digest artefact written: {DIGEST_ARTIFACT}")
-    except Exception as e:
-        print(f"[!] Could not write the digest artefact: {e}")
+    else:
+        print("[!] Could not write the digest artefact")
 
 
 # --------------------------------------------------------------------------

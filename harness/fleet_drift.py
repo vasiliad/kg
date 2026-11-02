@@ -22,7 +22,12 @@ Statuses:
 
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from harness import atomic_io
 
 # A score is measured on a 0..100 scale. Five points is roughly the spread
 # between two neighbouring duty models, so a smaller mean move is noise.
@@ -220,14 +225,8 @@ def append_cycle(path: str, report: Dict[str, Any], max_cycles: int = MAX_HISTOR
     history.append(cycle)
     if len(history) > max_cycles:
         history = history[-max_cycles:]
-    try:
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    # Atomic: the drift history is the memory the next comparison reads.
+    atomic_io.write_json_atomic(path, history)
     return history
 
 

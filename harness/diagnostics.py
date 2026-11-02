@@ -21,6 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from harness import atomic_io
+
 NIM_BASE = "https://integrate.api.nvidia.com/v1"
 
 # Model IDs the project believes are live. The fleet IDs are kept in their
@@ -358,12 +360,12 @@ def main() -> int:
     print(f"  Credentials: {'ALL SET' if report['credentials'].get('ok') else 'INCOMPLETE'}")
 
     out_path = PROJECT_ROOT / "diagnostics_report.json"
-    try:
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2, ensure_ascii=False)
+    # Atomic: the supervisor reads this file's age to decide whether the
+    # diagnostics cycle is alive.
+    if atomic_io.write_json_atomic(out_path, report):
         print(f"\n  Report written to {out_path}")
-    except Exception as e:
-        print(f"  Could not write report: {e}")
+    else:
+        print("  Could not write report")
 
     critical_ok = nvidia.get("ok") and report["telegram"].get("ok")
     return 0 if critical_ok else 1

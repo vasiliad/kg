@@ -45,6 +45,7 @@ if env_file.exists():
     except Exception:
         pass
 
+from harness.atomic_io import write_json_atomic
 from harness.disk_guard import DiskGuard
 from harness.state_manager import StateManager
 from harness.api_healthcheck import APIHealthChecker
@@ -444,8 +445,10 @@ class HarnessTelegramBot:
             # The session file is committed to a public repository: no address
             # may travel in it (see harness/redaction.py).
             payload = redaction.mask_emails_deep(payload)
-            with open(self.sessions_file, "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2)
+            # Atomic: THIS file is the bot's memory — the Telegram cursor,
+            # the authorized chats, the health. A half-written file would
+            # reset the cursor and replay old updates.
+            write_json_atomic(self.sessions_file, payload)
         except Exception:
             pass
 

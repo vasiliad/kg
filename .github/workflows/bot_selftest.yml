@@ -20,6 +20,11 @@ permissions:
 jobs:
   selftest:
     runs-on: ubuntu-latest
+    # The battery talks to the live bot transport; two runs would race for
+    # the same Telegram cursor.
+    concurrency:
+      group: bot-selftest
+      cancel-in-progress: false
     timeout-minutes: 25
     steps:
       - name: Checkout Repository

@@ -19,6 +19,11 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
+    # The supervisor may dispatch this while its own cron slot fires: a
+    # queue, not a race — the probes are the same either way.
+    concurrency:
+      group: diagnostics
+      cancel-in-progress: false
     timeout-minutes: 10
     steps:
       - name: Checkout Repository

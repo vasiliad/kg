@@ -41,6 +41,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from harness import atomic_io
+
 SHIFT_FILE = PROJECT_ROOT / "data" / "duty_shift.json"
 
 # How long one model stays on duty.
@@ -91,12 +93,10 @@ def load_shift(path: Path = SHIFT_FILE) -> Dict[str, Any]:
 
 def save_shift(shift: Dict[str, Any], path: Path = SHIFT_FILE) -> None:
     """Persists the shift. The bot daemon commits this file between windows."""
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(shift, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[!] Duty shift could not be saved: {e}")
+    # Atomic: a truncated shift file would look like "no shift" and the
+    # keeper would silently start a new 6-hour term mid-shift.
+    if not atomic_io.write_json_atomic(path, shift):
+        print("[!] Duty shift could not be saved")
 
 
 def shift_expired(shift: Dict[str, Any], now: Optional[datetime] = None) -> bool:

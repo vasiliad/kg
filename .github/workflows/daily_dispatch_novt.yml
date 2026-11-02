@@ -26,6 +26,11 @@ permissions:
 jobs:
   dispatch-emails:
     runs-on: ubuntu-latest
+    # A manual re-run must queue behind the scheduled one, not race it:
+    # two dispatches = the operator gets the same letter twice.
+    concurrency:
+      group: daily-dispatch
+      cancel-in-progress: false
     # The digest now reads the source pages and writes every news out in
     # full: measured in the cloud on 2026-11-02, the two model calls took
     # 295s and 478s — 13 minutes in total, close to the old 25-minute

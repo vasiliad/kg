@@ -22,6 +22,12 @@ permissions:
 jobs:
   heartbeat-and-fallback:
     runs-on: ubuntu-latest
+    # The heartbeat may dispatch other workflows; two heartbeats at once
+    # would double-dispatch the same stale cycle.
+    concurrency:
+      group: heartbeat
+      cancel-in-progress: false
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
