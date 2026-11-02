@@ -28,6 +28,14 @@ CONFLICT_FILES=(
   "data/model_sizes.json"
   "data/daily_digest.json"
   "data/duty_shift.json"
+  # Written by bot_selftest.yml — without them a rebase conflict on a
+  # self-test report could not be resolved and the push would be lost.
+  "data/bot_selftest_report.json"
+  "data/bot_transport_report.json"
+  # Written by emergency_cron.yml — the supervisor's own memory of what it
+  # dispatched, and the silence-alarm marker.
+  "data/.cycle_supervisor.json"
+  "data/.bot_silence_alarm.json"
 )
 
 git config --global user.name "vasiliad"
