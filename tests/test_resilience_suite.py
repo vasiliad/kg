@@ -2714,6 +2714,9 @@ def test_45_the_digest_reaches_telegram_as_a_control_copy():
     class _FakeBot:
         health = {"last_chat_id": 424242}
 
+        def _mail_red_line(self, hours=24.0):
+            return {"errors": 0, "delivered": 0, "failed": 0}
+
         def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
             sent["chat"], sent["text"] = chat_id, text
 
@@ -2852,6 +2855,107 @@ def test_47_the_state_vault_keeps_yesterdays_picture():
 
     print("[+] Test 47 Passed: yesterday's picture survives in the state vault.")
 
+def test_48_failures_heal_instead_of_only_being_seen():
+    """
+    The operator: «нужно чтобы система могла самостоятельно
+    восстанавливаться». Observability alone is not resilience — the
+    detected failure must TRIGGER an action:
+
+    - a transient SMTP refusal is retried INSIDE the run (the supervisor
+      would heal it hours later; a transient failure must not cost a day);
+    - the red line rides along in the Telegram control copy, so the day's
+      strain is visible even when the mail channel is the thing that died.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 48: A detected failure triggers recovery, not just a report")
+    print("=" * 60)
+    from datetime import datetime, timezone
+    import harness.daily_dispatcher as dd
+
+    # --- ring 1: the in-run retry -------------------------------------
+    attempts = []
+
+    class _FlakySender:
+        def send_email(self, **kwargs):
+            attempts.append(1)
+            if len(attempts) == 1:
+                return {"status": "ERROR", "error": "connection reset by peer"}
+            return {"status": "DELIVERED"}
+
+    dd.MAIL_RETRY_SEC = 0  # the pause must not slow the test
+    res = dd._dispatch_one(
+        _FlakySender(), "Проверка связи",
+        {"subject": "s", "html": "<p>ok</p>", "plain": "ok"},
+        "someone@example.com", dry_run=False,
+    )
+    assert len(attempts) == 2, f"an ERROR must be retried once ({len(attempts)})"
+    assert res["status"] == "DELIVERED", f"the retry must recover ({res})"
+
+    # A deliberate skip is NOT a transient failure: it must not be retried.
+    attempts.clear()
+
+    class _Unconfigured:
+        def send_email(self, **kwargs):
+            attempts.append(1)
+            return {"status": "SKIPPED_NOT_CONFIGURED"}
+
+    res2 = dd._dispatch_one(
+        _Unconfigured(), "Проверка связи",
+        {"subject": "s", "html": "<p>ok</p>", "plain": "ok"},
+        "someone@example.com", dry_run=False,
+    )
+    assert len(attempts) == 1, "a deliberate skip must not be retried"
+    assert res2["status"] == "SKIPPED_NOT_CONFIGURED"
+
+    # --- ring 2: the red line rides in the control copy ---------------
+    import harness.telegram_bot as tb
+
+    tmp = Path(tempfile.mkdtemp(prefix="red-line-"))
+    (tmp / "data").mkdir()
+    (tmp / "data" / "daily_digest.json").write_text(json.dumps(
+        {"subject": "Дайджест", "items": [{"title": "t", "url": "https://a.example", "detail": "full"}]},
+        ensure_ascii=False), encoding="utf-8")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    (tmp / "nim_history.log").write_text(
+        f"[{stamp} UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Проверка связи\n"
+        f"[{stamp} UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Дайджест | причина=HTTP 429\n"
+        f"[{stamp} UTC] Ошибка доступа к NVIDIA NIM (HTTP 429)\n",
+        encoding="utf-8")
+
+    saved_root = tb.PROJECT_ROOT
+    tb.PROJECT_ROOT = tmp
+    sent = {}
+
+    class _RealRedLineBot:
+        # The red line must come from the REAL log reader, not a stub:
+        # this is the assertion that the numbers are measured.
+        pass
+
+    class _Bot:
+        health = {"last_chat_id": 424242}
+        _mail_red_line = tb.HarnessTelegramBot._mail_red_line
+
+        def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
+            sent["text"] = text
+        def _save_health(self, force=False):
+            pass
+        def _record_error(self, error):
+            pass
+
+    bot = _Bot()
+    try:
+        tb.HarnessTelegramBot.maybe_push_daily_digest(bot)
+        text = sent["text"]
+        assert "Красная линия" in text, "the copy must carry the red line"
+        # Two lines carry failure markers (HTTP 429 twice) — the same
+        # keywords the letter's own counter uses, so both pipes agree.
+        assert "ошибок за 24ч 2" in text, f"the error count must be measured ({text[-200:]})"
+        assert "доставлено 1, не доставлено 1" in text, "both delivery outcomes must be counted"
+    finally:
+        tb.PROJECT_ROOT = saved_root
+
+    print("[+] Test 48 Passed: failures heal in-run, and the strain reaches the second pipe.")
+
 
 if __name__ == "__main__":
     print("================================================================")
@@ -2910,6 +3014,7 @@ if __name__ == "__main__":
         test_45_the_digest_reaches_telegram_as_a_control_copy,
         test_46_the_canary_measures_the_letter_task,
         test_47_the_state_vault_keeps_yesterdays_picture,
+        test_48_failures_heal_instead_of_only_being_seen,
     ]
     failed = []
     for t in tests:

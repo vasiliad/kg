@@ -22,7 +22,7 @@ import signal
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 from urllib.parse import urlsplit
@@ -1156,6 +1156,41 @@ class HarnessTelegramBot:
             # The placeholder is noise once the answer is out.
             self.delete_message(chat_id, placeholder_id)
 
+    def _mail_red_line(self, hours: float = 24.0) -> Dict[str, int]:
+        """
+        The red line, read from the event log: errors, deliveries, failures.
+
+        This lives in the BOT on purpose: when the mail channel dies, the
+        Telegram pipe must still carry the numbers — an operator who reads
+        the control copy must see the day's strain even if no letter
+        arrived. Self-contained (no dispatcher import): the bot must not
+        load the whole mail pipeline to count log lines.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        counts = {"errors": 0, "delivered": 0, "failed": 0}
+        try:
+            log = PROJECT_ROOT / "nim_history.log"
+            for line in (log.read_text(encoding="utf-8", errors="ignore")).splitlines():
+                if not line.startswith("["):
+                    continue
+                try:
+                    ts_str = line[1:line.find("]")].replace(" UTC", "")
+                    stamp = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                except Exception:
+                    continue
+                if stamp < cutoff:
+                    continue
+                msg = line[line.find("]") + 1:].upper()
+                if "ОТЧЁТЫ ОТПРАВЛЕНЫ" in msg:
+                    counts["delivered"] += 1
+                elif "ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ" in msg:
+                    counts["failed"] += 1
+                if any(kw in msg for kw in ("ERROR", "FAIL", "429", "TIMEOUT", "DANGER", "ALERT")):
+                    counts["errors"] += 1
+        except Exception:
+            return counts
+        return counts
+
     def maybe_push_daily_digest(self) -> None:
         """
         Once a day, sends the digest artefact to the operator's chat as a
@@ -1198,6 +1233,15 @@ class HarnessTelegramBot:
             html.escape(
                 f"Полных описаний: {full} из {len(items)}. "
                 "Письмо ушло отдельно; это контроль доставки через Telegram."
+            )
+        )
+        # The red line rides along: if the mail channel is the thing that
+        # died, this is where the operator still sees the day's strain.
+        strain = self._mail_red_line()
+        lines.append(
+            html.escape(
+                f"Красная линия: ошибок за 24ч {strain['errors']} · "
+                f"писем доставлено {strain['delivered']}, не доставлено {strain['failed']}."
             )
         )
         try:

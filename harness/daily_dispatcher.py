@@ -929,6 +929,12 @@ def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
         print(f"[!] Could not log dispatch outcome: {e}")
 
 
+# The first recovery ring: a transient SMTP refusal should heal INSIDE the
+# run, not wait for the supervisor's next heartbeat. The pause is an env
+# so the tests can shrink it to zero.
+MAIL_RETRY_SEC = float(os.getenv("MAIL_RETRY_SEC", "45"))
+
+
 def _dispatch_one(
     sender: EmailSender,
     label: str,
@@ -941,6 +947,11 @@ def _dispatch_one(
 
     No letter leaves without `email_render.validate_html`: an unbalanced tag
     is exactly what made the previous letters unreadable.
+
+    Recovery: an ERROR (a refused connection, a dropped socket — not a
+    deliberate skip) is retried ONCE after a pause, in the same run. The
+    supervisor would eventually re-dispatch a failed report, but hours
+    later; a transient failure should not cost the operator a day.
     """
     problems = email_render.validate_html(mail.get("html", ""))
     if problems:
@@ -959,6 +970,20 @@ def _dispatch_one(
         html_content=mail["html"],
         plain_text_content=mail["plain"],
     )
+
+    if result.get("status") == "ERROR" and MAIL_RETRY_SEC >= 0:
+        print(f"[!] {label}: the first attempt failed "
+              f"({str(result.get('error'))[:120]}); retrying in {MAIL_RETRY_SEC:.0f}s...")
+        time.sleep(MAIL_RETRY_SEC)
+        result = sender.send_email(
+            recipient_email=recipient,
+            subject=mail["subject"],
+            html_content=mail["html"],
+            plain_text_content=mail["plain"],
+        )
+        if result.get("status") == "DELIVERED":
+            print(f"[+] {label}: the retry recovered the delivery.")
+
     _log_dispatch(label, recipient, result)
     # The letter IS the primary alarm channel — when it fails, the failure
     # must not live only in the log next to it.
