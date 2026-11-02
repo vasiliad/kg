@@ -432,7 +432,11 @@ def _map_items(raw_items: List[Dict[str, Any]], candidates: List[Dict[str, Any]]
             "title": title,
             "summary": summary,
             "url": source["url"],
-            "source": source["title"],
+            # The SOURCE is the site, not the search result's headline: the
+            # letter said «Модели · Mistral открыла веса ИИ-модели Large 4
+            # с триллионом ... · 29 октября», which repeated the news in
+            # a truncated form instead of naming where it came from.
+            "source": _source_name(source),
             "date": str(raw.get("date") or "").strip(),
             "category": str(raw.get("category") or "").strip() or source["category"],
             "tier": source["tier"],
@@ -800,12 +804,18 @@ def write_digest_artifact(mail: Dict[str, Any]) -> None:
     later. Masked before writing: the artefact is committed, the repository
     is public (harness/redaction.py).
     """
+    meta = mail.get("meta") or {}
     payload = {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "subject": mail.get("subject"),
-        "tier": (mail.get("meta") or {}).get("tier", ""),
-        "queries": (mail.get("meta") or {}).get("queries", []),
-        "sources_count": (mail.get("meta") or {}).get("sources_count", 0),
+        "tier": meta.get("tier", ""),
+        "queries": meta.get("queries", []),
+        "sources_count": meta.get("sources_count", 0),
+        # How the letter was made — so a later quote of the digest does not
+        # pass a brief off as a news item.
+        "selection_mode": meta.get("selection_mode", ""),
+        "full_news_count": meta.get("full_news_count"),
+        "items_count": meta.get("items_count"),
         "items": [
             {
                 "title": item.get("title"),
@@ -814,6 +824,7 @@ def write_digest_artifact(mail: Dict[str, Any]) -> None:
                 "source": item.get("source"),
                 "date": item.get("date"),
                 "category": item.get("category"),
+                "detail": item.get("detail", ""),
             }
             for item in (mail.get("items") or [])
         ],

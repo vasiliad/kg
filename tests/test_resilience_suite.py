@@ -2437,6 +2437,21 @@ def test_41_the_news_is_written_out_in_full():
     assert described[0]["url"] == "https://a.example/1", "the URL stays ours"
     assert described[0]["source"] == "a.example", "the source stays ours"
 
+    # The source is the SITE, not the search result's headline. The letter
+    # said «Модели · Mistral открыла веса ИИ-модели Large 4 с триллионом ...»
+    # — the news repeated in truncated form instead of naming where it came from.
+    from harness.daily_dispatcher import _map_items
+    candidates = [{
+        "title": "Mistral открыла веса ИИ-модели Large 4 с триллионом параметров",
+        "url": "https://3dnews.ru/1150622/x",
+        "snippet": "текст",
+        "category": "Модели",
+        "tier": "TinyFish",
+    }]
+    mapped = _map_items([{"n": 1, "title": "Заголовок", "summary": "Суть"}], candidates)
+    assert mapped[0]["source"] == "3dnews.ru", \
+        f"the source must be the site, not the search headline ({mapped[0]['source']})"
+
     # A page that cannot be read is not a page.
     blocked = [{"title": "C", "summary": "s", "url": "https://blocked.example/x",
                 "source": "blocked.example", "category": "Модели", "date": ""}]
@@ -2451,7 +2466,8 @@ def test_41_the_news_is_written_out_in_full():
         "full_news_count": 1,
         "items_count": 2,
     })
-    assert "Источник: a.example" in html, "the link must name the source it confirms"
+    assert "Открыть источник" in html, "the link must stay as the source confirmation"
+    assert "a.example" in html, "the source site must be named in the letter"
     assert "краткое изложение" in html, "a brief must be marked in the letter"
     assert "полных описаний: 1 из 2" in html, "the footer must count the full ones"
     assert not email_render.validate_html(html), "the letter must stay well-formed"

@@ -66,15 +66,6 @@ def safe_url(url: Any) -> str:
     return text if SAFE_URL_RE.match(text) else ""
 
 
-def _source_host(url: Any) -> str:
-    """The host of a URL — what the operator sees next to the link."""
-    text = str(url or "")
-    host = text.split("//", 1)[-1].split("/", 1)[0]
-    if host.startswith("www."):
-        host = host[4:]
-    return host or "источник"
-
-
 # --------------------------------------------------------------------------
 # Markdown -> HTML (the fallback path, done properly)
 # --------------------------------------------------------------------------
@@ -401,13 +392,14 @@ def render_digest(
 
             # The link is there to CONFIRM the source, not to be the news:
             # the operator asked for the story itself and left the link as
-            # the reference. So the headline is plain text.
+            # the reference. So the headline is plain text, and the source
+            # is named in the meta line above the text.
             head_html = escape(head)
             if url:
                 link_html = (
                     f'<div style="padding-top:8px; font-size:13px;">'
                     f'<a href="{escape(url, quote=True)}" style="color:{ACCENT};">'
-                    f"Источник: {_source_host(url)}</a></div>"
+                    f"Открыть источник →</a></div>"
                 )
             else:
                 link_html = ""
