@@ -51,7 +51,13 @@ TEST_CASES = [
     ("быстрый_вопрос", "какой сейчас основной дежурный и почему он выбран?",
      [], ["Хранитель", "балл"]),
     ("код_задача", "напиши python функцию is_palindrome(s) с обработкой ошибок",
-     [], ["def ", "is_palindrome"]),
+     [], ["def ", "is_palindrome", "Песочница"]),
+    # The ORDER path of the forge (2026-11-03): the model writes, the
+    # sandbox RUNS it, the operator gets the measured result. The hard
+    # marker is structural — the bot must take the forge path; whether the
+    # live model cooperates is a soft marker (providers vary).
+    ("код_в_песочнице", "напиши программу, которая печатает 6*7",
+     ["Кузница"], ["Песочница", "42"]),
     ("память_фактов", "отправляли ли мне сегодня отчёты на почту?",
      [], ["ОТЧЁТЫ", "нет записей"]),
     ("поиск", "найди в интернете: что нового в NVIDIA NIM за последние дни",
