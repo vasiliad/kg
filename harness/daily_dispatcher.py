@@ -956,6 +956,14 @@ def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
     status = (result or {}).get("status", "UNKNOWN")
     error = (result or {}).get("error") or (result or {}).get("message") or ""
     detail = f" | причина={str(error)[:180]}" if error else ""
+    # WHICH account served the wire, and did the archive copy ride along —
+    # fingerprints only (see harness/redaction.py).
+    via = (result or {}).get("via") or ""
+    if via:
+        detail = f" | via={via}{detail}"
+    archive = (result or {}).get("archive_copy") or ""
+    if archive and archive != "not configured":
+        detail = f"{detail} | архив={archive}"
     if status == "DELIVERED":
         headline = "ОТЧЁТЫ ОТПРАВЛЕНЫ"
     else:

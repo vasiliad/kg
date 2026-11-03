@@ -106,6 +106,18 @@ def recipient_tag(address: str) -> str:
     return f"настроен (sha256:{digest})"
 
 
+def fingerprint(value: str) -> str:
+    """
+    A bare fingerprint («sha256:1a2b3c4d») for anything whose role is clear
+    from the key that names it — «via=sha256:…» records WHICH sender account
+    served a letter without publishing the address.
+    """
+    text = (value or "").strip()
+    if not text:
+        return "не задан"
+    return f"sha256:{_digest(text.lower())[:8]}"
+
+
 def chat_tag(chat_id: Any) -> str:
     """
     A short, non-reversible fingerprint of a Telegram chat id.

@@ -5129,6 +5129,159 @@ def test_65_the_digest_link_must_confirm_the_source():
           "the link confirms the source or there is no link.")
 
 
+def test_66_the_reports_survive_one_dead_google_account():
+    """
+    The operator named the honest 10-year risk: both daily letters hung on
+    ONE Google account. A refused app password (a password change, a 2FA
+    change, an anti-abuse block — the measured ways free mail dies) would
+    silence the whole reports channel at once.
+
+    The wire now has TWO accounts and the letters keep an ARCHIVE copy of
+    their own: the primary (GMAIL_SENDER) serves by default; a wire failure
+    (auth refused, connection dropped) hands the letter to the backup
+    (GMAIL_SENDER_2) exactly once; every letter rides the same SMTP session
+    to ARCHIVE_RECIPIENT_EMAIL — an archive that depends on neither the
+    operator's inbox nor on GitHub. A content refusal (no recipient, empty
+    body) never burns the backup: the problem is the letter, not the wire.
+    The log records WHICH account served, as a fingerprint.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 66: the reports survive one dead Google account")
+    print("=" * 60)
+    from harness import redaction
+    from harness import email_sender as es
+    from harness.email_sender import EmailSender
+
+    # --- the bare fingerprint --------------------------------------------
+    tag = redaction.fingerprint("primary@example.com")
+    assert tag.startswith("sha256:") and "example" not in tag, f"the tag leaks: {tag}"
+    assert redaction.fingerprint("PRIMARY@Example.com") == tag, "the tag must not depend on the case"
+    assert redaction.fingerprint("") == "не задан"
+
+    env_keys = ("GMAIL_SENDER", "GMAIL_APP_PASSWORD", "GMAIL_SENDER_2",
+                "GMAIL_APP_PASSWORD_2", "ARCHIVE_RECIPIENT_EMAIL")
+    saved = {k: os.environ.get(k) for k in env_keys}
+    try:
+        os.environ["GMAIL_SENDER"] = "primary@example.com"
+        os.environ["GMAIL_APP_PASSWORD"] = "p" * 16
+        os.environ["GMAIL_SENDER_2"] = "backup@example.com"
+        os.environ["GMAIL_APP_PASSWORD_2"] = "q" * 16
+        os.environ["ARCHIVE_RECIPIENT_EMAIL"] = "archive@example.org"
+
+        sender = EmailSender()
+        assert sender.is_configured() and sender.backup_configured(), \
+            "both accounts must be configured by the secrets"
+
+        # --- the policy: which failures hand the letter over -------------
+        calls: list = []
+        def _fake_deliver(account_email, password, recipient, subject, html, plain):
+            calls.append(account_email)
+            if account_email == "primary@example.com":
+                return {"status": "AUTH_ERROR", "error": "Authentication failed"}
+            return {"status": "DELIVERED", "recipient": "x", "subject": subject,
+                    "via": redaction.fingerprint(account_email)}
+
+        saved_deliver = sender._deliver
+        sender._deliver = _fake_deliver
+        try:
+            res = sender.send_email("operator@example.org", "Тест", "<p>тело</p>", "тело")
+            assert res.get("status") == "DELIVERED" and res.get("failed_over") is True, \
+                f"the backup must take the wire: {res}"
+            assert res.get("primary_status") == "AUTH_ERROR", \
+                f"the primary's failure must stay visible: {res}"
+            assert calls == ["primary@example.com", "backup@example.com"], \
+                f"exactly one backup attempt: {calls}"
+            assert "backup@example" not in json.dumps(res), \
+                f"the result must carry fingerprints, not addresses: {res}"
+
+            # A content refusal never burns the backup.
+            calls.clear()
+            res = sender.send_email("not-an-address", "Тест", "<p>тело</p>", "тело")
+            assert res.get("status") == "SKIPPED_NO_RECIPIENT" and not calls, \
+                f"a content problem is not a wire problem: {res}"
+        finally:
+            sender._deliver = saved_deliver
+
+        # Both dead → the error stands, no crash, no infinite fallback.
+        sender._deliver = lambda *a, **k: {"status": "NETWORK_ERROR", "error": "boom"}
+        try:
+            res = sender.send_email("operator@example.org", "Тест", "<p>тело</p>", "тело")
+            assert res.get("status") == "NETWORK_ERROR", \
+                f"both accounts dead must read as an error: {res}"
+            assert res.get("failed_over") is True, "the failover must be visible"
+        finally:
+            sender._deliver = saved_deliver
+
+        # --- the archive copy rides the same SMTP session ----------------
+        captured: dict = {}
+        class _FakeSMTP:
+            def __init__(self, host, port, timeout=20):
+                captured["host"], captured["port"] = host, port
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+            def ehlo(self):
+                return None
+            def starttls(self):
+                return None
+            def login(self, user, password):
+                captured["login"] = user
+            def sendmail(self, from_addr, to_addrs, msg):
+                captured["from"], captured["to"], captured["msg"] = from_addr, list(to_addrs), msg
+
+        saved_smtp = es.smtplib.SMTP
+        es.smtplib.SMTP = _FakeSMTP
+        try:
+            res = sender.send_email("operator@example.org", "Тест", "<p>тело</p>", "тело")
+            assert res.get("status") == "DELIVERED" and res.get("archive_copy") == "sent", \
+                f"the archive copy must ride along: {res}"
+            assert res.get("via") == redaction.fingerprint("primary@example.com"), \
+                f"the serving account must be fingerprinted: {res}"
+            assert captured["from"] == "primary@example.com", \
+                f"the primary must serve: {captured}"
+            assert captured["to"] == ["operator@example.org", "archive@example.org"], \
+                f"the archive must be an RCPT, not a header: {captured['to']}"
+            assert "Bcc" not in captured["msg"], \
+                "the archive address must never be published in a header"
+            assert "primary@example.com" in captured["msg"], \
+                "the From header must name the serving account"
+        finally:
+            es.smtplib.SMTP = saved_smtp
+    finally:
+        for k, val in saved.items():
+            if val is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = val
+
+    # --- and the log records who served ----------------------------------
+    import tempfile as _tf
+    import harness.daily_dispatcher as _dd
+    from harness.state_manager import StateManager
+    with _tf.TemporaryDirectory() as tmp:
+        saved_sm = _dd.StateManager
+        _dd.StateManager = lambda: StateManager(
+            state_file=str(Path(tmp) / "state.json"),
+            history_file=str(Path(tmp) / "nim_history.log"))
+        try:
+            _dd._log_dispatch("Проверка связи", "operator@example.org", {
+                "status": "DELIVERED",
+                "via": redaction.fingerprint("primary@example.com"),
+                "archive_copy": "sent",
+            })
+            written = (Path(tmp) / "nim_history.log").read_text(encoding="utf-8")
+        finally:
+            _dd.StateManager = saved_sm
+        assert "ОТЧЁТЫ ОТПРАВЛЕНЫ" in written and "via=sha256:" in written \
+            and "архив=sent" in written, \
+            f"the log must record the serving account and the copy: {written}"
+        assert "example" not in written, f"no address may reach the log: {written}"
+
+    print("[+] Test 66 Passed: two accounts on the wire, an archive of its own, "
+          "and the log says which account served.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5204,6 +5357,7 @@ if __name__ == "__main__":
         test_63_the_survival_ladder_must_be_wired_not_written,
         test_64_the_docs_must_describe_this_complex_not_a_former_one,
         test_65_the_digest_link_must_confirm_the_source,
+        test_66_the_reports_survive_one_dead_google_account,
     ]
     failed = []
     for t in tests:
