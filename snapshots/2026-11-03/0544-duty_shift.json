@@ -1,0 +1,12 @@
+{
+  "model_id": "mistralai/mistral-large-4-1t-a52b",
+  "started_at": "2026-11-02T07:08:59Z",
+  "until": "2026-11-02T13:08:59Z",
+  "chosen_by": "Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру",
+  "calls": 2,
+  "failures": 0,
+  "last_latency_sec": 59.01,
+  "broken_at": "",
+  "broken_reason": "",
+  "started_because": "дежурная модель перестала отвечать быстро"
+}
