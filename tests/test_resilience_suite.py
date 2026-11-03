@@ -3282,6 +3282,129 @@ def test_51_the_model_forge_runs_code_and_gates_self_improvement():
     print("[+] Test 51 Passed: the forge runs code in a sandbox and improves itself only suite-green.")
 
 
+def test_52_the_operator_can_order_code_and_the_forge_measures_it():
+    """
+    The operator's question, made reachable: «напиши программу, которая …».
+
+    The ORDER must be recognised in free form (and «напиши письмо про код»
+    must NOT be mistaken for it), the model must write, the sandbox must
+    RUN it, and the operator must receive the MEASURED result plus the
+    attribution. When the network tier is gone, the RESERVE LOCAL model
+    writes instead — and the deterministic kernel, which cannot write
+    programs, says so instead of inventing one.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 52: The operator orders code — the forge writes, runs and reports")
+    print("=" * 60)
+    from harness import code_forge
+    from harness.telegram_bot import HarnessTelegramBot
+
+    # --- the detector: an order, not a topic ------------------------------
+    assert code_forge.looks_like_code_order("напиши программу, которая считает бюджет"), \
+        "a free-form code order must be recognised"
+    assert code_forge.looks_like_code_order("запусти скрипт проверки диска"), \
+        "a run order must be recognised"
+    assert code_forge.looks_like_code_order("/code посчитай 2+2"), \
+        "the explicit command must be recognised"
+    assert not code_forge.looks_like_code_order("напиши письмо про код, который сломался"), \
+        "a letter about code is not a code order"
+    assert not code_forge.looks_like_code_order("запусти поиск новостей про AI"), \
+        "a search is not a code order"
+    assert not code_forge.looks_like_code_order("напиши статью о нейросетях"), \
+        "an article is not a code order"
+    assert code_forge.is_self_improvement_order("улучши себя: сделай дайджест короче"), \
+        "the self-improvement order must be recognised"
+    assert not code_forge.is_self_improvement_order("напиши программу"), \
+        "an ordinary code order is not a self-improvement"
+
+    # --- the extraction ----------------------------------------------------
+    fenced = "Готово:\n```python\nprint(6 * 7)\n```\nГотово."
+    assert code_forge.extract_code(fenced) == "print(6 * 7)", \
+        "the code must be taken out of the fence, not guessed"
+    assert code_forge.extract_code("просто текст без кода") == "", \
+        "prose is not code"
+    diff_text = "вот патч:\n```diff\ndiff --git a/x.py b/x.py\n@@ -1 +1 @@\n-a\n+b\n```"
+    extracted = code_forge.extract_diff(diff_text)
+    assert extracted.startswith("diff --git") and "```" not in extracted, \
+        f"the diff must be clean of the fence ({extracted!r})"
+
+    # --- the bot: the order is routed to the forge ------------------------
+    bot = HarnessTelegramBot()
+    workdir = _tmp_dir()
+    bot.sessions_file = workdir / "sessions.json"
+    sent = []
+    bot.send_message = lambda chat_id, text, **kw: sent.append((chat_id, text)) or True
+    bot.edit_message = lambda chat_id, message_id, text, **kw: sent.append((chat_id, text)) or True
+    bot.send_chat_action = lambda *a, **kw: True
+    bot._deliver_answer = lambda chat_id, placeholder_id, text, **kw: sent.append((chat_id, text))
+    bot.authorized_chats.add(424242)
+
+    class _FakeDuty:
+        """The duty holder: writes code, and says who wrote it."""
+        model_id = "n/a"
+
+        def execute_task(self, **kw):
+            return {"status": "SUCCESS", "content": fenced, "elapsed_sec": 3.2}
+
+    bot.executor = _FakeDuty()
+    bot._duty_writer = lambda ask: {
+        "ok": True, "model": "n/a", "role": "duty_primary", "score": 91.0,
+        "verified": True, "elapsed": 3.2, "content": fenced, "status": "SUCCESS",
+        "shift": {"model_id": "n/a", "chosen_by": "по живому замеру"},
+    }
+    bot.handle_code_order(424242, "напиши программу, которая печатает 6*7")
+    reply = "\n".join(t for _, t in sent)
+    assert "42" in reply, f"the MEASURED output must reach the operator ({reply[-400:]})"
+    assert "n/a" in reply, "the author must be named"
+    assert "Песочница" in reply or "песочница" in reply.lower(), \
+        "the operator must see that the code was actually run"
+
+    # --- the reserve local model writes when the network tier is gone ------
+    sent.clear()
+    bot._duty_writer = lambda ask: {"ok": False, "status": "NO_DUTY_MODEL", "content": ""}
+    bot._local_writer = lambda ask: {
+        "ok": True, "model": "локальная модель (llama_cpp_gguf)", "role": "sovereign_local",
+        "score": None, "verified": False, "elapsed": 8.1, "content": fenced, "status": "SUCCESS",
+    }
+    bot.handle_code_order(424242, "напиши программу, которая печатает 6*7")
+    reply = "\n".join(t for _, t in sent)
+    assert "42" in reply, "the local model must reach the same measured result"
+    assert "локальная модель" in reply, "the reserve local model must be named"
+
+    # --- the deterministic kernel does NOT invent programs -----------------
+    sent.clear()
+    bot._local_writer = lambda ask: {
+        "ok": False, "status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+        "model": "локальное ядро (детерминированное)", "content": "",
+    }
+    bot.handle_code_order(424242, "напиши программу, которая печатает 6*7")
+    reply = "\n".join(t for _, t in sent)
+    assert "42" not in reply, "no code means no invented result"
+    assert "Ни одна модель не написала код" in reply, \
+        f"the refusal must be explicit ({reply[-300:]})"
+
+    # --- the self-improvement order goes through the gate ------------------
+    sent.clear()
+    saved_apply = code_forge.apply_self_improvement
+    code_forge.apply_self_improvement = lambda diff: {
+        "ok": True, "stage": "branched", "branch": "forge/improvement-test",
+    }
+    try:
+        bot._duty_writer = lambda ask: {
+            "ok": True, "model": "n/a", "role": "duty_primary", "score": 91.0,
+            "verified": True, "elapsed": 3.2, "content": diff_text, "status": "SUCCESS",
+            "shift": {"model_id": "n/a", "chosen_by": "по живому замеру"},
+        }
+        bot.handle_code_order(424242, "улучши себя: сделай дайджест короче")
+        reply = "\n".join(t for _, t in sent)
+        assert "forge/improvement-test" in reply, \
+            f"the branch must be reported ({reply[-300:]})"
+    finally:
+        code_forge.apply_self_improvement = saved_apply
+
+    print("[+] Test 52 Passed: the operator orders code; the forge runs it and reports the measurement.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -3343,6 +3466,7 @@ if __name__ == "__main__":
         test_49_when_every_nvidia_model_dies_the_keeper_holds,
         test_50_the_survival_ladder_local_first_apis_last,
         test_51_the_model_forge_runs_code_and_gates_self_improvement,
+        test_52_the_operator_can_order_code_and_the_forge_measures_it,
     ]
     failed = []
     for t in tests:

@@ -27,6 +27,7 @@ quietly; a patch that was not suite-tested is never called "applied".
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -133,6 +134,126 @@ def _patch_is_clean(patch_text: str) -> Tuple[bool, str]:
         if forbidden.lower() in (patch_text or "").lower():
             return False, f"патч упоминает «{forbidden}» — секреты вне закона"
     return True, ""
+
+
+# ---------------------------------------------------------------------------
+# The ORDER: free-form detection, extraction, and the two prompts
+# ---------------------------------------------------------------------------
+
+# A code ORDER is not a code TOPIC. «напиши программу» is an order;
+# «напиши письмо про код» is a letter; «запусти поиск» is a search. The
+# marker must name BOTH the act and the artifact, and the artifact must be
+# the DIRECT object of the act — otherwise the forge answers a question
+# nobody asked it.
+CODE_VERB_RE = re.compile(
+    r"(напиши|написать|создай|создай|сделай|запусти|выполни|исполни|"
+    r"write|create|make|run|execute)",
+    re.I,
+)
+CODE_NOUN_RE = re.compile(
+    r"(код\w*|скрипт\w*|программ\w*|функци\w*|модул\w*|пайтон|python|"
+    r"bash|shell|скриптов)",
+    re.I,
+)
+# The words that mean "not the forge": the direct object is a letter, an
+# article or a note — and the mention of code comes later, as a topic.
+NOT_CODE_OBJECT_RE = re.compile(
+    r"(письм\w*|стать[ьяю]|доклад\w*|отч[её]т\w*|новост[ьию]|сообщени\w+|"
+    r"заметк\w+|резюме|список|план\w*|инструкци\w+)",
+    re.I,
+)
+# Self-improvement: the order to improve the complex itself.
+SELF_MARKER_RE = re.compile(
+    r"(улучш\w*\s+себя|улучш\w*\s+свой|улучш\w*\s+сво[её]|самоулучш\w*|"
+    r"self[- ]?improv\w*|поправь\s+(свой|свою|сво[её])|"
+    r"почини\s+(свой|свою|сво[её])|предложи\s+(патч|изменени\w+|улучшени\w+))",
+    re.I,
+)
+
+FENCE_RE = re.compile(r"```(?:python|py)?[ \t]*\r?\n(.*?)```", re.S | re.I)
+PY_HINT_RE = re.compile(r"^[ \t]*(import\s|from\s|def\s|class\s|print\(|if\s__name__)", re.M)
+
+
+def looks_like_code_order(text: str) -> bool:
+    """Is this message an ORDER to write or run code? (free-form, no @role)"""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if t == "/code" or t == "/forge" or t.startswith("/code ") or t.startswith("/forge "):
+        return True
+    if SELF_MARKER_RE.search(t):
+        return True
+    verb = CODE_VERB_RE.search(t)
+    if not verb:
+        return False
+    window = t[verb.end(): verb.end() + 80]
+    noun = CODE_NOUN_RE.search(window)
+    if not noun:
+        return False
+    other = NOT_CODE_OBJECT_RE.search(window)
+    if other and other.start() < noun.start():
+        return False          # «напиши письмо про код» — the object is a letter
+    return True
+
+
+def is_self_improvement_order(text: str) -> bool:
+    """The order to improve the complex itself (a patch, suite-gated)."""
+    return bool(SELF_MARKER_RE.search((text or "").strip()))
+
+
+def extract_code(text: str) -> str:
+    """The python code out of a model's answer — measured, not guessed."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    blocks = [b.strip() for b in FENCE_RE.findall(raw) if b.strip()]
+    if blocks:
+        return max(blocks, key=len)
+    if PY_HINT_RE.search(raw):
+        return raw
+    return ""
+
+
+def extract_diff(text: str) -> str:
+    """The unified diff out of a model's answer (the self-improvement path)."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    start = raw.find("diff --git")
+    if start < 0:
+        start = raw.find("--- a/")
+    if start < 0:
+        return ""
+    tail = raw[start:].strip()
+    fence_end = tail.find("```")     # the closing fence is not part of the diff
+    if fence_end >= 0:
+        tail = tail[:fence_end].strip()
+    return tail
+
+
+# The two prompts. Both demand ONE artifact and nothing else — a model that
+# answers with prose is a model that did not do the work.
+CODE_ORDER_PROMPT = (
+    "Напиши ОДИН самостоятельный Python-скрипт, который решает задачу оператора.\n"
+    "Правила ответа:\n"
+    "1. ТОЛЬКО код в одном блоке ```python ... ``` — без пояснений до и после;\n"
+    "2. только стандартная библиотека (без pip и внешних сервисов);\n"
+    "3. скрипт обязан сам завершиться и напечатать результат (print);\n"
+    "4. никаких ключей, паролей и токенов — никаких секретов в коде;\n"
+    "5. если данных не хватает — скрипт всё равно должен отработать и честно "
+    "сказать об этом в выводе."
+)
+
+SELF_IMPROVEMENT_PROMPT = (
+    "Ты — инженер самого автономного комплекса. Предложи ОДИН минимальный патч "
+    "к его собственному коду (unified diff, формат `diff --git a/... b/...`).\n"
+    "Правила ответа:\n"
+    "1. ТОЛЬКО патч в одном блоке ```diff ... ``` — без пояснений;\n"
+    "2. патч меняет ОДИН файл и решает ОДНУ задачу;\n"
+    "3. никаких ключей, паролей и токенов в патче;\n"
+    "4. патч не должен ломать существующие тесты;\n"
+    "5. если задача не требует изменения кода — верни пустой ответ."
+)
 
 
 def apply_self_improvement(

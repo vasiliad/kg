@@ -1302,6 +1302,253 @@ class HarnessTelegramBot:
             "sovereign": True,
         }
 
+    def handle_code_order(self, chat_id: int, task: str) -> None:
+        """
+        The operator's ORDER to write code — «напиши программу, которая …».
+
+        The model writes, the forge RUNS it in the sandbox (its own empty
+        dir, isolated interpreter, no secrets, hard timeout), and the
+        operator gets the MEASURED result: the exit code, the output and
+        the error, as they were — never a promise.
+
+        The reserve LOCAL model does the same when the network tier is
+        gone: that is the operator's own question («может ли резервная
+        локальная модель писать программы»), and it must be answerable
+        without the network.
+
+        The self-improvement order («улучши себя») takes the other path:
+        the model proposes a PATCH, and only a fully green offline suite
+        turns it into a branch.
+        """
+        from harness import code_forge
+
+        self.send_chat_action(chat_id, "typing")
+        placeholder_id = self.send_message(
+            chat_id,
+            "⚙️ <i>Кузница: модель пишет код, песочница запускает…</i>",
+            parse_mode="HTML",
+            reply_markup=NO_MARKUP,
+        )
+
+        self_improve = code_forge.is_self_improvement_order(task)
+        ask = (
+            (code_forge.SELF_IMPROVEMENT_PROMPT if self_improve
+             else code_forge.CODE_ORDER_PROMPT)
+            + "\n\nЗадача оператора:\n" + task
+        )
+
+        # 1. The duty holder writes. The bench replaces it only if it stays
+        #    silent — one voice, the keeper's shift.
+        writer = self._duty_writer(ask)
+        # 2. The network tier is gone: the RESERVE LOCAL model writes.
+        local: Dict[str, Any] = {}
+        if not writer.get("ok"):
+            local = self._local_writer(ask)
+            if local.get("ok"):
+                writer = local
+
+        if not writer.get("ok"):
+            self._deliver_answer(
+                chat_id, placeholder_id,
+                "[-] <b>Ни одна модель не написала код.</b>\n"
+                f"Сетевая дежурная: {html.escape(str(writer.get('status') or 'нет ответа'))}\n"
+                f"Локальная резервная: {html.escape(str((local or {}).get('status') or 'нет ответа'))}\n\n"
+                "Без локальной нейросети на этой машине кузница не пишет код: "
+                "детерминированное ядро Хранителя не выдумывает программы.",
+                parse_mode="HTML",
+            )
+            return
+
+        # 3. The artifact, as written.
+        content = str(writer.get("content") or "")
+        if self_improve:
+            self._deliver_self_improvement(chat_id, placeholder_id, writer, content)
+            return
+
+        code = code_forge.extract_code(content)
+        if not code:
+            self._deliver_answer(
+                chat_id, placeholder_id,
+                "[-] <b>Модель ответила без кода.</b>\n"
+                f"Автор: {html.escape(str(writer.get('model') or '?'))}\n\n"
+                "Песочница запускает только код: без него результата нет.",
+                parse_mode="HTML",
+            )
+            return
+
+        # 4. The sandbox MEASURES.
+        run = code_forge.run_script(code, timeout_sec=code_forge.FORGE_TIMEOUT_SEC)
+        self._deliver_code_result(chat_id, placeholder_id, writer, code, run)
+
+    def _duty_writer(self, ask: str) -> Dict[str, Any]:
+        """The holder of the duty shift writes the code."""
+        from harness.duty_team import DutyTeam
+        from harness import duty_shift
+
+        try:
+            team = DutyTeam()
+            roster = team.load_roster()
+            shift, _ = duty_shift.current_duty(roster)
+        except Exception as e:
+            return {"ok": False, "status": f"ROSTER_ERROR:{type(e).__name__}", "content": ""}
+
+        model_id = str(shift.get("model_id") or "")
+        if not model_id:
+            return {"ok": False, "status": "NO_DUTY_MODEL", "content": "", "shift": shift}
+        entry = next(
+            (m for m in (roster.get("duty") or []) if str(m.get("id")) == model_id), {}
+        )
+        try:
+            res = self.executor.execute_task(
+                task_prompt=ask,
+                context="",
+                enable_search=False,
+                max_tokens=8192,
+                temperature=0.2,
+                top_p=0.9,
+                model_id=model_id,
+            )
+        except Exception as e:
+            return {"ok": False, "status": f"EXECUTOR_ERROR:{type(e).__name__}",
+                    "model": model_id, "content": "", "shift": shift}
+
+        content = str(res.get("content") or "")
+        elapsed = res.get("elapsed_sec")
+        ok = res.get("status") == "SUCCESS" and bool(content.strip())
+        duty_shift.note_outcome(
+            model_id, elapsed, ok,
+            measured_latency=(entry.get("measured") or {}).get("latency_sec")
+            or entry.get("latency_sec"),
+        )
+        return {
+            "ok": ok, "model": model_id, "role": "duty_primary",
+            "score": entry.get("score"), "verified": entry.get("verified"),
+            "elapsed": elapsed, "content": content,
+            "status": res.get("status"), "shift": shift,
+        }
+
+    def _local_writer(self, ask: str) -> Dict[str, Any]:
+        """
+        The RESERVE LOCAL model writes the code when the network is gone.
+        The deterministic kernel cannot write programs — and says so.
+        """
+        try:
+            sov = self.arbiter_engine.execute_sovereign_mission(
+                task_description=ask,
+                context={"mode": "forge_order"},
+            )
+        except Exception as e:
+            self._record_error(f"local writer: {type(e).__name__}: {e}")
+            return {"ok": False, "status": f"LOCAL_ENGINE_ERROR:{type(e).__name__}", "content": ""}
+
+        engine = str(sov.get("engine") or "")
+        text = str(sov.get("output") or "").strip()
+        if engine == "deterministic_kernel":
+            return {"ok": False, "status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+                    "model": "локальное ядро (детерминированное)", "content": "",
+                    "elapsed": sov.get("elapsed_sec")}
+        return {
+            "ok": bool(text), "model": f"локальная модель ({engine})",
+            "role": "sovereign_local", "score": None, "verified": False,
+            "elapsed": sov.get("elapsed_sec"), "content": text,
+            "status": sov.get("status"),
+        }
+
+    def _deliver_code_result(
+        self,
+        chat_id: int,
+        placeholder_id: Optional[int],
+        writer: Dict[str, Any],
+        code: str,
+        run: Dict[str, Any],
+    ) -> None:
+        """The measured run, as it was — plus who wrote the code."""
+        from harness import duty_shift
+        from harness import code_forge
+
+        score_txt = f"балл {writer['score']}" if writer.get("score") is not None else "балл не измерен"
+        mark = "замер ✅" if writer.get("verified") else "сид ⚠️"
+        shift_line = ""
+        if writer.get("shift"):
+            try:
+                shift_line = f"🧑‍💼 <i>Хранитель:</i> {html.escape(duty_shift.describe_shift(writer['shift']))}\n"
+            except Exception:
+                shift_line = ""
+
+        shown = code if len(code) <= 1800 else code[:1800] + "\n… (код обрезан для показа)"
+        exit_txt = "таймаут" if run.get("timed_out") else str(run.get("exit_code"))
+        verdict = "✅" if run.get("ok") else "❌"
+        out = (run.get("stdout") or "").strip() or "(пусто)"
+        err = (run.get("stderr") or "").strip()
+        if len(out) > 1500:
+            out = out[:1500] + "\n… (вывод обрезан)"
+        if len(err) > 800:
+            err = err[:800] + "\n… (ошибка обрезана)"
+
+        parts = [
+            f"⚙️ <b>Кузница — код написан и выполнен</b> {verdict}",
+            shift_line,
+            f"✍️ <b>Автор:</b> {html.escape(str(writer.get('model') or '?'))} — "
+            f"{score_txt} ({mark}) · {writer.get('elapsed', '?')}с",
+            "",
+            "<b>Код:</b>",
+            f"<pre>{html.escape(shown)}</pre>",
+            "",
+            f"🧪 <b>Песочница:</b> exit={html.escape(exit_txt)} · "
+            f"{run.get('elapsed_sec', '?')}с · изолированный каталог, без секретов, "
+            f"таймаут {code_forge.FORGE_TIMEOUT_SEC:.0f}с",
+            "",
+            "<b>Вывод:</b>",
+            f"<pre>{html.escape(out)}</pre>",
+        ]
+        if err:
+            parts += ["", "<b>Ошибка:</b>", f"<pre>{html.escape(err)}</pre>"]
+        if not run.get("ok"):
+            parts += ["", "<i>Код не прошёл — результат выше измерен, а не обещан.</i>"]
+        self._deliver_answer(chat_id, placeholder_id, "\n".join(p for p in parts if p is not None),
+                             parse_mode="HTML")
+
+    def _deliver_self_improvement(
+        self,
+        chat_id: int,
+        placeholder_id: Optional[int],
+        writer: Dict[str, Any],
+        content: str,
+    ) -> None:
+        """The self-improvement order: a patch, and the suite as the judge."""
+        from harness import code_forge
+
+        diff = code_forge.extract_diff(content)
+        if not diff:
+            self._deliver_answer(
+                chat_id, placeholder_id,
+                "[-] <b>Модель не предложила патч.</b>\n"
+                f"Автор: {html.escape(str(writer.get('model') or '?'))}\n\n"
+                "Самоулучшение идёт через unified diff — без него улучшать нечего.",
+                parse_mode="HTML",
+            )
+            return
+
+        outcome = code_forge.apply_self_improvement(diff)
+        if outcome.get("ok"):
+            body = (
+                "✅ <b>Патч прошёл весь офлайн-suite в песочнице.</b>\n"
+                f"✍️ Автор: {html.escape(str(writer.get('model') or '?'))}\n"
+                f"🌿 Ветка: <code>{html.escape(str(outcome.get('branch') or ''))}</code>\n\n"
+                "<i>Ветка ждёт оператора или облачную проверку — в main она не попала.</i>"
+            )
+        else:
+            stage = str(outcome.get("stage") or "?")
+            error = str(outcome.get("error") or "патч отклонён")
+            body = (
+                "[-] <b>Патч отклонён конституцией.</b>\n"
+                f"✍️ Автор: {html.escape(str(writer.get('model') or '?'))}\n"
+                f"🔎 Этап: {html.escape(stage)}\n"
+                f"Причина: {html.escape(error[:400])}\n\n"
+                "<i>Ветка не создана: без зелёного suite улучшение не становится кодом.</i>"
+            )
+        self._deliver_answer(chat_id, placeholder_id, body, parse_mode="HTML")
+
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""
         self.send_chat_action(chat_id, "typing")
@@ -1440,6 +1687,9 @@ class HarnessTelegramBot:
                 "• <b>🧑‍💼 Состав команды</b> — хранитель и дежурные модели с измеренными баллами.\n"
                 "• <b>🔄 Обновить флот</b> — живой замер каталога NIM и переотбор дежурных.\n"
                 "• <b>👑 Запрос Арбитру</b> — прямое обращение к Верховному арбитру (Qwen2.5-1.5B CPU).\n"
+                "• <b>⚙️ Кузница</b> — напишите «напиши программу, которая …»: модель пишет код, "
+                "песочница запускает и присылает измеренный результат. «Улучши себя» — тот же путь, "
+                "но через патч и полный офлайн-suite.\n"
                 "• <b>🌐 Поиск Keenable</b> — живой поиск информации без обрезки.\n"
                 f"• <b>📧 Проверка почты</b> — отправка отчета здоровья на {recipient}.\n"
                 "• <b>📝 Сменить email</b> — изменить получателя ежедневных отчётов.\n"
@@ -1478,8 +1728,15 @@ class HarnessTelegramBot:
             prompt = text.replace("/task ", "", 1).strip()
             self.handle_minimax_task(chat_id, prompt)
         else:
-            # Default: treat any regular message as a task for MiniMax
-            self.handle_minimax_task(chat_id, text)
+            # The ORDER to write code — free-form, no @role: «напиши
+            # программу, которая …». The detector names both the act and
+            # the artifact, so «напиши письмо про код» stays a letter.
+            from harness import code_forge
+            if code_forge.looks_like_code_order(text):
+                self.handle_code_order(chat_id, text)
+            else:
+                # Default: treat any regular message as a task for MiniMax
+                self.handle_minimax_task(chat_id, text)
 
     def _handle_signal(self, signum, frame) -> None:
         """Graceful shutdown: GitHub Actions sends SIGTERM when the job ends."""
