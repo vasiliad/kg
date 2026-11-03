@@ -6,17 +6,18 @@
   ],
   "last_update_id": 603244787,
   "health": {
-    "runs": 75,
-    "started_at": "2026-11-03T15:05:57Z",
-    "last_poll_at": "2026-11-03T15:24:02Z",
+    "runs": 76,
+    "started_at": "2026-11-03T16:04:19Z",
+    "last_poll_at": "2026-11-03T16:06:56Z",
     "last_update_at": "2026-11-02T13:18:23Z",
-    "last_send_at": "2026-11-03T15:06:25Z",
+    "last_send_at": "2026-11-03T16:04:49Z",
     "updates_seen": 17,
-    "messages_sent": 51,
+    "messages_sent": 53,
     "errors": 3,
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
-    "last_chat_id": "чат#131d3f47",
+    "last_chat_id": "чат#c03145cb",
     "last_digest_push": "2026-11-03",
-    "last_forge_push": "20261103T115317Z"
+    "last_forge_push": "20261103T115317Z",
+    "last_chat_tag": "чат#c03145cb"
   }
 }
