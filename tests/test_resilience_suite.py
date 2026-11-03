@@ -57,6 +57,11 @@ import json
 import time
 import tempfile
 from pathlib import Path
+# The names used in annotations MUST be imported: Python 3.11 (the cloud)
+# evaluates annotations when the def executes, while Python 3.14 (the local
+# machine) defers them (PEP 649). An unimported name is therefore a green
+# test here and a NameError there — measured 2026-11-03 on run 41646228973.
+from typing import Any, Dict, List, Optional, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -4562,6 +4567,143 @@ def test_60_an_outage_may_not_replace_the_measured_team():
     print("[+] Test 60 Passed: an outage keeps the measured team, and a seeded team says so.")
 
 
+def test_61_the_annotations_must_survive_the_clouds_python():
+    """
+    The machine that JUDGES the complex must not differ from the machine that
+    RUNS it.
+
+    Measured 2026-11-03, cloud run 41646228973: this suite was green on the
+    local Python 3.14 and RED on the cloud's Python 3.11. The cause was one
+    word — `Dict` used in an annotation but never imported. Python 3.14 does
+    not evaluate annotations when a function is defined (PEP 649); 3.11 does,
+    and dies with `NameError: name 'Dict' is not defined`. The same suite
+    would then fail in every cloud run, forever, while the laptop stayed
+    green.
+
+    So the repository is scanned for that exact shape — an annotation naming
+    something the module never defines — and the scanner itself is checked
+    against a synthetic broken file: a guard that stopped looking must not
+    be able to pass silently.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 61: The annotations must survive the cloud's Python")
+    print("=" * 60)
+    import ast
+    import builtins
+
+    def _module_names(tree):
+        names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    names.add((alias.asname or alias.name).split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    names.add(alias.asname or alias.name)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    for sub in ast.walk(target):
+                        if isinstance(sub, ast.Name):
+                            names.add(sub.id)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                names.add(node.target.id)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                names.add(node.id)
+        return names
+
+    def _annotation_names(node):
+        out = set()
+        if node is None:
+            return out
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name):
+                out.add(sub.id)
+            elif isinstance(sub, ast.Attribute):
+                base = sub
+                while isinstance(base, ast.Attribute):
+                    base = base.value
+                if isinstance(base, ast.Name):
+                    out.add(base.id)
+        return out
+
+    def _problems(source, filename):
+        tree = ast.parse(source, filename=filename)
+        known = _module_names(tree) | set(dir(builtins))
+        found = []
+        scopes = [known]
+
+        class Visitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):
+                local = set(scopes[-1])
+                args = (list(node.args.posonlyargs) + list(node.args.args)
+                        + list(node.args.kwonlyargs))
+                for arg in args:
+                    local.add(arg.arg)
+                for ann in [a.annotation for a in args] + [node.returns]:
+                    for name in _annotation_names(ann):
+                        if name not in local:
+                            found.append(f"{filename}:{node.lineno}: '{name}' in {node.name}")
+                scopes.append(local)
+                self.generic_visit(node)
+                scopes.pop()
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+
+            def visit_AnnAssign(self, node):
+                for name in _annotation_names(node.annotation):
+                    if name not in scopes[-1]:
+                        found.append(f"{filename}:{node.lineno}: '{name}'")
+                self.generic_visit(node)
+
+        Visitor().visit(tree)
+        return found
+
+    # --- the detector must still be able to SEE a bug --------------------
+    broken = "def f() -> Dict[str, Any]:\n    return None\n"
+    assert _problems(broken, "synthetic.py"), \
+        "the detector itself went blind — it must catch an unimported name"
+
+    # --- and the repository must have none -------------------------------
+    tracked = []
+    try:
+        import subprocess as _sp
+        out = _sp.run(
+            ["git", "ls-files", "*.py"],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60,
+        )
+        if out.returncode == 0:
+            tracked = [line.strip() for line in out.stdout.splitlines() if line.strip()]
+    except Exception:
+        tracked = []
+    if not tracked:
+        tracked = [str(p.relative_to(PROJECT_ROOT)).replace("\\", "/")
+                   for p in PROJECT_ROOT.rglob("*.py")
+                   if ".git" not in p.parts]
+
+    broken_files = []
+    for rel in sorted(tracked):
+        path = PROJECT_ROOT / rel
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        try:
+            broken_files.extend(_problems(source, rel))
+        except SyntaxError as exc:
+            broken_files.append(f"{rel}: SyntaxError {exc}")
+
+    assert not broken_files, (
+        "an annotation names something the module never defines — green on "
+        "Python 3.14, a NameError on the cloud's 3.11:\n  "
+        + "\n  ".join(broken_files[:20])
+    )
+    print(f"[+] Test 61 Passed: {len(tracked)} modules, no annotation names a "
+          f"name the module never defines (the cloud's Python 3.11 agrees with "
+          f"the local 3.14).")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4632,6 +4774,7 @@ if __name__ == "__main__":
         test_58_the_dispatcher_keeps_the_daily_promise_itself,
         test_59_an_unreadable_log_is_not_a_quiet_day,
         test_60_an_outage_may_not_replace_the_measured_team,
+        test_61_the_annotations_must_survive_the_clouds_python,
     ]
     failed = []
     for t in tests:
