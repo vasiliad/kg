@@ -28,6 +28,7 @@ quietly; a patch that was not suite-tested is never called "applied".
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,11 @@ if str(PROJECT_ROOT) not in sys.path:
 FORGE_TIMEOUT_SEC = float(os.getenv("FORGE_TIMEOUT_SEC", "60"))
 FORGE_MAX_OUTPUT = 8000
 FORGE_TESTS_TIMEOUT_SEC = float(os.getenv("FORGE_TESTS_TIMEOUT_SEC", "900"))
+# The scratch clone is a mechanical step. Measured 2026-11-03: the same
+# clone took 2.2 seconds by hand and stalled for the whole 300-second
+# timeout while the host was loaded. A busy machine must not be able to
+# veto a patch — the timeout is generous, and the clone is retried once.
+FORGE_CLONE_TIMEOUT_SEC = float(os.getenv("FORGE_CLONE_TIMEOUT_SEC", "600"))
 # The forge's inner suite run carries this marker: the suite-in-the-scratch
 # must not forge ITSELF (measured 2026-11-03: the inner test_51 cloned again
 # and choked on the already-applied patch — an endless recursion of smiths).
@@ -308,11 +314,32 @@ def apply_self_improvement(
     if dry_run:
         return {"ok": True, "stage": "dry_run", "scratch": str(scratch)}
 
-    try:
-        subprocess.run(GIT + ["clone", "--shared", str(PROJECT_ROOT), str(scratch)],
-                       check=True, capture_output=True, timeout=300)
-    except Exception as e:
-        return {"ok": False, "stage": "clone", "error": f"{type(e).__name__}: {e}"}
+    # The clone is a mechanical step, and a MECHANICAL step must not be
+    # mistaken for a verdict: measured on 2026-11-03, a loaded Windows host
+    # stalled the clone for the full timeout while the same clone took 2.2
+    # seconds by hand. So the timeout is generous and the clone is retried
+    # ONCE (the project's rule: one retry per ring, no infinite loops). A
+    # patch is refused because the constitution said so — never because the
+    # machine was busy.
+    clone_error = ""
+    for attempt in range(2):
+        try:
+            subprocess.run(GIT + ["clone", "--shared", str(PROJECT_ROOT), str(scratch)],
+                           check=True, capture_output=True,
+                           timeout=FORGE_CLONE_TIMEOUT_SEC)
+            clone_error = ""
+            break
+        except Exception as e:
+            clone_error = f"{type(e).__name__}: {e}"
+            # A half-written scratch dir would poison the next attempt.
+            try:
+                if scratch.exists():
+                    shutil.rmtree(scratch, ignore_errors=True)
+            except Exception:
+                pass
+            scratch = Path(tempfile.mkdtemp(prefix="forge-patch-"))
+    if clone_error:
+        return {"ok": False, "stage": "clone", "error": clone_error}
 
     # The patch is a unified diff; it is applied in the scratch copy only.
     # The line endings are normalised first: the model writes text, and CRLF

@@ -3301,6 +3301,34 @@ def test_51_the_model_forge_runs_code_and_gates_self_improvement():
     assert branch not in leaked or len([b for b in leaked.splitlines() if b.strip()]) == 1, \
         f"a rejected patch must not leave a branch behind ({leaked})"
 
+    # --- a BUSY machine must not veto a patch ----------------------------
+    # Measured 2026-11-03: under load the scratch clone stalled for its whole
+    # timeout (the same clone took 2.2 seconds by hand) and the patch was
+    # REFUSED — a mechanical stall read as a verdict of the constitution.
+    # The clone is retried once; the gate must still be reached.
+    real_run = code_forge.subprocess.run
+    clone_calls = {"n": 0}
+
+    def _run_with_one_stall(*args, **kwargs):
+        argv = list(args[0]) if args else list(kwargs.get("args") or [])
+        if "clone" in argv:
+            clone_calls["n"] += 1
+            if clone_calls["n"] == 1:
+                raise _sp.TimeoutExpired(argv, 300)
+        return real_run(*args, **kwargs)
+
+    code_forge.subprocess.run = _run_with_one_stall
+    try:
+        retried = code_forge.apply_self_improvement(_diff(original, broken_text))
+    finally:
+        code_forge.subprocess.run = real_run
+    assert clone_calls["n"] == 2, \
+        f"the stalled clone must be retried exactly once ({clone_calls})"
+    assert retried.get("stage") != "clone", \
+        f"a busy machine must not read as a verdict ({retried})"
+    assert retried.get("stage") == "suite", \
+        f"the gate must still be reached after the retry ({retried})"
+
     # The forge's own recursion guard: inside a forge run the forge refuses.
     saved_flag = os.environ.get("FORGE_SKIP_SELF")
     os.environ["FORGE_SKIP_SELF"] = "1"
