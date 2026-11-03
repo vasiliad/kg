@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-03T14:02:48.343298+00:00",
+  "timestamp": "2026-11-03T21:25:53.317680+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -132,11 +132,22 @@
   "state": {
     "ok": true,
     "files": {
-      "data/.bot_sessions.json": 617,
-      "data/telegram_history.txt": 41757,
-      "active_models.json": 8696,
+      "data/.bot_sessions.json": 689,
+      "data/telegram_history.txt": 41763,
+      "active_models.json": 21704,
       "data/.memory_vault.json": null
     }
+  },
+  "bot_health": {
+    "ok": true,
+    "last_poll_at": "2026-11-03T21:24:37Z",
+    "age_min": 1.3,
+    "last_send_at": "2026-11-03T20:32:02Z",
+    "updates_seen": 17,
+    "messages_sent": 63,
+    "errors": 3,
+    "last_chat_id": "чат#c03145cb",
+    "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
   },
   "credentials": {
     "ok": true,
@@ -150,17 +161,17 @@
       "GMAIL_SENDER": true,
       "GMAIL_APP_PASSWORD": true,
       "DISPATCH_RECIPIENT_EMAIL": true
+    },
+    "verdicts": {
+      "NVIDIA_API_KEY": "живой (замер пройден)",
+      "KEENABLE_API_KEY": "МЁРТВ ИЛИ ДЕГРАДАЦИЯ (замер: http_401)",
+      "HF_TOKEN": "присутствует (в этом отчёте не измерялся)",
+      "GH_PAT": "присутствует (в этом отчёте не измерялся)",
+      "TELEGRAM_BOT_TOKEN": "живой (замер пройден)",
+      "TELEGRAM_BOT_PASSWORD": "присутствует (в этом отчёте не измерялся)",
+      "GMAIL_SENDER": "присутствует (в этом отчёте не измерялся)",
+      "GMAIL_APP_PASSWORD": "присутствует (в этом отчёте не измерялся)",
+      "DISPATCH_RECIPIENT_EMAIL": "присутствует (в этом отчёте не измерялся)"
     }
-  },
-  "bot_health": {
-    "ok": true,
-    "last_poll_at": "2026-11-03T14:00:19Z",
-    "age_min": 2.6,
-    "last_send_at": "2026-11-03T13:22:22Z",
-    "updates_seen": 17,
-    "messages_sent": 47,
-    "errors": 1,
-    "last_chat_id": "чат#131d3f47",
-    "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
   }
 }
