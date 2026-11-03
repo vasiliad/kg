@@ -1,0 +1,30 @@
+{
+  "attempted_at": "2026-11-03T11:01:37.176068+00:00",
+  "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
+  "ok": false,
+  "stage": "apply_check",
+  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 11.18, худший: mistralai/mistral-large-4-1t-a52b (дельта 1.7)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.16с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- mistralai/mistral-large-4-1t-a52b: балл 91.41, задержка 12.31с, ok_rate 1.0, слабейшая задача instruction=1.0\n- minimaxai/minimax-m3.1-flash: балл 88.61, задержка 8.77с, ok_rate 1.0, слабейшая задача instruction=0.5\nТекущая смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 70, ошибок 1, ответов 39",
+  "writer": {
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "role": "duty_primary",
+    "score": 96.75,
+    "verified": true,
+    "elapsed": 28.67,
+    "status": "SUCCESS"
+  },
+  "duty_status": "SUCCESS",
+  "local_status": null,
+  "gate": {
+    "ok": false,
+    "stage": "apply_check",
+    "branch": null,
+    "error": "error: corrupt patch at /tmp/forge-patch-kvh55tnp/proposed.patch:11\n"
+  },
+  "branch": null,
+  "patch_bytes": 596,
+  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: corrupt patch at /tmp/forge-patch-kvh55tnp/proposed.patch:11\n",
+  "attempt_day": "2026-11-03",
+  "checked_at": "2026-11-03T11:01:37.176029+00:00",
+  "verdict_id": "20261103T110137Z",
+  "patch_file": "data/forge_autopilot/20261103T110137Z.patch"
+}

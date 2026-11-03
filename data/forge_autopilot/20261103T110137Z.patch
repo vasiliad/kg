@@ -1,0 +1,11 @@
+diff --git a/autopilot/model_selection_policy.py b/autopilot/model_selection_policy.py
+--- a/autopilot/model_selection_policy.py
++++ b/autopilot/model_selection_policy.py
+@@ -12,7 +12,7 @@ def select_model(metrics: dict[str, ModelMetrics]) -> str:
+     # Prefer highest score, but penalise latency > 5 s heavily
+     def score(m: ModelMetrics) -> float:
+         latency_penalty = max(0.0, (m.latency_s - 5.0) * 2.0)
+-        return m.score - latency_penalty
++        return m.score - latency_penalty - (1.0 - m.reasoning) * 10.0
+ 
+     return max(metrics.items(), key=lambda kv: score(kv[1]))[0]
