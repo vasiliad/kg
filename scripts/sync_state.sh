@@ -44,6 +44,20 @@ CONFLICT_FILES=(
   "data/cloud_tests_report.json"
 )
 
+# The append-only logs are NOT snapshots: both writers' lines are true, so a
+# conflict is MERGED, never resolved by taking one side whole.
+#
+# Measured on 2026-11-02, from the repository's own history: the report's
+# proof of delivery was committed at 05:24 (72c2543) and ERASED six minutes
+# later by the fleet tuner's commit (770dd9c), whose workspace held an older
+# copy of the log. The supervisor then read the newest report as 22.7 hours
+# old, decided the daily cycle was owed, and sent the letter again — four
+# times in one day. One overwritten log line became a flood of mail.
+MERGED_FILES=(
+  "nim_history.log"
+  "data/telegram_history.txt"
+)
+
 git config --global user.name "vasiliad"
 git config --global user.email "vasiliadi@users.noreply.github.com"
 
@@ -71,8 +85,19 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   fi
 
   if ! git rebase "origin/${TARGET_BRANCH}"; then
-    echo "[sync] conflict while rebasing — keeping this run's state files."
+    echo "[sync] conflict while rebasing — merging this run's state with the other writer's."
+    # The append-only logs first: their conflicted stages must be read BEFORE
+    # any checkout resolves them.
+    for f in "${MERGED_FILES[@]}"; do
+      mode="events"
+      [ "$f" = "data/telegram_history.txt" ] && mode="conversation"
+      if ! python scripts/merge_state_log.py --file "$f" --mode "$mode"; then
+        echo "[sync] WARNING: ${f} could not be merged — this run's version wins there."
+      fi
+    done
+    # The snapshot-like state files: the newest run wins.
     for f in "${CONFLICT_FILES[@]}"; do
+      case " ${MERGED_FILES[*]} " in *" $f "*) continue ;; esac
       git checkout --theirs -- "$f" 2>/dev/null || true
     done
     # Only the KNOWN state files are staged. A blanket `git add -A` would
@@ -98,7 +123,11 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   fi
 done
 
-# A failed state sync must not mark the whole cycle as failed: the next
-# scheduled run re-syncs, and the cycle's own work already succeeded.
-echo "[sync] WARNING: state could not be pushed after ${MAX_ATTEMPTS} attempts; the next cycle retries."
-exit 0
+# A failed state sync is NOT a quiet warning. Measured on 2026-11-02: the
+# state push was refused, the helper printed a warning and exited 0, and the
+# workflow reported SUCCESS while the cycle's evidence never reached the
+# repository. The supervisor then read the missing evidence as "this cycle
+# never ran" and repeated the work — the operator got the same daily letter
+# four times. A loss that nobody can see is a loss that happens again.
+echo "[sync] ERROR: the state could not be pushed after ${MAX_ATTEMPTS} attempts; this cycle's evidence is NOT in the repository."
+exit 1

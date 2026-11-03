@@ -4036,6 +4036,138 @@ def test_55_the_platform_boundary_must_not_rot():
     print("[+] Test 55 Passed: the platform's edges are part of the constitution.")
 
 
+def test_56_two_writers_must_not_erase_each_others_log():
+    """
+    The log is not a snapshot. Measured on 2026-11-02, from the repository's
+    own history:
+
+        72c2543  05:24  chore(dispatch)  + the report's proof of delivery
+        770dd9c  05:30  feat(fleet)      - the report's proof of delivery
+
+    The fleet tuner's workspace held an older copy of `nim_history.log`; the
+    rebase resolved the conflict by taking one side WHOLE and erased the
+    report's delivery record. At 10:31 the supervisor read the newest report
+    as 22.7 hours old, decided the daily cycle was owed, and sent the letter
+    again — four times in one day. One overwritten log line became a flood.
+
+    So: two writers, one log, both sides must survive. And a state push that
+    fails must FAIL LOUDLY — the old helper printed a warning and exited 0,
+    so the workflow reported success while the evidence never reached the
+    repository.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 56: Two writers must not erase each other's log")
+    print("=" * 60)
+
+    import subprocess
+
+    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+    import merge_state_log as merge
+
+    # 1. The merge keeps both sides, oldest first, duplicates collapsed.
+    side_a = (
+        "[2026-11-02 05:20:18 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Проверка связи | статус=DELIVERED\n"
+        "[2026-11-02 04:02:12 UTC] EMERGENCY RUN SUCCESS | Fleet: 5 models\n"
+    )
+    side_b = (
+        "[2026-11-02 05:24:14 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n"
+        "[2026-11-02 05:20:18 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Проверка связи | статус=DELIVERED\n"
+    )
+    merged = merge.merge_events(side_a, side_b)
+    assert "05:20:18" in merged and "05:24:14" in merged, \
+        "BOTH writers' lines must survive the merge — one erased line is how the operator got four letters a day"
+    assert merged.count("05:20:18") == 1, \
+        "the same event recorded twice is ONE event"
+    stamps = [line[1:20] for line in merged.splitlines() if line.startswith("[")]
+    assert stamps == sorted(stamps), "the merged log must read in chronological order"
+
+    # The conversation format keeps its blocks (and their blank line).
+    convo_a = "[2026-11-01 10:00:00 UTC] USER: первое\n"
+    convo_b = "[2026-11-01 11:00:00 UTC] USER: второе\n"
+    convo = merge.merge_conversation(convo_a, convo_b)
+    assert "первое" in convo and "второе" in convo, \
+        "the conversation log must keep both writers' words"
+    assert "\n\n" in convo, \
+        "the conversation format separates blocks with a blank line — the memory engine reads that"
+
+    # 2. The REAL thing: a git conflict between two writers, resolved by the
+    #    helper the shared sync script calls.
+    tmp = Path(tempfile.mkdtemp(prefix="merge-log-test-"))
+    repo = tmp / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c",
+             "commit.gpgsign=false", *args],
+            cwd=str(repo), capture_output=True, text=True, timeout=60,
+        )
+
+    git("init", "-q", "-b", "main")
+    (repo / "nim_history.log").write_text(
+        "[2026-11-02 04:02:12 UTC] EMERGENCY RUN SUCCESS | Fleet: 5 models\n",
+        encoding="utf-8")
+    git("add", "nim_history.log")
+    git("commit", "-qm", "base")
+
+    # The other writer (the dispatch) adds its delivery record and pushes it.
+    git("checkout", "-qb", "writer-a")
+    (repo / "nim_history.log").write_text(
+        "[2026-11-02 04:02:12 UTC] EMERGENCY RUN SUCCESS | Fleet: 5 models\n"
+        "[2026-11-02 05:24:14 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n",
+        encoding="utf-8")
+    git("commit", "-aqm", "dispatch")
+
+    # This writer (the fleet tuner) starts from the OLD copy and adds its own
+    # line — exactly the situation measured on 2026-11-02.
+    git("checkout", "-q", "main")
+    git("checkout", "-qb", "writer-b")
+    (repo / "nim_history.log").write_text(
+        "[2026-11-02 04:02:12 UTC] EMERGENCY RUN SUCCESS | Fleet: 5 models\n"
+        "[2026-11-02 05:30:35 UTC] ФЛОТ ПЕРЕОБРАН | метод=живой замер\n",
+        encoding="utf-8")
+    git("commit", "-aqm", "fleet")
+
+    # The shared helper rebases this writer onto the other's branch — the
+    # exact situation of two cloud jobs pushing to the same branch.
+    conflict = git("rebase", "writer-a")
+    assert conflict.returncode != 0, \
+        "the two writers must actually conflict — otherwise this test proves nothing"
+    assert git("ls-files", "-u", "--", "nim_history.log").stdout.strip(), \
+        "the log must be left conflicted for the helper to resolve"
+
+    saved_root = merge.PROJECT_ROOT
+    merge.PROJECT_ROOT = repo
+    try:
+        assert merge.merge_conflicted_file("nim_history.log", mode="events"), \
+            "the helper must resolve a conflicted log"
+    finally:
+        merge.PROJECT_ROOT = saved_root
+
+    git("add", "nim_history.log")
+    cont = git("-c", "core.editor=true", "rebase", "--continue")
+    assert cont.returncode == 0, \
+        f"the rebase must continue after the merge: {cont.stderr[:200]}"
+    final = (repo / "nim_history.log").read_text(encoding="utf-8")
+    assert "05:24:14" in final, \
+        "the dispatch's proof of delivery must SURVIVE the other writer's commit"
+    assert "05:30:35" in final, "the fleet's own line must survive too"
+    assert "04:02:12" in final, "the common line must survive"
+
+    # 3. The shared helper must use the merge and must FAIL LOUDLY.
+    sync = (PROJECT_ROOT / "scripts" / "sync_state.sh").read_text(encoding="utf-8")
+    assert "merge_state_log.py" in sync, \
+        "the sync helper must merge the append-only logs — one overwritten line became a flood of letters"
+    assert "nim_history.log" in sync.split("MERGED_FILES=(")[1].split(")")[0], \
+        "the operational log must be in the merged set"
+    assert "exit 1" in sync.split("MAX_ATTEMPTS} attempts")[1][:400], \
+        "a state push that fails must FAIL — the old helper exited 0 and the loss was invisible"
+    assert "exit 0" not in sync.split("MAX_ATTEMPTS} attempts")[1][:400], \
+        "the failed push must not report success"
+
+    print("[+] Test 56 Passed: two writers cannot erase each other's log, and a lost push is loud.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4101,6 +4233,7 @@ if __name__ == "__main__":
         test_53_the_complex_improves_itself_without_being_told,
         test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine,
         test_55_the_platform_boundary_must_not_rot,
+        test_56_two_writers_must_not_erase_each_others_log,
     ]
     failed = []
     for t in tests:
