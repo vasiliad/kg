@@ -64,6 +64,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 os.environ.setdefault("SOVEREIGN_FORCE_DETERMINISTIC", "1")
 
+# The OFFLINE constitution. When this suite runs as the FORGE's gate (the
+# patch must be green in a scratch copy), the live-provider parts are
+# skipped: they are not offline, a patch must not be judged by a provider's
+# mood, and the cloud must not pay for the same live digest twice.
+# Measured 2026-11-03: the live digest build alone took 17 minutes in
+# Actions — the gate has to stay hermetic and fast.
+OFFLINE_GATE = os.getenv("SUITE_OFFLINE") == "1"
+
 from harness import fleet_probes
 from harness import fleet_drift
 from harness.fleet_tuner import FleetTuner, DEFAULT_POLICY
@@ -2164,7 +2172,38 @@ def test_36_email_wellformed_honest_private():
     assert "test@" not in health["html"], "No address in health HTML"
     assert "example.com" not in health["html"], "No address in health HTML"
 
-    # Digest letter (may use fallback if network fails)
+    # Digest letter. The LIVE build (web search + the model writing the
+    # news out in full) is the daily dispatch cycle's work, not the offline
+    # constitution's — and in the cloud it costs ~17 minutes. As the forge's
+    # gate the structure is checked with a fixture instead.
+    if OFFLINE_GATE:
+        from harness.daily_dispatcher import fallback_items
+        fixture = fallback_items([{
+            "title": "Тестовая новость",
+            "url": "https://example.org/article",
+            "snippet": "Текст источника.",
+            "category": "Модели",
+            "tier": "TinyFish",
+        }])
+        html, _ = email_render.render_digest(fixture, {
+            "subject": "Дайджест",
+            "date_label": "02.11.2026",
+            "tier": "TinyFish",
+            "queries": ["q"],
+            "sources_count": 1,
+            "recipient_tag": "настроен (sha256:00000000)",
+            "selection_mode": "источники показаны как есть",
+            "selection_note": "оффлайн-конституция",
+        })
+        problems2 = email_render.validate_html(html)
+        assert not problems2, f"Digest HTML broken (offline fixture): {problems2}"
+        for bad in ["## ", "**", "__"]:
+            assert bad not in html, f"Markdown literal '{bad}' leaked in digest (offline)"
+        assert "test@" not in html and "example.com" not in html, "No address in digest HTML"
+        print("[+] Test 36 Passed (offline gate): the letters are well-formed; "
+              "the LIVE digest build is the dispatch cycle's work, not the constitution's.")
+        return
+
     digest = build_ai_news_digest_email()
     problems2 = email_render.validate_html(digest["html"])
     assert not problems2, f"Digest HTML broken: {problems2}"

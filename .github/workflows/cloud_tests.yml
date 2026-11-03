@@ -24,7 +24,11 @@ jobs:
     concurrency:
       group: cloud-tests
       cancel-in-progress: false
-    timeout-minutes: 20
+    # The live digest build inside the resilience suite measures ~17 minutes
+    # in Actions (the model writes every news out in full), and the forge's
+    # gate adds an OFFLINE run of the whole suite on top of it. Measured
+    # 2026-11-03: the previous 20-minute limit killed the run at 20m22s.
+    timeout-minutes: 40
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

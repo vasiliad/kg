@@ -317,7 +317,15 @@ def apply_self_improvement(
 
     suite = suite_command or [sys.executable, "tests/test_resilience_suite.py"]
     try:
-        forge_env = {**os.environ, FORGE_SKIP_SELF_ENV: "1"}
+        # The gate is the OFFLINE constitution: the live-provider parts are
+        # the dispatch cycle's work (measured in the cloud: the live digest
+        # build alone took 17 minutes), and a patch must be judged by the
+        # offline suite, not by a provider's mood.
+        forge_env = {
+            **os.environ,
+            FORGE_SKIP_SELF_ENV: "1",
+            "SUITE_OFFLINE": "1",
+        }
         proc = subprocess.run(suite, cwd=str(scratch), capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
                               env=forge_env, timeout=FORGE_TESTS_TIMEOUT_SEC)
