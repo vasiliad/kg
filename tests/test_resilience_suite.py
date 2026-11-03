@@ -298,7 +298,9 @@ def test_9_bot_access_guard():
     bot.process_message({"chat": {"id": 424242}, "from": {"id": 1}, "text": "unit-test-pass-1", "message_id": None})
     assert 424242 in bot.authorized_chats, "the correct passphrase must authorize"
     saved = json.loads((workdir / "sessions.json").read_text(encoding="utf-8"))
-    assert 424242 in saved.get("authorized_chats", []), "sessions must persist to the isolated file"
+    from harness import redaction
+    assert redaction.chat_tag(424242) in saved.get("authorized_chats", []), \
+        "sessions must persist to the isolated file — as a fingerprint"
     print("[+] Test 9 Passed: password gate fails closed and authorizes precisely.")
 
 
@@ -546,7 +548,7 @@ def test_15_telegram_cursor_survives_restart():
         # Built without the constructor: no network, no keys, no engines.
         bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
         bot.sessions_file = sessions
-        bot.authorized_chats = {846947027}
+        bot.authorized_chats = {777000111}
         bot.last_update_id = 0
         bot._pending_update_ids = set()
         bot._dispatched_max = 0
@@ -573,14 +575,17 @@ def test_15_telegram_cursor_survives_restart():
 
     on_disk = json.loads(sessions.read_text(encoding="utf-8"))
     assert on_disk["last_update_id"] == 8_765_432, "the cursor must be persisted"
-    assert 846947027 in on_disk["authorized_chats"], "authorized chats must survive too"
+    from harness import redaction
+    assert redaction.chat_tag(777000111) in on_disk["authorized_chats"], \
+        "the authorization must survive — as a FINGERPRINT, not as an address"
 
     # A cold start must resume from the persisted cursor. This is what stops
     # the bot from replaying the whole 24-hour backlog after every restart
     # (the bug that answered old questions again, hours late).
     fresh = bare_bot()
     assert fresh._load_last_update_id() == 8_765_432, "the cursor must survive a restart"
-    assert fresh._load_authorized_sessions() == {846947027}
+    assert fresh._load_authorized_sessions() == set(), \
+        "a fingerprint is not an address — the chat ids come from the secret"
 
     # A broken session file degrades to an empty state, never to a crash.
     sessions.write_text("{not json", encoding="utf-8")
@@ -940,7 +945,7 @@ def test_22_transport_covers_button_press_edit_and_delete():
 
     def bare_bot():
         bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
-        bot.authorized_chats = {846947027}
+        bot.authorized_chats = {777000111}
         bot.user_states = {}
         bot._state_lock = threading.RLock()
         bot.sent: List[str] = []
@@ -959,7 +964,7 @@ def test_22_transport_covers_button_press_edit_and_delete():
     bot = bare_bot()
     bot.process_callback_query({
         "id": "cb1", "data": "roster",
-        "message": {"chat": {"id": 846947027}, "message_id": 1},
+        "message": {"chat": {"id": 777000111}, "message_id": 1},
     })
     assert "ROSTER" in bot.sent, "a button press must reach the handler"
     assert bot.answered, "a button press must be answered, or the button spins forever"
@@ -979,14 +984,14 @@ def test_22_transport_covers_button_press_edit_and_delete():
     bot.answered.clear()
     bot.process_callback_query({
         "id": "cb3", "data": "что-то-неизвестное",
-        "message": {"chat": {"id": 846947027}, "message_id": 3},
+        "message": {"chat": {"id": 777000111}, "message_id": 3},
     })
     assert bot.answered and bot.sent, "an unknown button must answer, not go silent"
 
     # The answer replaces the placeholder in place.
     bot.sent.clear()
     bot.edited.clear()
-    bot._deliver_answer(846947027, 555, "🧪 ответ", parse_mode="HTML")
+    bot._deliver_answer(777000111, 555, "🧪 ответ", parse_mode="HTML")
     assert bot.edited and "🧪 ответ" in bot.edited[0], "the answer must edit the placeholder"
     assert not bot.sent, "an edited answer must not be sent as a second message"
 
@@ -995,7 +1000,7 @@ def test_22_transport_covers_button_press_edit_and_delete():
     bot.edited.clear()
     bot.deleted.clear()
     bot.edit_message = lambda *a, **k: False
-    bot._deliver_answer(846947027, 555, "🧪 ответ")
+    bot._deliver_answer(777000111, 555, "🧪 ответ")
     assert bot.sent, "if the edit fails the answer must still be sent"
     assert bot.deleted, "the stale placeholder must be removed"
 
@@ -1003,7 +1008,7 @@ def test_22_transport_covers_button_press_edit_and_delete():
     bot.sent.clear()
     bot.edited.clear()
     bot.edit_message = lambda *a, **k: True
-    bot._deliver_answer(846947027, 555, "x" * 5000)
+    bot._deliver_answer(777000111, 555, "x" * 5000)
     assert not bot.edited, "a 5000-character answer must not be edited into one message"
     assert bot.sent, "a long answer must still be delivered"
 
@@ -1089,7 +1094,7 @@ def test_24_the_bot_reports_its_own_health():
     def bare_bot():
         bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
         bot.sessions_file = sessions
-        bot.authorized_chats = {846947027}
+        bot.authorized_chats = {777000111}
         bot.last_update_id = 0
         bot._pending_update_ids = set()
         bot._dispatched_max = 0
@@ -1177,7 +1182,7 @@ def test_25_the_cursor_never_rolls_back():
     def bare_bot(cursor: int = 0, chats=None):
         bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
         bot.sessions_file = sessions
-        bot.authorized_chats = set(chats or [846947027])
+        bot.authorized_chats = set(chats or [777000111])
         bot.last_update_id = cursor
         bot._pending_update_ids = set()
         bot._dispatched_max = cursor
@@ -1200,17 +1205,18 @@ def test_25_the_cursor_never_rolls_back():
     assert on_disk["last_update_id"] == 500, "the daemon must persist its cursor"
 
     # A second writer that started before the daemon advanced the cursor.
-    stale = bare_bot(cursor=0, chats=[846947027])
-    stale._record_send(846947027)
+    stale = bare_bot(cursor=0, chats=[777000111])
+    stale._record_send(777000111)
     on_disk = json.loads(sessions.read_text(encoding="utf-8"))
     assert on_disk["last_update_id"] == 500, \
         "a stale writer must never roll the cursor back"
-    assert 111222333 in on_disk["authorized_chats"], \
+    from harness import redaction
+    assert redaction.chat_tag(111222333) in on_disk["authorized_chats"], \
         "an authorization must not be dropped by another writer"
     assert on_disk["health"]["messages_sent"] >= 1, \
         "the health block must survive the merge"
-    assert on_disk["health"]["last_chat_id"] == 846947027, \
-        "the chat the bot answered must be measured, not guessed"
+    assert on_disk["health"]["last_chat_id"] == redaction.chat_tag(777000111), \
+        "the chat the bot answered must be measured — as a fingerprint, not an address"
 
     # The cursor may only move forward, never back.
     ahead = bare_bot(cursor=0)
@@ -1344,7 +1350,7 @@ def test_27_no_chunk_is_lost_and_the_placeholder_is_bare():
     }
     bot._last_health_save = 0.0
     bot.sessions_file = Path(tempfile.mkdtemp(prefix="transport-test-")) / ".bot_sessions.json"
-    bot.authorized_chats = {846947027}
+    bot.authorized_chats = {777000111}
     bot.last_update_id = 0
 
     original = tb.requests.post
@@ -1352,7 +1358,7 @@ def test_27_no_chunk_is_lost_and_the_placeholder_is_bare():
     try:
         # A long answer: several chunks, only the last one may carry markup.
         long_text = "\n\n".join(f"абзац {i} " + ("тест разбивки " * 90) for i in range(1, 6))
-        bot.send_message(846947027, long_text, parse_mode="HTML")
+        bot.send_message(777000111, long_text, parse_mode="HTML")
     finally:
         tb.requests.post = original
 
@@ -1369,7 +1375,7 @@ def test_27_no_chunk_is_lost_and_the_placeholder_is_bare():
     original = tb.requests.post
     tb.requests.post = fake_post
     try:
-        bot.send_message(846947027, "🧠 Хранитель думает...", parse_mode="HTML",
+        bot.send_message(777000111, "🧠 Хранитель думает...", parse_mode="HTML",
                          reply_markup=tb.NO_MARKUP)
     finally:
         tb.requests.post = original
@@ -1381,7 +1387,7 @@ def test_27_no_chunk_is_lost_and_the_placeholder_is_bare():
     original = tb.requests.post
     tb.requests.post = fake_post
     try:
-        bot.send_message(846947027, "📡 Статус системы", parse_mode="HTML")
+        bot.send_message(777000111, "📡 Статус системы", parse_mode="HTML")
     finally:
         tb.requests.post = original
     assert payloads[0].get("reply_markup", {}).get("keyboard"), \
@@ -1415,12 +1421,12 @@ def test_28_the_silence_alarm_judges_two_signals_and_never_floods():
         stamp = (now - timedelta(minutes=minutes_old)).strftime("%Y-%m-%dT%H:%M:%SZ")
         health = {
             "runs": 3, "started_at": stamp, "last_poll_at": stamp if poll else None,
-            "last_update_at": None, "last_send_at": None, "last_chat_id": 846947027,
+            "last_update_at": None, "last_send_at": None, "last_chat_id": 777000111,
             "updates_seen": 4, "messages_sent": 4, "errors": 1,
             "last_error": "poll: TimeoutError: timed out",
         }
         sessions.write_text(
-            json.dumps({"last_update_id": 12345, "authorized_chats": [846947027],
+            json.dumps({"last_update_id": 12345, "authorized_chats": [777000111],
                         "health": health}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -2761,6 +2767,9 @@ def test_45_the_digest_reaches_telegram_as_a_control_copy():
     class _FakeBot:
         health = {"last_chat_id": 424242}
 
+        def _operator_chat(self):
+            return int(self.health.get("last_chat_id") or 0)
+
         def _mail_red_line(self, hours=24.0):
             return {"errors": 0, "delivered": 0, "failed": 0}
 
@@ -2981,6 +2990,9 @@ def test_48_failures_heal_instead_of_only_being_seen():
     class _Bot:
         health = {"last_chat_id": 424242}
         _mail_red_line = tb.HarnessTelegramBot._mail_red_line
+
+        def _operator_chat(self):
+            return int(self.health.get("last_chat_id") or 0)
 
         def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
             sent["text"] = text
@@ -4455,6 +4467,9 @@ def test_59_an_unreadable_log_is_not_a_quiet_day():
         health = {"last_chat_id": 424242}
         _mail_red_line = tb.HarnessTelegramBot._mail_red_line
 
+        def _operator_chat(self):
+            return int(self.health.get("last_chat_id") or 0)
+
         def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
             sent["text"] = text
         def _save_health(self, force=False):
@@ -4704,6 +4719,164 @@ def test_61_the_annotations_must_survive_the_clouds_python():
           f"the local 3.14).")
 
 
+def test_62_the_operator_chat_never_reaches_the_public_repository():
+    """
+    A Telegram chat id is an ADDRESS, exactly like the e-mail — and the
+    repository is public.
+
+    Measured 2026-11-03: the operator's chat ids were committed in six
+    places — the session file (the authorized chats and
+    `health.last_chat_id`), the transport report, the committed conversation
+    log, the diagnostics report, the event log («чат=<id>») and a test
+    fixture — and they were PRINTED into the Actions log, which is public
+    for a public repository.
+
+    The rule is now the same as for the address: the real id lives in the
+    `TELEGRAM_OPERATOR_CHAT_ID` secret and nowhere else, and everything the
+    repository keeps is a fingerprint. The test checks the rule from three
+    sides — the helper (a tag is one-way and stable), the bot (the tracked
+    file holds no id, and the secret restores the authorization across a
+    restart), and the repository itself (no tracked file holds a raw id in a
+    chat context).
+    """
+    print("\n" + "=" * 60)
+    print("TEST 62: the operator's chat never reaches the public repo")
+    print("=" * 60)
+    import subprocess
+    import threading
+    from harness import redaction
+    from harness.telegram_bot import HarnessTelegramBot, _parse_chat_ids
+
+    # --- the tag is one-way, stable and idempotent -----------------------
+    tag = redaction.chat_tag(424242123)
+    assert "424242123" not in tag, f"the tag must not contain the id: {tag}"
+    assert tag.startswith("чат#"), f"the tag must be a fingerprint: {tag}"
+    assert redaction.chat_tag(424242123) == tag, \
+        "the same chat must always produce the same tag"
+    assert redaction.chat_tag(424242124) != tag, \
+        "a different chat must produce a different tag"
+    assert redaction.chat_tag(tag) == tag, \
+        "a tag must never be tagged again"
+    assert redaction.is_chat_tag(tag), "a tag must be recognizable as a tag"
+
+    # --- free text is masked where the id appears ------------------------
+    for sample in ("чат=424242123",
+                   "чат `424242123`",
+                   "чат 424242123",
+                   '"last_chat_id": 424242123',
+                   '"chat_id": 424242123'):
+        masked = redaction.mask_chat_ids(sample)
+        assert "424242123" not in masked, \
+            f"the id survived the mask: {sample} -> {masked}"
+        assert "чат#" in masked, f"the id must be replaced, not dropped: {masked}"
+    # ... and the numbers that are NOT addresses must survive.
+    for harmless in ("проверок=7/7", "чат 5 сообщений", "модель=1234567890"):
+        assert redaction.mask_chat_ids(harmless) == harmless, \
+            f"a number that is not an address must survive: {harmless}"
+
+    # --- the tracked session file holds no id ----------------------------
+    tmp = Path(tempfile.mkdtemp(prefix="privacy-test-"))
+    sessions = tmp / ".bot_sessions.json"
+    bot = HarnessTelegramBot.__new__(HarnessTelegramBot)
+    bot.sessions_file = sessions
+    bot.authorized_chats = {424242123}
+    bot.operator_chat_ids = [424242123]
+    bot.last_update_id = 0
+    bot._pending_update_ids = set()
+    bot._dispatched_max = 0
+    bot._state_lock = threading.RLock()
+    bot._last_health_save = 0.0
+    bot.health = {
+        "runs": 1, "started_at": None, "last_poll_at": None,
+        "last_update_at": None, "last_send_at": None,
+        "last_chat_id": 424242123, "last_chat_tag": None,
+        "updates_seen": 0, "messages_sent": 0, "errors": 0,
+        "last_error": None,
+    }
+    bot._save_authorized_sessions()
+    written = sessions.read_text(encoding="utf-8")
+    assert "424242123" not in written, \
+        f"the chat id reached the tracked file: {written}"
+    on_disk = json.loads(written)
+    assert redaction.chat_tag(424242123) in on_disk["authorized_chats"], \
+        f"the authorization must survive as a fingerprint: {on_disk}"
+    assert on_disk["health"]["last_chat_id"] == redaction.chat_tag(424242123), \
+        f"the answered chat must survive as a fingerprint: {on_disk}"
+
+    # --- the SECRET restores the authorization across a restart ----------
+    saved_secret = os.environ.get("TELEGRAM_OPERATOR_CHAT_ID")
+    os.environ["TELEGRAM_OPERATOR_CHAT_ID"] = "424242123"
+    try:
+        fresh = HarnessTelegramBot.__new__(HarnessTelegramBot)
+        fresh.sessions_file = sessions
+        fresh.operator_chat_ids = _parse_chat_ids("424242123")
+        fresh.authorized_chats = fresh._load_authorized_sessions() | set(
+            fresh.operator_chat_ids)
+        fresh.health = {"last_chat_id": None}
+        assert fresh.authorized_chats == {424242123}, \
+            "the secret must authorize the operator's chat after a restart"
+        assert fresh._load_authorized_sessions() == set(), \
+            "a fingerprint is not an address — the ids come from the secret"
+    finally:
+        if saved_secret is None:
+            os.environ.pop("TELEGRAM_OPERATOR_CHAT_ID", None)
+        else:
+            os.environ["TELEGRAM_OPERATOR_CHAT_ID"] = saved_secret
+
+    # --- the decisive check: no tracked file holds a raw id --------------
+    # The suite's own fixtures live in this file; they are synthetic and are
+    # checked against an allowlist instead of being skipped.
+    synthetic = {"777000111", "424242", "424242123", "90210"}
+    try:
+        listing = subprocess.run(["git", "ls-files"], cwd=str(PROJECT_ROOT),
+                                  capture_output=True, text=True, timeout=60)
+        tracked = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+    except Exception:
+        tracked = []
+    offenders = []
+    for rel in tracked:
+        path = PROJECT_ROOT / rel
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for match in redaction.CHAT_RE.finditer(text):
+            chat_id = match.group("id")
+            if rel == "tests/test_resilience_suite.py":
+                if chat_id not in synthetic:
+                    offenders.append(f"{rel}: {chat_id} is not a synthetic id")
+            else:
+                offenders.append(f"{rel}: {match.group(0)[:60]}")
+    assert not offenders, \
+        "a chat id is committed to a public repository: " + ", ".join(offenders[:10])
+
+    # --- and the address of the operator must never be staged ------------
+    daemon = (PROJECT_ROOT / "scripts" / "run_telegram_daemon.sh").read_text(encoding="utf-8")
+    staged_files = []
+    in_array = False
+    for line in daemon.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("STATE_FILES=("):
+            in_array = True
+            continue
+        if in_array:
+            if stripped.startswith(")"):
+                break
+            if stripped.startswith('"') and stripped.endswith('"'):
+                staged_files.append(stripped.strip('"'))
+    assert staged_files, "the daemon must still declare its state files"
+    assert "data/.bot_settings.json" not in staged_files, \
+        "the daemon must never stage the operator's settings file — it holds the address"
+    ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "data/.bot_settings.json" in ignore, \
+        "the operator's settings file must be ignored by git"
+
+    print("[+] Test 62 Passed: the chat id lives in the secret, the repository "
+          "keeps only a fingerprint.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4775,6 +4948,7 @@ if __name__ == "__main__":
         test_59_an_unreadable_log_is_not_a_quiet_day,
         test_60_an_outage_may_not_replace_the_measured_team,
         test_61_the_annotations_must_survive_the_clouds_python,
+        test_62_the_operator_chat_never_reaches_the_public_repository,
     ]
     failed = []
     for t in tests:

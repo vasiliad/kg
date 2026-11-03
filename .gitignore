@@ -58,6 +58,13 @@ temp/
 data/.memory_vault.json
 data/.event_vault.json
 
+# The operator's own settings — the report recipient and the runtime
+# preferences. The address lives in the `DISPATCH_RECIPIENT_EMAIL` secret
+# and HERE, and nowhere else: this file was listed in the daemon's
+# STATE_FILES, so the next `git add` would have committed the operator's
+# personal address to the public repository.
+data/.bot_settings.json
+
 # Temporary MTProto session for the real-user bot test client
 # (scripts/tg_user_test.py). The session grants access to the test Telegram
 # account, so it must NEVER be committed; it is deleted by `logout`.

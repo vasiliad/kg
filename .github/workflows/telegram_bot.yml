@@ -90,6 +90,10 @@ jobs:
           DURATION_MINUTES: ${{ inputs.duration_minutes || '50' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          # The operator's chat id: an ADDRESS. It lives in the secret
+          # and nowhere else — the tracked state keeps a fingerprint.
+          TELEGRAM_OPERATOR_CHAT_ID: ${{ secrets.TELEGRAM_OPERATOR_CHAT_ID }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
           LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}

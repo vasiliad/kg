@@ -52,6 +52,7 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}

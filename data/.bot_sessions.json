@@ -1,8 +1,8 @@
 {
   "authorized_chats": [
-    557677490,
-    846947027,
-    486378909
+    "чат#c03145cb",
+    "чат#131d3f47",
+    "чат#acd9993c"
   ],
   "last_update_id": 603244787,
   "health": {
@@ -15,7 +15,7 @@
     "messages_sent": 51,
     "errors": 3,
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
-    "last_chat_id": 846947027,
+    "last_chat_id": "чат#131d3f47",
     "last_digest_push": "2026-11-03",
     "last_forge_push": "20261103T115317Z"
   }

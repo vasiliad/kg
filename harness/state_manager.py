@@ -46,10 +46,11 @@ class StateManager:
 
         The log is committed to a PUBLIC repository, so any address in the
         message is replaced by a non-reversible fingerprint before it is
-        written (see harness/redaction.py).
+        written (see harness/redaction.py) — the e-mail AND the Telegram chat
+        (measured 2026-11-03: «чат=<the operator's id>» was committed this way).
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        new_entry = f"[{timestamp}] {redaction.mask_emails(message)}\n"
+        new_entry = f"[{timestamp}] {redaction.mask_sensitive(message)}\n"
         
         lines = []
         if os.path.exists(self.history_file):

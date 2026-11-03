@@ -18,6 +18,7 @@ import sys
 import json
 import time
 import html
+import re
 import signal
 import threading
 import requests
@@ -75,6 +76,32 @@ class _NoMarkup:
 
 
 NO_MARKUP = _NoMarkup()
+
+
+def _parse_chat_ids(raw: str) -> List[int]:
+    """
+    The operator's chat ids, taken from the `TELEGRAM_OPERATOR_CHAT_ID`
+    secret — the ONLY place the real id may live.
+
+    Measured 2026-11-03: the authorized chats and `health.last_chat_id` were
+    committed to the PUBLIC repository, and the id was printed into the
+    public Actions log. The repository now keeps a fingerprint; the secret
+    keeps the address.
+
+    The value is a list because the operator may write from more than one
+    account; a comma, a space or a semicolon separates the ids.
+    """
+    out: List[int] = []
+    for part in re.split(r"[\s,;]+", (raw or "").strip()):
+        if not part:
+            continue
+        try:
+            chat_id = int(part)
+        except ValueError:
+            continue
+        if chat_id not in out:
+            out.append(chat_id)
+    return out
 
 
 def _now_iso() -> str:
@@ -208,7 +235,16 @@ class HarnessTelegramBot:
         # runs (the runner filesystem is wiped on every job restart).
         self.sessions_file = PROJECT_ROOT / "data" / ".bot_sessions.json"
         self.sessions_file.parent.mkdir(parents=True, exist_ok=True)
-        self.authorized_chats: Set[int] = self._load_authorized_sessions()
+        # The operator's real chat ids live in the SECRET, never in the
+        # repository: the tracked session file keeps only fingerprints
+        # («чат#1a2b3c4d»), the secret keeps the address. A chat learned
+        # from the passphrase is authorized for this run and remembered as a
+        # fingerprint; the operator's own chat is authorized by the secret
+        # and therefore survives every restart.
+        self.operator_chat_ids: List[int] = _parse_chat_ids(
+            os.getenv("TELEGRAM_OPERATOR_CHAT_ID", ""))
+        self.authorized_chats: Set[int] = (
+            self._load_authorized_sessions() | set(self.operator_chat_ids))
         # Telegram's update cursor. It MUST survive a restart: without it the
         # bot re-reads every unconfirmed update of the last 24 hours on each
         # cold start and re-answers old questions — duplicate replies, wasted
@@ -225,6 +261,12 @@ class HarnessTelegramBot:
         # two possible causes — an absent bot and a broken one — and from
         # the outside they look exactly the same.
         self.health: Dict[str, Any] = self._load_health()
+        # The chat the control copy goes to: the operator's own chat from the
+        # secret. Without it the digest would have no addressee after a
+        # restart — the tracked file cannot hold one.
+        if not self.health.get("last_chat_id") and self.operator_chat_ids:
+            self.health["last_chat_id"] = self.operator_chat_ids[0]
+            self.health["last_chat_tag"] = redaction.chat_tag(self.operator_chat_ids[0])
         self.health["runs"] = int(self.health.get("runs") or 0) + 1
         self.health["started_at"] = _now_iso()
         self._last_health_save: float = 0.0
@@ -298,10 +340,27 @@ class HarnessTelegramBot:
         return {}
 
     def _load_authorized_sessions(self) -> Set[int]:
+        """
+        The chats authorized by a PREVIOUS run.
+
+        The tracked file holds fingerprints («чат#1a2b3c4d»), not ids — so it
+        can only confirm that a chat WAS authorized, never which one. The ids
+        come from the secret. A legacy file that still holds raw ids is read
+        (it is a real authorization), and the next write replaces them with
+        fingerprints.
+        """
+        chats: Set[int] = set()
         try:
-            return set(self._load_sessions().get("authorized_chats", []))
+            for chat in self._load_sessions().get("authorized_chats", []) or []:
+                if isinstance(chat, bool):
+                    continue
+                if isinstance(chat, int):
+                    chats.add(int(chat))
+                elif isinstance(chat, str) and chat.strip().lstrip("-").isdigit():
+                    chats.add(int(chat.strip()))
         except Exception:
             return set()
+        return chats
 
     def _load_health(self) -> Dict[str, Any]:
         """
@@ -317,6 +376,7 @@ class HarnessTelegramBot:
             "last_update_at": None,
             "last_send_at": None,
             "last_chat_id": None,
+            "last_chat_tag": None,
             "updates_seen": 0,
             "messages_sent": 0,
             "errors": 0,
@@ -330,6 +390,22 @@ class HarnessTelegramBot:
                 health[key] = int(health[key] or 0)
             except Exception:
                 health[key] = 0
+        # `last_chat_id` is an ADDRESS. The tracked file keeps the
+        # fingerprint («чат#1a2b3c4d»); the secret keeps the id. A legacy
+        # file that still holds a raw id is read, and the next write
+        # replaces it with a fingerprint.
+        raw_chat = health.get("last_chat_id")
+        if isinstance(raw_chat, str) and not raw_chat.strip().lstrip("-").isdigit():
+            health["last_chat_tag"] = raw_chat.strip()
+            health["last_chat_id"] = None
+        elif raw_chat is not None:
+            try:
+                chat_id = int(raw_chat)
+                health["last_chat_id"] = chat_id
+                health["last_chat_tag"] = redaction.chat_tag(chat_id)
+            except (TypeError, ValueError):
+                health["last_chat_id"] = None
+                health["last_chat_tag"] = None
         return health
 
     def _save_health(self, force: bool = False) -> None:
@@ -364,8 +440,30 @@ class HarnessTelegramBot:
             self.health["messages_sent"] = int(self.health.get("messages_sent") or 0) + 1
             if chat_id:
                 # Which chat the bot actually answered — measured, not guessed.
+                # The id stays in memory; the tracked file keeps the tag.
                 self.health["last_chat_id"] = int(chat_id)
+                self.health["last_chat_tag"] = redaction.chat_tag(int(chat_id))
         self._save_health(force=True)
+
+    def _operator_chat(self) -> int:
+        """
+        The chat to answer to, as a real id — 0 when there is none.
+
+        The id may come from the secret or from this run's memory; the
+        tracked file holds only a fingerprint, which is NOT an address and
+        must never be cast to an int.
+        """
+        for candidate in (self.health.get("last_chat_id"),
+                          self.operator_chat_ids[0] if self.operator_chat_ids else None):
+            if candidate is None:
+                continue
+            try:
+                chat_id = int(candidate)
+            except (TypeError, ValueError):
+                continue
+            if chat_id:
+                return chat_id
+        return 0
 
     def _record_error(self, error: str) -> None:
         """Something broke — the reason must outlive the window."""
@@ -405,10 +503,15 @@ class HarnessTelegramBot:
             _int(disk.get("last_update_id")), _int(payload.get("last_update_id"))
         )
 
-        chats = list(disk.get("authorized_chats") or [])
-        for chat in payload.get("authorized_chats") or []:
-            if chat not in chats:
-                chats.append(chat)
+        chats: List[str] = []
+        for chat in list(disk.get("authorized_chats") or []) + list(payload.get("authorized_chats") or []):
+            # The tracked file holds FINGERPRINTS: «чат#1a2b3c4d» proves that
+            # a chat was authorized, not which one. The ids live in the
+            # secret and in memory only. The union matters: an authorization
+            # must never be dropped by another writer.
+            tag = chat if redaction.is_chat_tag(chat) else redaction.chat_tag(chat)
+            if tag not in chats:
+                chats.append(tag)
         merged["authorized_chats"] = chats
 
         disk_health = disk.get("health") if isinstance(disk.get("health"), dict) else {}
@@ -424,6 +527,8 @@ class HarnessTelegramBot:
         # The chat the bot last answered to: keep whichever side knows it.
         if not own_health.get("last_chat_id"):
             health["last_chat_id"] = disk_health.get("last_chat_id")
+        if not own_health.get("last_chat_tag"):
+            health["last_chat_tag"] = disk_health.get("last_chat_tag")
         health.setdefault("last_error", None)
         if not own_health.get("last_error"):
             health["last_error"] = disk_health.get("last_error")
@@ -443,8 +548,9 @@ class HarnessTelegramBot:
                 }
                 payload = self._merge_sessions_payload(payload)
             # The session file is committed to a public repository: no address
-            # may travel in it (see harness/redaction.py).
-            payload = redaction.mask_emails_deep(payload)
+            # may travel in it (see harness/redaction.py) — neither the
+            # e-mail nor the Telegram chat.
+            payload = redaction.mask_sensitive_deep(payload)
             # Atomic: THIS file is the bot's memory — the Telegram cursor,
             # the authorized chats, the health. A half-written file would
             # reset the cursor and replay old updates.
@@ -540,7 +646,7 @@ class HarnessTelegramBot:
         sending another one.
         """
         if not self.is_configured():
-            print(f"[Telegram Bot] Token missing. Message to {chat_id}: {text[:100]}...")
+            print(f"[Telegram Bot] Token missing. Message to {redaction.chat_tag(chat_id)}: {text[:100]}...")
             return None
 
         markup = reply_markup if reply_markup is not None else self.get_main_keyboard()
@@ -605,7 +711,7 @@ class HarnessTelegramBot:
                     except Exception:
                         pass
             except Exception as e:
-                print(f"[!] Error sending message to {chat_id}: {e}")
+                print(f"[!] Error sending message to {redaction.chat_tag(chat_id)}: {e}")
                 return None
         self.last_message_id = last_id
         self.last_message_chunks = len(chunks)
@@ -691,7 +797,7 @@ class HarnessTelegramBot:
             try:
                 res = requests.post(f"{self.base_url}/editMessageText", json=payload, timeout=15)
             except Exception as e:
-                print(f"[!] Error editing message {message_id} in {chat_id}: {e}")
+                print(f"[!] Error editing message {message_id} in {redaction.chat_tag(chat_id)}: {e}")
                 return False
             if res.ok:
                 # Which form Telegram accepted: the markup, the plain text, or
@@ -1219,7 +1325,7 @@ class HarnessTelegramBot:
         failure here is recorded in the bot's own error counters and never
         interrupts polling.
         """
-        chat_id = int(self.health.get("last_chat_id") or 0)
+        chat_id = self._operator_chat()
         if not chat_id:
             return  # nobody to confirm to yet
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1648,7 +1754,7 @@ class HarnessTelegramBot:
         tells the operator that the complex tried, what it proposed and
         what the constitution said about it.
         """
-        chat_id = int(self.health.get("last_chat_id") or 0)
+        chat_id = self._operator_chat()
         if not chat_id:
             return  # nobody to tell yet
         from harness import forge_autopilot
@@ -1792,7 +1898,7 @@ class HarnessTelegramBot:
                     "Клавиатура быстрого управления активирована внизу экрана."
                 )
                 self.send_message(chat_id, welcome, parse_mode="HTML")
-                print(f"[+] User {user_id} (@{username}) successfully authenticated chat {chat_id} with password.")
+                print(f"[+] User {redaction.chat_tag(user_id)} (@{username}) successfully authenticated chat {redaction.chat_tag(chat_id)} with password.")
                 return
             else:
                 lock_msg = (
@@ -1814,7 +1920,7 @@ class HarnessTelegramBot:
                 reply_markup={"remove_keyboard": True},
                 parse_mode="HTML"
             )
-            print(f"[*] Chat {chat_id} logged out.")
+            print(f"[*] Chat {redaction.chat_tag(chat_id)} logged out.")
             return
 
         # 3. Pending Interaction States

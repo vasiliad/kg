@@ -51,6 +51,8 @@ jobs:
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          TELEGRAM_OPERATOR_CHAT_ID: ${{ secrets.TELEGRAM_OPERATOR_CHAT_ID }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           SOVEREIGN_FORCE_DETERMINISTIC: '1'
@@ -60,6 +62,8 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          TELEGRAM_OPERATOR_CHAT_ID: ${{ secrets.TELEGRAM_OPERATOR_CHAT_ID }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: python harness/bot_transport_test.py
 

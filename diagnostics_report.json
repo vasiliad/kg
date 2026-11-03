@@ -160,7 +160,7 @@
     "updates_seen": 17,
     "messages_sent": 47,
     "errors": 1,
-    "last_chat_id": 846947027,
+    "last_chat_id": "чат#131d3f47",
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
   }
 }

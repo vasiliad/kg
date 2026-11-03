@@ -22,6 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness import atomic_io
+from harness import redaction
 
 NIM_BASE = "https://integrate.api.nvidia.com/v1"
 
@@ -308,7 +309,8 @@ def check_bot_health() -> Dict[str, Any]:
 
     print(f"  Last poll      : {last_poll or '—'}" + (f" ({age_min} min ago)" if age_min is not None else ""))
     print(f"  Last answer    : {last_send or '—'}"
-          + (f" (chat {health.get('last_chat_id')})" if health.get("last_chat_id") else ""))
+          + (f" (chat {redaction.chat_tag(health.get('last_chat_id'))})"
+             if health.get("last_chat_id") else ""))
     print(f"  Updates seen   : {updates}")
     print(f"  Messages sent  : {sent}")
     print(f"  Errors         : {errors}" + (f" — {health.get('last_error')}" if health.get("last_error") else ""))
@@ -319,14 +321,14 @@ def check_bot_health() -> Dict[str, Any]:
         return {"ok": True, "last_poll_at": last_poll, "age_min": age_min,
                 "last_send_at": last_send, "updates_seen": updates,
                 "messages_sent": sent, "errors": errors,
-                "last_chat_id": health.get("last_chat_id"),
+                "last_chat_id": redaction.chat_tag(health.get("last_chat_id")),
                 "last_error": health.get("last_error")}
 
     print("  STATUS: SILENT - the bot has not polled Telegram recently.")
     return {"ok": False, "reason": "no_recent_poll", "last_poll_at": last_poll,
             "age_min": age_min, "last_send_at": last_send, "updates_seen": updates,
             "messages_sent": sent, "errors": errors,
-            "last_chat_id": health.get("last_chat_id"),
+            "last_chat_id": redaction.chat_tag(health.get("last_chat_id")),
             "last_error": health.get("last_error")}
 
 

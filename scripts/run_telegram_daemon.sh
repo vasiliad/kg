@@ -22,7 +22,6 @@ git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
 
 STATE_FILES=(
   "data/.bot_sessions.json"
-  "data/.bot_settings.json"
   "data/telegram_history.txt"
   "active_models.json"
   "data/fleet_report.json"
@@ -34,16 +33,25 @@ STATE_FILES=(
   # and "GitHub did not answer" would be read as "idle" all over again.
   "data/.cycle_supervisor.json"
   "nim_history.log"
+  # NOT `data/.bot_settings.json`: it holds the operator's address, so it
+  # must NEVER be committed (the secret `DISPATCH_RECIPIENT_EMAIL` is the
+  # source of truth). It used to be in this list — and `git add` with a
+  # path that .gitignore rejects aborts the WHOLE command, so one private
+  # file would have silently stopped every state sync.
 )
 
 sync_state() {
-  local args=()
+  local staged=0
+  # Each path is added on its own: `git add` with several paths aborts
+  # entirely when one pathspec does not match (measured 2026-11-03), and a
+  # single rejected path would take the whole state sync with it.
   for f in "${STATE_FILES[@]}"; do
-    [ -e "$f" ] && args+=("$f")
+    [ -e "$f" ] || continue
+    git add -- "$f" 2>/dev/null || true
+    staged=1
   done
-  [ ${#args[@]} -eq 0 ] && return 0
+  [ "$staged" -eq 0 ] && return 0
 
-  git add -- "${args[@]}" 2>/dev/null || true
   if ! git diff --staged --quiet 2>/dev/null; then
     if git commit -m "chore(bot): persist session and memory state [skip ci]" >/dev/null 2>&1; then
       # Shared helper: rebases and retries, because the heartbeat and the

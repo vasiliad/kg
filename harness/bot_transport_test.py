@@ -21,7 +21,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness.state_manager import StateManager
-from harness.telegram_bot import HarnessTelegramBot, NO_MARKUP
+from harness.telegram_bot import HarnessTelegramBot, NO_MARKUP, _parse_chat_ids
+from harness import redaction
 
 REPORT_PATH = PROJECT_ROOT / "data" / "bot_transport_report.json"
 
@@ -34,10 +35,17 @@ def _authorized_chat() -> int:
     land in a chat the operator was not looking at.
 
     So the target is, in order of evidence:
-      1. the chat the daemon last answered to (health.last_chat_id),
-      2. the chat where delivery last worked (the previous report),
-      3. the first authorized chat.
+      1. the operator's chat from the `TELEGRAM_OPERATOR_CHAT_ID` secret —
+         the only place the real id lives (measured 2026-11-03: the tracked
+         session file held the id itself, and the PUBLIC repository carried
+         it; it now holds a fingerprint, which is not an address),
+      2. the chat the daemon last answered to (a legacy raw id, if any),
+      3. the chat where delivery last worked (the previous report),
+      4. the first authorized chat.
     """
+    for chat_id in _parse_chat_ids(os.getenv("TELEGRAM_OPERATOR_CHAT_ID", "")):
+        return chat_id
+
     sessions_file = PROJECT_ROOT / "data" / ".bot_sessions.json"
     try:
         data = json.loads(sessions_file.read_text(encoding="utf-8"))
@@ -48,19 +56,29 @@ def _authorized_chat() -> int:
     last_chat = health.get("last_chat_id")
     if last_chat:
         try:
-            return int(last_chat)
-        except Exception:
+            chat_id = int(last_chat)
+            if chat_id:
+                return chat_id
+        except (TypeError, ValueError):
             pass
 
     try:
         previous = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
         if previous.get("chat_id"):
-            return int(previous["chat_id"])
+            chat_id = int(previous["chat_id"])
+            if chat_id:
+                return chat_id
     except Exception:
         pass
 
-    chats = data.get("authorized_chats") or []
-    return int(chats[0]) if chats else 0
+    for chat in data.get("authorized_chats") or []:
+        try:
+            chat_id = int(chat)
+        except (TypeError, ValueError):
+            continue  # a fingerprint is not an address
+        if chat_id:
+            return chat_id
+    return 0
 
 
 def main() -> int:
@@ -80,7 +98,10 @@ def main() -> int:
     me = bot.get_me()
     username = (me.get("result") or {}).get("username", "?")
     chat_info = bot.get_chat(chat_id)
-    print(f"[*] Bot: @{username}; target chat: {chat_id} ({chat_info.get('type', 'unknown')})")
+    # The chat id is an ADDRESS: the Actions log of a public repository is
+    # public too, so it is printed as a fingerprint.
+    chat_tag = redaction.chat_tag(chat_id)
+    print(f"[*] Bot: @{username}; target chat: {chat_tag} ({chat_info.get('type', 'unknown')})")
 
     tests: List[Dict[str, Any]] = []
 
@@ -159,7 +180,9 @@ def main() -> int:
     report = {
         "ran_at": datetime.now(timezone.utc).isoformat(),
         "bot": username,
-        "chat_id": chat_id,
+        # The fingerprint, not the id: the report is committed to a public
+        # repository.
+        "chat_id": chat_tag,
         "tests": tests,
         "summary": "PASSED" if ok_all else "FAILED",
     }
@@ -168,7 +191,7 @@ def main() -> int:
 
     StateManager().append_history_log(
         f"ТРАНСПОРТНЫЙ САМОТЕТ БОТА {'ПРОЙДЕН' if ok_all else 'ПРОВАЛЕН'} "
-        f"| проверок={passed}/{len(tests)} | бот=@{username} | чат={chat_id}"
+        f"| проверок={passed}/{len(tests)} | бот=@{username} | чат={chat_tag}"
     )
 
     print("\n" + "=" * 72)

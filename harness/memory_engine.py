@@ -393,8 +393,10 @@ class MemoryEngine:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         # The conversation log is COMMITTED to a public repository, so an
         # address in a turn is replaced by a fingerprint before it is written
-        # — both to the plain text log and to the semantic vault.
-        clean_text = redaction.mask_emails(text.strip())
+        # — both to the plain text log and to the semantic vault. The address
+        # is the e-mail AND the Telegram chat (measured 2026-11-03: a turn
+        # quoted the chat id, and the committed transcript carried it).
+        clean_text = redaction.mask_sensitive(text.strip())
         if not clean_text:
             return
 
