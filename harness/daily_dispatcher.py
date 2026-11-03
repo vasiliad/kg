@@ -47,6 +47,7 @@ import time
 import argparse
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -293,6 +294,35 @@ MAX_ITEMS = 6
 PER_QUERY_RESULTS = 5
 
 
+# Pages that DEFINE a term, not pages that REPORT a news event. The letter's
+# link exists so the operator can confirm the source — measured 2026-11-03,
+# the digest's first link pointed at baike.baidu.com: the model READ the page
+# and the facts were right, but an encyclopedia stub cannot confirm a news
+# story. Such candidates never reach the model's list now; the soft rule
+# (prefer primary sources) lives in SELECTION_PROMPT as the second layer.
+REFERENCE_HOSTS: Tuple[str, ...] = (
+    "wikipedia.org",
+    "baike.baidu.com",
+    "britannica.com",
+    "dic.academic.ru",
+    "encyclopedia.com",
+    "wikidata.org",
+    "wiktionary.org",
+    "wikiwand.com",
+)
+
+
+def is_reference_host(url: str) -> bool:
+    """True for encyclopedia/dictionary pages — definitions, not news."""
+    try:
+        host = urlsplit(url).netloc.lower()
+    except Exception:
+        return False
+    if host.startswith("www."):
+        host = host[4:]
+    return any(host == ref or host.endswith("." + ref) for ref in REFERENCE_HOSTS)
+
+
 def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
     """
     Asks the search chain the targeted queries and returns
@@ -300,7 +330,8 @@ def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, An
 
     Every candidate keeps the tier that served it, so the letter can say
     where the facts came from instead of naming a brand that was never
-    asked.
+    asked. Reference pages (encyclopedias, dictionaries) are dropped before
+    the model ever sees them: it can only pick what is in the list.
     """
     candidates: List[Dict[str, Any]] = []
     seen_urls = set()
@@ -319,11 +350,15 @@ def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, An
             if tier and tier not in tiers:
                 tiers.append(tier)
             queries.append(query)
+            dropped = 0
             for result in results:
                 url = str(result.get("url") or "").strip()
                 title = str(result.get("title") or "").strip()
                 snippet = str(result.get("snippet") or "").strip()
                 if not url or not title or url in seen_urls:
+                    continue
+                if is_reference_host(url):
+                    dropped += 1
                     continue
                 seen_urls.add(url)
                 candidates.append({
@@ -333,7 +368,8 @@ def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, An
                     "category": category,
                     "tier": tier,
                 })
-            print(f"    -> {len(results)} results (tier: {tier or 'none'})")
+            print(f"    -> {len(results)} results (tier: {tier or 'none'})"
+                  + (f", {dropped} справочных отброшено" if dropped else ""))
 
     return candidates, tiers, queries
 
@@ -349,8 +385,11 @@ SELECTION_PROMPT = (
     "1. n — номер источника из списка. Ссылку НЕ пиши: её подставит харнесс.\n"
     "2. title и summary — только факты из этого источника. Ничего не добавляй из своей памяти.\n"
     "3. Разные новости — разные источники; не бери два пункта из одного источника.\n"
-    "4. Если существенных новостей нет — верни {{\"items\": []}}.\n"
-    "5. Ответ — ТОЛЬКО JSON: начни с {{ и закончи }}. Никаких слов, пояснений, "
+    "4. Предпочитай ПЕРВОИСТОЧНИК новости — пресс-релиз, СМИ, блог компании, отчёт; "
+    "избегай энциклопедий, словарей, форумов и агрегаторов: ссылка в письме должна "
+    "подтверждать источник, а не определять термин.\n"
+    "5. Если существенных новостей нет — верни {{\"items\": []}}.\n"
+    "6. Ответ — ТОЛЬКО JSON: начни с {{ и закончи }}. Никаких слов, пояснений, "
     "markdown-заборов и нумерации перед JSON."
 )
 

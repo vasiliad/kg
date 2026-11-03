@@ -5057,6 +5057,78 @@ def test_64_the_docs_must_describe_this_complex_not_a_former_one():
     print("[+] Test 64 Passed: the docs describe the machine that actually runs.")
 
 
+def test_65_the_digest_link_must_confirm_the_source():
+    """
+    Measured 2026-11-03 in the mailed digest: news #1 was written out in
+    full and the facts were right — but its link pointed at
+    baike.baidu.com, an encyclopedia stub. The link's whole purpose (the
+    operator's own bar: «ссылка только подтверждает источник») is to let
+    the operator verify the story; a definition page confirms nothing.
+
+    The mechanism was never fabricating: the model picks sources BY NUMBER
+    and the harness attaches the URL from what was actually found — so the
+    fix is to control the LIST. Reference pages (encyclopedias,
+    dictionaries) are dropped before the model ever sees them, and the
+    prompt carries the soft rule as the second layer: prefer the primary
+    source.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 65: the digest link must confirm the source")
+    print("=" * 60)
+    from harness.daily_dispatcher import (
+        collect_digest_sources, is_reference_host, SELECTION_PROMPT,
+    )
+
+    # --- the hard filter knows the difference between a news page and a definition
+    for reference in ("https://baike.baidu.com/ru/item/%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D0%B8/4799477",
+                      "https://ru.wikipedia.org/wiki/%D0%9C%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C",
+                      "https://www.wikipedia.org/",
+                      "https://britannica.com/topic/artificial-intelligence",
+                      "https://wikiwand.com/en/articles/Large_language_model"):
+        assert is_reference_host(reference), \
+            f"a reference page must be recognized: {reference}"
+    for news in ("https://habr.com/ru/articles/1041274/",
+                 "https://rocm.blogs.amd.com/artificial-intelligence/benchmark-reasoning-models/RE",
+                 "https://www.youtube.com/watch?v=pcE3_hWH2S8",
+                 "https://openai.com/index/some-announcement/",
+                 "https://habr.com/ru/company/wikipedia_under_attack/news/",  # "wikipedia" INSIDE another host
+                 "https://notabaike.baidu.com.ru/"):  # a suffix trick must not match
+        assert not is_reference_host(news), \
+            f"a real page must survive the filter: {news}"
+
+    # --- the model can only pick what is in the list ----------------------
+    class _FakeExecutor:
+        last_search_tier = "TinyFish"
+
+        def search_web(self, query, num_results=3):
+            return [
+                {"title": "энциклопедия", "url": "https://baike.baidu.com/item/x/1",
+                 "snippet": "определение"},
+                {"title": "вики", "url": "https://ru.wikipedia.org/wiki/X",
+                 "snippet": "статья"},
+                {"title": "настоящая новость", "url": "https://habr.com/ru/articles/1/",
+                 "snippet": "факты"},
+                {"title": "блог компании", "url": "https://rocm.blogs.amd.com/x/",
+                 "snippet": "разбор"},
+            ]
+
+    candidates, tiers, queries = collect_digest_sources(_FakeExecutor())
+    urls = [c["url"] for c in candidates]
+    assert urls == ["https://habr.com/ru/articles/1/",
+                    "https://rocm.blogs.amd.com/x/"], \
+        f"reference pages must be dropped before the model sees them: {urls}"
+    assert tiers == ["TinyFish"], "the tier must survive the filter"
+    assert queries, "the queries must survive the filter"
+
+    # --- the soft rule is in the prompt as the second layer ---------------
+    prompt_lower = SELECTION_PROMPT.lower()
+    assert "первоисточник" in prompt_lower and "энциклопед" in prompt_lower, \
+        "the prompt must tell the model to prefer the primary source"
+
+    print("[+] Test 65 Passed: reference pages never reach the digest — "
+          "the link confirms the source or there is no link.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5131,6 +5203,7 @@ if __name__ == "__main__":
         test_62_the_operator_chat_never_reaches_the_public_repository,
         test_63_the_survival_ladder_must_be_wired_not_written,
         test_64_the_docs_must_describe_this_complex_not_a_former_one,
+        test_65_the_digest_link_must_confirm_the_source,
     ]
     failed = []
     for t in tests:
