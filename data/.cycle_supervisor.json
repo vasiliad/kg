@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-03T13:34:40.548977+00:00",
+  "checked_at": "2026-11-03T14:13:42.079204+00:00",
   "repo": "vasiliad/kg",
   "dry_run": false,
   "cycles": [
@@ -7,16 +7,20 @@
       "name": "fleet",
       "workflow": "fleet_tuner.yml",
       "artefact": "data/fleet_report.json",
-      "age_h": 6.6,
+      "age_h": 7.25,
       "max_age_h": 7.0,
-      "stale": false,
-      "action": "fresh"
+      "stale": true,
+      "action": "dispatched",
+      "busy": false,
+      "last_run_age_h": 7.26,
+      "local_dispatch_age_h": null,
+      "effective_age_h": 7.26
     },
     {
       "name": "diagnostics",
       "workflow": "diagnostics.yml",
       "artefact": "diagnostics_report.json",
-      "age_h": 5.4,
+      "age_h": 0.18,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -25,7 +29,7 @@
       "name": "selftest",
       "workflow": "bot_selftest.yml",
       "artefact": "data/bot_selftest_report.json",
-      "age_h": 2.14,
+      "age_h": 2.79,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh"
@@ -34,7 +38,7 @@
       "name": "daily_dispatch",
       "workflow": "daily_dispatch_novt.yml",
       "artefact": "nim_history.log",
-      "age_h": 0.79,
+      "age_h": 1.44,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -44,7 +48,7 @@
       "name": "cloud_tests",
       "workflow": "cloud_tests.yml",
       "artefact": "data/cloud_tests_report.json",
-      "age_h": 0.88,
+      "age_h": 0.39,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -53,13 +57,17 @@
       "name": "forge_autopilot",
       "workflow": "forge_autopilot.yml",
       "artefact": "data/forge_autopilot.json",
-      "age_h": 1.69,
+      "age_h": 2.34,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
       "due_today": false
     }
   ],
-  "dispatched": [],
-  "dispatch_log": {}
+  "dispatched": [
+    "fleet_tuner.yml"
+  ],
+  "dispatch_log": {
+    "fleet": "2026-11-03T14:13:42.079204+00:00"
+  }
 }
