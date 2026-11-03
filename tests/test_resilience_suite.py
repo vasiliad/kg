@@ -4418,6 +4418,67 @@ def test_58_the_dispatcher_keeps_the_daily_promise_itself():
     print("[+] Test 58 Passed: the dispatcher keeps the daily promise by itself.")
 
 
+def test_59_an_unreadable_log_is_not_a_quiet_day():
+    """
+    The red line counts the day's strain from the event log. When the log
+    cannot be read, the old reader returned zeros — and zeros read as "the
+    mail channel was fine". That is the exact lie this pipe exists to
+    prevent: the one situation in which the operator most needs to hear
+    something was the one situation that looked calm.
+
+    So: no log, no numbers — an explicit "unknown" instead.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 59: An unreadable log is not a quiet day")
+    print("=" * 60)
+
+    import harness.telegram_bot as tb
+    from datetime import datetime, timezone
+
+    tmp = Path(tempfile.mkdtemp(prefix="red-line-blind-"))
+    (tmp / "data").mkdir()
+    (tmp / "data" / "daily_digest.json").write_text(json.dumps(
+        {"subject": "Дайджест", "items": [{"title": "t", "url": "https://a.example", "detail": "full"}]},
+        ensure_ascii=False), encoding="utf-8")
+    # NO nim_history.log at all: the worst case the reader can meet.
+
+    saved_root = tb.PROJECT_ROOT
+    tb.PROJECT_ROOT = tmp
+    sent = {}
+
+    class _Bot:
+        health = {"last_chat_id": 424242}
+        _mail_red_line = tb.HarnessTelegramBot._mail_red_line
+
+        def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
+            sent["text"] = text
+        def _save_health(self, force=False):
+            pass
+        def _record_error(self, error):
+            pass
+
+    try:
+        strain = _Bot()._mail_red_line()
+        assert strain.get("error"), \
+            f"an unreadable log must be an error, not a tally: {strain}"
+        assert "журнал недоступен" in strain["error"], \
+            f"the reason must be named: {strain}"
+
+        sent.clear()
+        tb.HarnessTelegramBot.maybe_push_daily_digest(_Bot())
+        text = sent.get("text", "")
+        assert "НЕИЗВЕСТНО" in text, \
+            f"the control copy must say the numbers are unknown: {text[-300:]}"
+        assert "ошибок за 24ч 0" not in text, \
+            f"a missing log must never read as a calm day: {text[-300:]}"
+        assert "не равно" in text, \
+            f"the copy must say why silence is not calm: {text[-300:]}"
+    finally:
+        tb.PROJECT_ROOT = saved_root
+
+    print("[+] Test 59 Passed: an unreadable log says so — it does not fake a calm day.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4486,6 +4547,7 @@ if __name__ == "__main__":
         test_56_two_writers_must_not_erase_each_others_log,
         test_57_a_silent_github_is_not_an_idle_cycle,
         test_58_the_dispatcher_keeps_the_daily_promise_itself,
+        test_59_an_unreadable_log_is_not_a_quiet_day,
     ]
     failed = []
     for t in tests:

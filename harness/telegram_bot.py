@@ -1166,7 +1166,7 @@ class HarnessTelegramBot:
             # The placeholder is noise once the answer is out.
             self.delete_message(chat_id, placeholder_id)
 
-    def _mail_red_line(self, hours: float = 24.0) -> Dict[str, int]:
+    def _mail_red_line(self, hours: float = 24.0) -> Dict[str, Any]:
         """
         The red line, read from the event log: errors, deliveries, failures.
 
@@ -1175,9 +1175,14 @@ class HarnessTelegramBot:
         the control copy must see the day's strain even if no letter
         arrived. Self-contained (no dispatcher import): the bot must not
         load the whole mail pipeline to count log lines.
+
+        And when the log cannot be read, the answer is NOT "zero". A missing
+        log read as an empty tally is a calm day that nobody measured — the
+        exact lie the red line exists to prevent. So the failure travels
+        with the numbers and is shown as such.
         """
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-        counts = {"errors": 0, "delivered": 0, "failed": 0}
+        counts: Dict[str, Any] = {"errors": 0, "delivered": 0, "failed": 0}
         try:
             log = PROJECT_ROOT / "nim_history.log"
             for line in (log.read_text(encoding="utf-8", errors="ignore")).splitlines():
@@ -1197,7 +1202,9 @@ class HarnessTelegramBot:
                     counts["failed"] += 1
                 if any(kw in msg for kw in ("ERROR", "FAIL", "429", "TIMEOUT", "DANGER", "ALERT")):
                     counts["errors"] += 1
-        except Exception:
+        except Exception as e:
+            # The numbers are UNKNOWN, not zero. The caller must say so.
+            counts["error"] = f"журнал недоступен ({type(e).__name__})"
             return counts
         return counts
 
@@ -1248,12 +1255,22 @@ class HarnessTelegramBot:
         # The red line rides along: if the mail channel is the thing that
         # died, this is where the operator still sees the day's strain.
         strain = self._mail_red_line()
-        lines.append(
-            html.escape(
-                f"Красная линия: ошибок за 24ч {strain['errors']} · "
-                f"писем доставлено {strain['delivered']}, не доставлено {strain['failed']}."
+        if strain.get("error"):
+            # Silence that was never measured must not wear the mask of a
+            # calm day. The numbers are withheld, and the reason is shown.
+            lines.append(
+                html.escape(
+                    f"Красная линия: НЕИЗВЕСТНО — {strain['error']}. "
+                    "Числа не показаны: отсутствие показаний не равно «всё спокойно»."
+                )
             )
-        )
+        else:
+            lines.append(
+                html.escape(
+                    f"Красная линия: ошибок за 24ч {strain['errors']} · "
+                    f"писем доставлено {strain['delivered']}, не доставлено {strain['failed']}."
+                )
+            )
         try:
             self.send_message(chat_id, "\n".join(lines), parse_mode="HTML", reply_markup=NO_MARKUP)
             self.health["last_digest_push"] = today
