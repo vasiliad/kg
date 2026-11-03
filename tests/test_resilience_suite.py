@@ -4298,6 +4298,126 @@ def test_57_a_silent_github_is_not_an_idle_cycle():
     print("[+] Test 57 Passed: a silent GitHub is not an idle cycle, and the attempt is remembered.")
 
 
+def test_58_the_dispatcher_keeps_the_daily_promise_itself():
+    """
+    One report per day — and the promise is kept by the DISPATCHER, not
+    only by the supervisor.
+
+    Measured on 2026-11-02: the operator received the same letter four times
+    in one day. The supervisor was the trigger (it had lost the delivery
+    record), but the dispatcher sent every letter it was told to send,
+    without ever asking whether today's letter had already gone out. A
+    promise that only one witness keeps is a promise that breaks when that
+    witness blinks.
+
+    And a FAILED send is not a promise kept: the cycle must stay free to
+    try again.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 58: The dispatcher keeps the daily promise by itself")
+    print("=" * 60)
+
+    import harness.daily_dispatcher as dd
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 11, 2, 10, 31, 0, tzinfo=timezone.utc)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        log = Path(tmp) / "nim_history.log"
+        log.write_text(
+            "[2026-11-02 05:24:14 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n"
+            "[2026-11-01 11:47:58 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n"
+            "[2026-11-02 05:20:18 UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Проверка связи | статус=ERROR\n",
+            encoding="utf-8",
+        )
+
+        seen = dd.delivered_today(now=now, log_path=log, include_remote=False)
+        assert seen[dd.DIGEST_REPORT_LABEL] is True, \
+            "today's delivered digest must be seen"
+        assert seen[dd.HEALTH_REPORT_LABEL] is False, \
+            "a FAILED letter is not a promise kept — the cycle must be free to try again"
+
+        # Yesterday's digest does not count as today's.
+        yesterday_only = Path(tmp) / "yesterday.log"
+        yesterday_only.write_text(
+            "[2026-11-01 11:47:58 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n",
+            encoding="utf-8",
+        )
+        seen = dd.delivered_today(now=now, log_path=yesterday_only, include_remote=False)
+        assert seen[dd.DIGEST_REPORT_LABEL] is False, \
+            "yesterday's letter must not stop today's"
+
+    # --- The behaviour: a second dispatch on the same day sends NOTHING.
+    sent = []
+    logged = []
+    original = {
+        "delivered_today": dd.delivered_today,
+        "_dispatch_one": dd._dispatch_one,
+        "build_health_report_email": dd.build_health_report_email,
+        "build_ai_news_digest_email": dd.build_ai_news_digest_email,
+        "write_digest_artifact": dd.write_digest_artifact,
+        "resolve_recipient": dd.resolve_recipient,
+        "StateManager": dd.StateManager,
+        "push_state_snapshot": dd.state_vault.push_state_snapshot,
+    }
+
+    class _FakeStateManager:
+        def __init__(self, *a, **kw):
+            pass
+
+        def append_history_log(self, message):
+            logged.append(message)
+
+    try:
+        dd.delivered_today = lambda *a, **k: {
+            dd.HEALTH_REPORT_LABEL: True,
+            dd.DIGEST_REPORT_LABEL: True,
+        }
+        dd._dispatch_one = lambda sender, label, mail, recipient, dry_run: (
+            sent.append(label) or {"status": "DELIVERED"}
+        )
+        dd.build_health_report_email = lambda: {"html": "<html></html>", "plain": "", "subject": "s"}
+        dd.build_ai_news_digest_email = lambda: {"html": "<html></html>", "plain": "", "subject": "s"}
+        dd.write_digest_artifact = lambda mail: None
+        dd.resolve_recipient = lambda: "operator@example.com"
+        dd.StateManager = _FakeStateManager
+        dd.state_vault.push_state_snapshot = lambda files: None
+
+        results = dd.run_daily_dispatch()
+        assert not sent, f"nothing may be sent when today's letters are out: {sent}"
+        assert results.get("news_digest", {}).get("status") == "SKIPPED_ALREADY_SENT", \
+            f"the skip must be visible in the result: {results}"
+        assert results.get("health_report", {}).get("status") == "SKIPPED_ALREADY_SENT", \
+            f"the health letter is guarded too: {results}"
+        assert logged, "the skip must be recorded — a quiet omission is not a record"
+        assert all(dd.SKIPPED_HEADLINE in line for line in logged), \
+            f"a skip must not look like a delivery: {logged}"
+        assert all(dd.SENT_HEADLINE not in line for line in logged), \
+            f"a skip must not look like a delivery: {logged}"
+
+        # --- And the operator's explicit request still wins.
+        sent.clear()
+        results = dd.run_daily_dispatch(force=True)
+        assert sorted(sent) == sorted([dd.HEALTH_REPORT_LABEL, dd.DIGEST_REPORT_LABEL]), \
+            f"--force must send both letters: {sent}"
+    finally:
+        dd.delivered_today = original["delivered_today"]
+        dd._dispatch_one = original["_dispatch_one"]
+        dd.build_health_report_email = original["build_health_report_email"]
+        dd.build_ai_news_digest_email = original["build_ai_news_digest_email"]
+        dd.write_digest_artifact = original["write_digest_artifact"]
+        dd.resolve_recipient = original["resolve_recipient"]
+        dd.StateManager = original["StateManager"]
+        dd.state_vault.push_state_snapshot = original["push_state_snapshot"]
+
+    # The workflow must offer the escape hatch and nothing else.
+    wf = (PROJECT_ROOT / ".github/workflows/daily_dispatch_novt.yml").read_text(encoding="utf-8")
+    assert "--force" in wf, "the operator must be able to ask for a re-send"
+    assert "force:" in wf, "the re-send must be an explicit input"
+
+    print("[+] Test 58 Passed: the dispatcher keeps the daily promise by itself.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4365,6 +4485,7 @@ if __name__ == "__main__":
         test_55_the_platform_boundary_must_not_rot,
         test_56_two_writers_must_not_erase_each_others_log,
         test_57_a_silent_github_is_not_an_idle_cycle,
+        test_58_the_dispatcher_keeps_the_daily_promise_itself,
     ]
     failed = []
     for t in tests:

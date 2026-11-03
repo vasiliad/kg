@@ -16,6 +16,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      force:
+        description: 'Send again even if today''s letter was already delivered'
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
   contents: write
@@ -83,6 +88,14 @@ jobs:
             FLAGS="--health-only"
           elif [ "${{ inputs.news_only }}" = "true" ]; then
             FLAGS="--news-only"
+          fi
+          # The dispatcher keeps the daily promise by itself: a letter that
+          # was already delivered today is not sent again. Measured on
+          # 2026-11-02: the operator received the same letter four times in
+          # one day. Only an explicit --force (the operator's own hand on
+          # the trigger) may repeat it.
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FLAGS="$FLAGS --force"
           fi
 
           python harness/daily_dispatcher.py $FLAGS

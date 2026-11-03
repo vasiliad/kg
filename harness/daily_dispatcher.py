@@ -42,8 +42,10 @@ The new pipeline is the plan's Workstream B:
 import os
 import sys
 import json
+import re
 import time
 import argparse
+import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
@@ -934,6 +936,112 @@ def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
 # so the tests can shrink it to zero.
 MAIL_RETRY_SEC = float(os.getenv("MAIL_RETRY_SEC", "45"))
 
+# --------------------------------------------------------------------------
+# The daily promise: one report per day, and the dispatcher itself keeps it.
+#
+# Measured on 2026-11-02: the daily letter was delivered four times in one
+# day. The supervisor was the trigger — it had lost the delivery record and
+# kept deciding the cycle was owed — but the DISPATCHER sent every letter
+# it was told to send, without ever asking whether today's letter had
+# already gone out. A promise that only one witness keeps is a promise that
+# breaks when that witness blinks.
+#
+# So the dispatcher asks the question itself, before it sends anything: has
+# today's letter ALREADY been delivered? The answer comes from two
+# witnesses — the log in this workspace, and the log in the repository (the
+# checkout can be older than the delivery the previous run recorded).
+# --------------------------------------------------------------------------
+HEALTH_REPORT_LABEL = "Проверка связи"
+DIGEST_REPORT_LABEL = "Ежедневный дайджест ИИ"
+SENT_HEADLINE = "ОТЧЁТЫ ОТПРАВЛЕНЫ"
+SKIPPED_HEADLINE = "ОТЧЁТЫ ПРОПУЩЕНЫ"
+HISTORY_LOG = PROJECT_ROOT / "nim_history.log"
+
+_LOG_STAMP = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) UTC\]")
+
+
+def _remote_log_text(path: str = "nim_history.log", ref: str = "main") -> str:
+    """
+    The log as the REPOSITORY has it — the delivery record of a previous
+    run may not be in this workspace yet (that is exactly what happened on
+    2026-11-02: the workspace's log did not contain the 05:24 delivery, so
+    the cycle sent the letter again at 10:31). Empty when GitHub cannot be
+    reached: the local witness still works.
+    """
+    try:
+        subprocess.run(
+            ["git", "fetch", "--no-tags", "--depth=1", "origin", ref],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=90,
+        )
+        proc = subprocess.run(
+            ["git", "show", f"origin/{ref}:{path}"],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60,
+        )
+    except Exception:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout
+
+
+def delivered_today(
+    now: Optional[datetime] = None,
+    log_path: Optional[Path] = None,
+    include_remote: bool = True,
+) -> Dict[str, bool]:
+    """
+    Which of TODAY's letters were already delivered.
+
+    Only a DELIVERED letter counts. A failure is not a promise kept: the
+    cycle must be free to try again, and the supervisor decides when.
+    """
+    now = now or datetime.now(timezone.utc)
+    day = now.astimezone(timezone.utc).date()
+    texts: List[str] = []
+
+    local = Path(log_path) if log_path else HISTORY_LOG
+    try:
+        if local.exists():
+            texts.append(local.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        pass
+    if include_remote:
+        remote = _remote_log_text()
+        if remote:
+            texts.append(remote)
+
+    delivered = {HEALTH_REPORT_LABEL: False, DIGEST_REPORT_LABEL: False}
+    for text in texts:
+        for line in text.splitlines():
+            stripped = line.strip()
+            match = _LOG_STAMP.match(stripped)
+            if not match:
+                continue
+            try:
+                stamp = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+            if stamp.replace(tzinfo=timezone.utc).date() != day:
+                continue
+            if SENT_HEADLINE not in stripped:
+                continue
+            for label in delivered:
+                if f"тип={label}" in stripped:
+                    delivered[label] = True
+    return delivered
+
+
+def _log_skip(label: str, recipient: str) -> None:
+    """The skip is recorded too — a quiet omission is not a record."""
+    try:
+        StateManager().append_history_log(
+            f"{SKIPPED_HEADLINE} | тип={label} | "
+            f"получатель={redaction.recipient_tag(recipient)} | причина=уже отправлено сегодня"
+        )
+        print(f"[*] Dispatch skipped: {label} — already delivered today.")
+    except Exception as e:
+        print(f"[!] The skip could not be recorded: {e}")
+
 
 def _dispatch_one(
     sender: EmailSender,
@@ -996,7 +1104,12 @@ def _dispatch_one(
     return result
 
 
-def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_only: bool = False) -> Dict[str, Any]:
+def run_daily_dispatch(
+    dry_run: bool = False,
+    health_only: bool = False,
+    news_only: bool = False,
+    force: bool = False,
+) -> Dict[str, Any]:
     print("=" * 72)
     print("📬 STARTING DAILY 12:00 NOVT DISPATCH PIPELINE")
     print(f"[*] Dispatcher timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -1013,34 +1126,68 @@ def run_daily_dispatch(dry_run: bool = False, health_only: bool = False, news_on
     else:
         print(f"[*] Dispatch recipient: {redaction.recipient_tag(recipient)}")
 
+    # The daily promise, checked by the dispatcher itself: a letter that was
+    # already delivered today is not sent again. The supervisor may be
+    # wrong (it lost the delivery record on 2026-11-02 and sent the letter
+    # four times) — the operator's inbox is not a place for retries.
+    already: Dict[str, bool] = {}
+    if force:
+        print("[*] --force: today's letters will be sent again on purpose.")
+    else:
+        try:
+            already = delivered_today()
+            for label, was_delivered in already.items():
+                if was_delivered:
+                    print(f"[*] {label}: already delivered today — it will not be sent again.")
+        except Exception as e:
+            # A guard that cannot read the log must not block the report:
+            # the supervisor still decides whether the cycle is owed.
+            print(f"[!] The daily guard could not be read ({e}); sending as usual.")
+
     # 1. Email 1: Проверка связи (Health & Incidents).
     # Each letter is built and sent under its OWN try/except: a broken health
     # letter used to cancel the digest as well, and the operator got nothing.
     if not news_only:
-        print("\n--- GENERATING EMAIL 1: Проверка связи ---")
-        try:
-            health_mail = build_health_report_email()
-            results["health_report"] = _dispatch_one(
-                sender, "Проверка связи", health_mail, recipient, dry_run
-            )
-        except Exception as e:
-            print(f"[-] Error generating the health report: {e}")
-            results["health_report"] = {"status": "ERROR", "error": str(e)}
-            _log_dispatch("Проверка связи", recipient, results["health_report"])
+        if already.get(HEALTH_REPORT_LABEL):
+            print("\n--- SKIPPING EMAIL 1: Проверка связи (already delivered today) ---")
+            results["health_report"] = {
+                "status": "SKIPPED_ALREADY_SENT",
+                "reason": "уже отправлено сегодня",
+            }
+            _log_skip(HEALTH_REPORT_LABEL, recipient)
+        else:
+            print("\n--- GENERATING EMAIL 1: Проверка связи ---")
+            try:
+                health_mail = build_health_report_email()
+                results["health_report"] = _dispatch_one(
+                    sender, HEALTH_REPORT_LABEL, health_mail, recipient, dry_run
+                )
+            except Exception as e:
+                print(f"[-] Error generating the health report: {e}")
+                results["health_report"] = {"status": "ERROR", "error": str(e)}
+                _log_dispatch(HEALTH_REPORT_LABEL, recipient, results["health_report"])
 
     # 2. Email 2: Ежедневный дайджест ИИ
     if not health_only:
-        print("\n--- GENERATING EMAIL 2: Ежедневный дайджест ИИ ---")
-        try:
-            news_mail = build_ai_news_digest_email()
-            write_digest_artifact(news_mail)
-            results["news_digest"] = _dispatch_one(
-                sender, "Ежедневный дайджест ИИ", news_mail, recipient, dry_run
-            )
-        except Exception as e:
-            print(f"[-] Error generating news digest: {e}")
-            results["news_digest"] = {"status": "ERROR", "error": str(e)}
-            _log_dispatch("Ежедневный дайджест ИИ", recipient, results["news_digest"])
+        if already.get(DIGEST_REPORT_LABEL):
+            print("\n--- SKIPPING EMAIL 2: Ежедневный дайджест ИИ (already delivered today) ---")
+            results["news_digest"] = {
+                "status": "SKIPPED_ALREADY_SENT",
+                "reason": "уже отправлено сегодня",
+            }
+            _log_skip(DIGEST_REPORT_LABEL, recipient)
+        else:
+            print("\n--- GENERATING EMAIL 2: Ежедневный дайджест ИИ ---")
+            try:
+                news_mail = build_ai_news_digest_email()
+                write_digest_artifact(news_mail)
+                results["news_digest"] = _dispatch_one(
+                    sender, DIGEST_REPORT_LABEL, news_mail, recipient, dry_run
+                )
+            except Exception as e:
+                print(f"[-] Error generating news digest: {e}")
+                results["news_digest"] = {"status": "ERROR", "error": str(e)}
+                _log_dispatch(DIGEST_REPORT_LABEL, recipient, results["news_digest"])
 
     # The state vault: point-in-time snapshots of the complex's memory on
     # the state-history branch. main shows only the LATEST picture; the
@@ -1067,6 +1214,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Generate emails without sending via SMTP")
     parser.add_argument("--health-only", action="store_true", help="Dispatch only 'Проверка связи'")
     parser.add_argument("--news-only", action="store_true", help="Dispatch only 'Ежедневный дайджест ИИ'")
+    parser.add_argument("--force", action="store_true",
+                        help="Send again even if today's letter was already delivered (the operator's own request)")
     parser.add_argument("--preview", metavar="PATH", help="Write both letters to PATH (HTML) and exit")
     args = parser.parse_args()
 
@@ -1077,4 +1226,9 @@ if __name__ == "__main__":
         print(f"[*] Health letter preview: {preview_path}")
         print("[*] validate_html:", email_render.validate_html(health["html"]) or "OK")
     else:
-        run_daily_dispatch(dry_run=args.dry_run, health_only=args.health_only, news_only=args.news_only)
+        run_daily_dispatch(
+            dry_run=args.dry_run,
+            health_only=args.health_only,
+            news_only=args.news_only,
+            force=args.force,
+        )
