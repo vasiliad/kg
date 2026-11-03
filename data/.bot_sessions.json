@@ -8,7 +8,7 @@
   "health": {
     "runs": 57,
     "started_at": "2026-11-02T23:31:07Z",
-    "last_poll_at": "2026-11-03T00:00:24Z",
+    "last_poll_at": "2026-11-03T00:02:32Z",
     "last_update_at": "2026-11-02T13:18:23Z",
     "last_send_at": "2026-11-03T00:00:25Z",
     "updates_seen": 17,
@@ -16,6 +16,6 @@
     "errors": 1,
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
     "last_chat_id": 846947027,
-    "last_digest_push": "2026-11-02"
+    "last_digest_push": "2026-11-03"
   }
 }
