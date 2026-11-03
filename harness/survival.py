@@ -480,6 +480,105 @@ def discover_alternate_apis(executor: Any) -> Dict[str, Any]:
 # The orchestration: 1 → 2 → 3, in the operator's order
 # ---------------------------------------------------------------------------
 
+NIM_MODELS_URL = "https://integrate.api.nvidia.com/v1/models"
+SURVIVAL_REPORT = PROJECT_ROOT / "data" / "survival_report.json"
+
+
+def nim_alive(timeout: int = 25) -> Optional[bool]:
+    """
+    One cheap call to the NIM catalog: is the cloud tier alive RIGHT NOW?
+
+    True / False are measurements. None means UNKNOWN — the network is the
+    suspect, not the provider — and an unknown is not a death: the ladder
+    must not start because one request timed out (the same honesty rule the
+    supervisor and the mail reader already follow: unreadable is not quiet).
+    """
+    key = os.getenv("NVIDIA_API_KEY", "").strip()
+    if not key:
+        # No key means the cloud tier cannot be used at all — that is a
+        # measured death of the tier the complex depends on.
+        print("[survival] NVIDIA_API_KEY is not set — the cloud tier is unusable")
+        return False
+    try:
+        res = requests.get(
+            NIM_MODELS_URL, headers={"Authorization": f"Bearer {key}"}, timeout=timeout
+        )
+        if res.status_code == 200:
+            return True
+        print(f"[survival] NIM catalog: HTTP {res.status_code}")
+        return False
+    except Exception as exc:
+        print(f"[survival] NIM catalog unreachable: {type(exc).__name__} — UNKNOWN")
+        return None
+
+
+def run_if_needed(
+    executor: Any = None,
+    free_gb: Optional[float] = None,
+    allow_download: Optional[bool] = None,
+    dry_run: bool = False,
+    report_path: Path = SURVIVAL_REPORT,
+    stage3: bool = True,
+) -> Dict[str, Any]:
+    """
+    The ladder's trigger: measure the cloud tier first, and walk the ladder
+    ONLY on a measured death.
+
+    Until 2026-11-03 this module had no caller at all — the survival
+    protocol existed, was tested, and never ran. Now one catalog request
+    decides: alive → the report records the check and costs one request;
+    dead → the ladder runs; unknown → nothing runs and the next cycle
+    measures again.
+
+    The report is the cycle's ARTEFACT (`data/survival_report.json`,
+    field `checked_at`): the supervisor reads its age, so the ladder can no
+    longer be silently dropped the way the scheduler drops a cron slot.
+    """
+    alive = nim_alive()
+    stamp = datetime.now(timezone.utc).isoformat()
+    report: Dict[str, Any] = {
+        "checked_at": stamp,
+        "ran_at": stamp,
+        "nim": {True: "alive", False: "dead", None: "unknown"}[alive],
+        "needed": alive is False,
+    }
+    if alive is True:
+        report["note"] = (
+            "облачный тир жив — лестница не запускалась; "
+            "проверка стоила одну каталожную заявку"
+        )
+    elif alive is None:
+        report["note"] = (
+            "сеть не дала измерить (неизвестно ≠ мёртв) — "
+            "лестница не запускалась, следующий цикл измерит снова"
+        )
+    else:
+        report["note"] = "облачный тир измеренно мёртв — лестница запущена"
+        if stage3 and executor is None:
+            # The executor is built only when the ladder actually runs: the
+            # alive-path must cost one catalog request, not an engine.
+            try:
+                from harness.minimax_executor import MiniMaxExecutor
+                executor = MiniMaxExecutor(
+                    nvidia_api_key=os.getenv("NVIDIA_API_KEY", ""),
+                    keenable_api_key=os.getenv("KEENABLE_API_KEY", ""),
+                )
+            except Exception as exc:
+                print(f"[survival] stage 3 unavailable: {type(exc).__name__}")
+                executor = None
+        report["protocol"] = run_protocol(
+            executor=executor,
+            free_gb=free_gb,
+            allow_download=allow_download,
+            dry_run=dry_run,
+        )
+
+    from harness import atomic_io
+    atomic_io.write_json_atomic(
+        report_path, redaction.mask_sensitive_deep(report))
+    return report
+
+
 def run_protocol(
     executor: Any = None,
     free_gb: Optional[float] = None,
@@ -526,7 +625,24 @@ if __name__ == "__main__":
     parser.add_argument("--stage", choices=["1", "2", "3", "all"], default="all")
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--if-needed", action="store_true",
+        help="measure the cloud tier first and walk the ladder only on a "
+             "measured death; the report is written to data/survival_report.json")
     args = parser.parse_args()
+
+    if args.if_needed:
+        report = run_if_needed(
+            allow_download=True if args.allow_download else None,
+            dry_run=args.dry_run,
+            stage3=os.getenv("SURVIVAL_SKIP_STAGE3", "").strip().lower()
+            not in ("1", "true", "yes"),
+        )
+        print(json.dumps(
+            redaction.mask_sensitive_deep(
+                {k: v for k, v in report.items() if k != "protocol"}),
+            ensure_ascii=False, indent=2, default=str))
+        sys.exit(0)
 
     executor = None
     if args.stage in ("3", "all"):

@@ -1,0 +1,70 @@
+name: Survival Protocol (local-first ladder)
+
+on:
+  # The scheduler is a suggestion, not a promise (measured: slots skipped by
+  # hours). The real dispatcher is the cycle supervisor — it dispatches this
+  # workflow when the artefact is too old, and the artefact (`ran_at`) is the
+  # proof that the check actually happened.
+  schedule:
+    - cron: '10 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  survival:
+    runs-on: ubuntu-latest
+    # One ladder at a time: two runs would measure the tier twice and race
+    # for the same artefact.
+    concurrency:
+      group: survival-protocol
+      cancel-in-progress: false
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Walk the survival ladder if the cloud tier is dead
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
+          LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+        run: |
+          # The trigger measures first: NIM alive → one catalog request and
+          # the artefact says so; NIM measured dead → the ladder walks
+          # (stage 1 is the standing takeover, stage 2 finds a smarter local
+          # model, stage 3 prepares alternative APIs). The download stays
+          # gated — a 10 GB fetch on a 14 GB disk is the operator's call
+          # (SOVEREIGN_ALLOW_DOWNLOAD / --allow-download).
+          python harness/survival.py --if-needed
+
+      - name: Persist the survival report
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          # Each path on its own: `git add` with several paths aborts
+          # entirely when one pathspec does not match.
+          git add data/survival_report.json 2>/dev/null || true
+          git add data/local_keeper.json 2>/dev/null || true
+          git add data/provider_candidates.json 2>/dev/null || true
+          git add nim_history.log 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(survival): the ladder's own proof of life [skip ci]"
+          else
+            echo "No survival report changes."
+          fi
+          bash scripts/sync_state.sh

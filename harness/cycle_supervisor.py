@@ -124,6 +124,23 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "daily": True,
         "not_before_utc": 4,
     },
+    {
+        # The survival ladder — the complex's answer to «NVIDIA умерла».
+        # Measured 2026-11-03: the module existed, was tested, and had NO
+        # caller — the plan for surviving the cloud's death was itself
+        # surviving only in the source code. Now the trigger measures the
+        # cloud tier first (one catalog request) and walks the ladder only on
+        # a measured death; the artefact is the proof that the check ran,
+        # whatever the scheduler did with its cron slot.
+        "name": "survival_protocol",
+        "workflow": "survival_protocol.yml",
+        "artefact": "data/survival_report.json",
+        "field": "checked_at",
+        "max_age_h": 26.0,
+        "retry_h": 6.0,
+        "daily": True,
+        "not_before_utc": 3,
+    },
 )
 
 REPORT_PATH = PROJECT_ROOT / "data" / ".cycle_supervisor.json"

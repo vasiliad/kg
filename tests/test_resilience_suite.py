@@ -4877,6 +4877,105 @@ def test_62_the_operator_chat_never_reaches_the_public_repository():
           "keeps only a fingerprint.")
 
 
+def test_63_the_survival_ladder_must_be_wired_not_written():
+    """
+    Measured 2026-11-03: `harness/survival.py` — the plan for surviving the
+    cloud provider's death — had NO caller. No workflow, no cycle, no cron
+    ran it. A survival plan that exists only in the source code survives
+    nothing: the day NVIDIA dies, the ladder would still be sitting in the
+    repository, waiting for a human who is not part of this complex.
+
+    The wiring is three things, and each is checked: the module can decide
+    for itself whether the ladder is needed (measure first — an unknown is
+    not a death); a workflow runs that decision in the cloud; the cycle
+    supervisor owns the cycle, so a skipped scheduler slot is re-dispatched
+    and the artefact proves the check ran.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 63: the survival ladder is wired, not written")
+    print("=" * 60)
+    from harness import survival, cycle_supervisor as cs
+
+    # --- the supervisor owns the cycle -----------------------------------
+    names = {c["name"]: c for c in cs.CYCLES}
+    assert "survival_protocol" in names, \
+        f"the ladder must be a supervised cycle: {sorted(names)}"
+    cycle = names["survival_protocol"]
+    assert cycle["workflow"] == "survival_protocol.yml"
+    assert cycle["artefact"] == "data/survival_report.json", \
+        "the cycle must have an artefact — the proof that the check ran"
+    assert cycle["field"] == "checked_at", "the artefact's stamp must be parseable"
+    assert cycle.get("daily") is True, "the check is owed once a day"
+    assert 0 <= int(cycle["not_before_utc"]) <= 23, "the daily hour must be sane"
+
+    # --- the workflow exists and holds the minimum permissions -----------
+    wf_path = PROJECT_ROOT / ".github" / "workflows" / "survival_protocol.yml"
+    assert wf_path.exists(), "the ladder's workflow must exist"
+    wf = wf_path.read_text(encoding="utf-8")
+    assert "contents: write" in wf, \
+        "the workflow must be able to commit its artefact"
+    assert "--if-needed" in wf, \
+        "the workflow must run the MEASURED trigger, not the raw ladder"
+    assert "scripts/sync_state.sh" in wf, \
+        "the artefact must be pushed through the race-safe helper"
+    assert "REDACTION_SALT" in wf, \
+        "the artefact's fingerprints must use the same salt as every other file"
+
+    # --- the trigger measures before it walks ----------------------------
+    tmp = Path(tempfile.mkdtemp(prefix="survival-test-"))
+    report_path = tmp / "survival_report.json"
+    calls = {"protocol": 0}
+
+    def _fake_protocol(**kwargs):
+        calls["protocol"] += 1
+        return {"stage2_candidate": None, "stage3_apis": None}
+
+    saved_alive = survival.nim_alive
+    saved_protocol = survival.run_protocol
+    try:
+        survival.run_protocol = _fake_protocol
+
+        # ALIVE: one catalog request, and the ladder does NOT run.
+        survival.nim_alive = lambda timeout=25: True
+        report = survival.run_if_needed(report_path=report_path, stage3=False)
+        assert report["needed"] is False, f"a live tier needs no ladder: {report}"
+        assert report["nim"] == "alive"
+        assert calls["protocol"] == 0, \
+            "a live cloud tier must not pay for the ladder"
+
+        # UNKNOWN: the network is the suspect — the ladder does NOT run.
+        survival.nim_alive = lambda timeout=25: None
+        report = survival.run_if_needed(report_path=report_path, stage3=False)
+        assert report["needed"] is False, \
+            "an unknown is not a death — the ladder must not start"
+        assert calls["protocol"] == 0, "an unknown must not run the ladder"
+        assert "неизвестн" in report.get("note", ""), \
+            f"the report must say why nothing ran: {report.get('note')}"
+
+        # DEAD: the ladder runs and the report carries it.
+        survival.nim_alive = lambda timeout=25: False
+        report = survival.run_if_needed(report_path=report_path, stage3=False)
+        assert report["needed"] is True, "a measured death is what the ladder is for"
+        assert calls["protocol"] == 1, "the ladder must actually run"
+        assert report.get("protocol", {}).get("stage2_candidate") is None, \
+            "the report must carry the ladder's stages"
+    finally:
+        survival.nim_alive = saved_alive
+        survival.run_protocol = saved_protocol
+
+    # --- the artefact is the cycle's proof of life ------------------------
+    assert report_path.exists(), "the trigger must write its artefact"
+    on_disk = json.loads(report_path.read_text(encoding="utf-8"))
+    assert "424242" not in json.dumps(on_disk), "the artefact must carry no test id"
+    stamp = on_disk.get("checked_at")
+    assert stamp, f"the artefact must be stamped: {on_disk}"
+    assert cs.parse_timestamp(stamp) is not None, \
+        f"the supervisor must be able to read the stamp: {stamp}"
+
+    print("[+] Test 63 Passed: the ladder is measured, wired and evidenced — "
+          "not just written.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4949,6 +5048,7 @@ if __name__ == "__main__":
         test_60_an_outage_may_not_replace_the_measured_team,
         test_61_the_annotations_must_survive_the_clouds_python,
         test_62_the_operator_chat_never_reaches_the_public_repository,
+        test_63_the_survival_ladder_must_be_wired_not_written,
     ]
     failed = []
     for t in tests:
