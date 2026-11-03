@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 65
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The bot arms this watchdog at the START of its window and asks it to
       # check AFTER the window is over. A tick that checked immediately would

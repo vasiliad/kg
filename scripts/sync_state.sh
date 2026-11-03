@@ -40,6 +40,8 @@ CONFLICT_FILES=(
   # dispatched, and the silence-alarm marker.
   "data/.cycle_supervisor.json"
   "data/.bot_silence_alarm.json"
+  # Written by cloud_tests.yml — the proof that the verification cycle ran.
+  "data/cloud_tests_report.json"
 )
 
 git config --global user.name "vasiliad"

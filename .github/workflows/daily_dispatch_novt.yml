@@ -42,10 +42,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -95,7 +95,12 @@ jobs:
           # can quote it later ("что было в утреннем дайджесте?"). It is
           # masked before writing (harness/redaction.py) — the repository is
           # public.
-          git add nim_history.log data/daily_digest.json || true
+          # `git add` ABORTS the WHOLE command when one pathspec does not
+          # match (measured 2026-11-03): one missing file and NOTHING is
+          # staged — the cycle's state silently never reached the repo.
+          # Each path is added on its own.
+          git add nim_history.log 2>/dev/null || true
+          git add data/daily_digest.json 2>/dev/null || true
           if ! git diff --staged --quiet; then
             git commit -m "chore(dispatch): record report dispatch outcome [skip ci]"
             echo "Dispatch outcome committed."

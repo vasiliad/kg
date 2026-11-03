@@ -28,12 +28,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -92,7 +92,13 @@ jobs:
         run: |
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
-          git add data/bot_selftest_report.json data/bot_transport_report.json nim_history.log || true
+          # `git add` ABORTS the WHOLE command when one pathspec does not
+          # match (measured 2026-11-03): one missing file and NOTHING is
+          # staged — the cycle's state silently never reached the repo.
+          # Each path is added on its own.
+          git add data/bot_selftest_report.json 2>/dev/null || true
+          git add data/bot_transport_report.json 2>/dev/null || true
+          git add nim_history.log 2>/dev/null || true
           if ! git diff --staged --quiet; then
             git commit -m "test(bot): self-test conversation transcript [skip ci]"
           else

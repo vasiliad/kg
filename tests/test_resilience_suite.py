@@ -3909,15 +3909,18 @@ def test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine():
     bribe = (_diff_of(judge_rel, judge_text, bribed_judge)
              + _diff_of(code_rel, code_text, marked_code))
     # The judge checks two things: the code change IS applied, and the tests
-    # are the ORIGINAL ones. If the patch could rewrite the judge, the second
-    # check would fail — and the gate would (correctly) refuse.
+    # on disk are BYTE-IDENTICAL to the committed ones. (A marker string is
+    # no good here: the test itself mentions it, so the committed file would
+    # "contain" it too. The invariant is equality with HEAD, not a word.)
     suite_cmd = [
         sys.executable, "-c",
-        "import pathlib,sys;"
-        "j=pathlib.Path('tests/test_resilience_suite.py').read_text(encoding='utf-8');"
+        "import hashlib,pathlib,subprocess,sys;"
+        "j=pathlib.Path('tests/test_resilience_suite.py').read_bytes();"
+        "h=subprocess.run(['git','show','HEAD:tests/test_resilience_suite.py'],"
+        "capture_output=True).stdout;"
         "c=pathlib.Path('harness/survival.py').read_text(encoding='utf-8');"
-        "sys.exit(0 if ('BRIBE_MARKER' not in j and "
-        "'model-proposed improvement' in c) else 3)",
+        "sys.exit(0 if (hashlib.sha256(j).digest()==hashlib.sha256(h).digest() "
+        "and 'model-proposed improvement' in c) else 3)",
     ]
     tmp_repo = _tmp_dir()
     _sp.run(["git", "init", "-q", str(tmp_repo)], capture_output=True)
@@ -3929,6 +3932,108 @@ def test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine():
         f"the improvement must reach a branch ({outcome})"
 
     print("[+] Test 54 Passed: the proposal is possible, and the judge cannot be bribed.")
+
+
+def test_55_the_platform_boundary_must_not_rot():
+    """
+    The complex lives INSIDE GitHub Actions, so the platform's edges are
+    part of its constitution. Measured 2026-11-03 by the audit:
+
+    - `actions/checkout@v4` and `actions/setup-python@v5` target Node 20,
+      which GitHub already deprecates (the cloud log says so in every run:
+      «forced to run on Node.js 24»). When the runners enforce it, every
+      one of the nine workflows dies at step 1 — and with them the whole
+      autonomy;
+    - the heartbeat's `git add` listed five paths in ONE command, and
+      `data/.bot_silence_alarm.json` is written only when the alarm fires:
+      on a healthy day the pathspec did not match, the whole `git add`
+      aborted, and the heartbeat's memory NEVER reached the repository —
+      while `|| true` hid it;
+    - the heartbeat had a 30-minute limit against a measured 29m21s run —
+      a heartbeat that starts two minutes late was killed mid-job;
+    - the bot's second recovery path had no `if: always()`, so any failure
+      above removed it exactly when the chain was already dead;
+    - `cloud_tests.yml` — the cycle meant to notice that a SUPPLIER changed
+      something — had no artefact and no supervisor: the one check that
+      could vanish for weeks was the one nobody watched.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 55: The platform boundary must not rot")
+    print("=" * 60)
+    import re
+    from harness import cycle_supervisor, verification_report
+
+    workflows_dir = PROJECT_ROOT / ".github" / "workflows"
+    workflows = sorted(workflows_dir.glob("*.yml"))
+    assert len(workflows) >= 9, f"the complex's workflows must be present ({len(workflows)})"
+
+    # --- the actions must not run on a deprecated runtime -----------------
+    for wf in workflows:
+        text = wf.read_text(encoding="utf-8")
+        for action in re.findall(r"uses:\s+(actions/[a-z-]+)@(\S+)", text):
+            name, version = action
+            major = version.lstrip("v").split(".")[0]
+            assert int(major) >= 7, \
+                (f"{wf.name}: {name}@{version} targets the deprecated Node 20 "
+                 f"runtime — every workflow would die at step 1")
+
+    # --- one missing pathspec must not abort the whole staging -----------
+    bad_adds = []
+    for wf in workflows:
+        for line in wf.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("git add "):
+                continue
+            tokens = [t for t in stripped[len("git add "):].split()
+                      if not t.startswith("-") and "dev/null" not in t
+                      and t not in ("||", "true")]
+            if len(tokens) > 1:
+                bad_adds.append((wf.name, stripped))
+    assert not bad_adds, \
+        f"one missing pathspec must not abort the whole staging ({bad_adds})"
+
+    # --- the heartbeat must survive a slow queue --------------------------
+    heartbeat = (workflows_dir / "emergency_cron.yml").read_text(encoding="utf-8")
+    timeout = re.search(r"timeout-minutes:\s*(\d+)", heartbeat)
+    assert timeout, "the heartbeat must have a timeout"
+    assert int(timeout.group(1)) >= 40, \
+        (f"the heartbeat's limit ({timeout.group(1)}m) is below its measured "
+         f"run (29m21s) — a late start would kill it mid-job")
+
+    # --- the bot's second recovery path must survive a failure above -----
+    revive = heartbeat.split("Revive the bot window")
+    assert len(revive) == 2, "the heartbeat must revive the bot window"
+    revive_block = revive[1].split("- name:")[0]
+    assert "if: always()" in revive_block, \
+        "the bot's second recovery path must run even when the step above failed"
+
+    # --- the verification cycle must leave a proof of life ---------------
+    cloud = [c for c in cycle_supervisor.CYCLES
+             if c.get("workflow") == "cloud_tests.yml"]
+    assert cloud, \
+        f"the verification cycle must be supervised ({[c.get('name') for c in cycle_supervisor.CYCLES]})"
+    assert cloud[0].get("artefact") == "data/cloud_tests_report.json", \
+        "the verification cycle must watch a real artefact"
+
+    saved_report = verification_report.REPORT
+    tmp_report = _tmp_dir() / "cloud_tests_report.json"
+    verification_report.REPORT = tmp_report
+    try:
+        green = verification_report.write_report("0", "0")
+        assert green.get("ok"), "a green verification must read as green"
+        assert green.get("offline_suite") == "PASS", "the outcome must be recorded"
+        assert green.get("checked_at"), "the report must carry its stamp"
+
+        red = verification_report.write_report("1", "0")
+        assert not red.get("ok"), \
+            "a failed verification must NEVER read as a pass"
+        assert red.get("offline_suite") == "FAIL", "the failure must be recorded"
+        assert tmp_report.exists(), \
+            "the report must be written even when a suite failed — a failed check is evidence"
+    finally:
+        verification_report.REPORT = saved_report
+
+    print("[+] Test 55 Passed: the platform's edges are part of the constitution.")
 
 
 if __name__ == "__main__":
@@ -3995,6 +4100,7 @@ if __name__ == "__main__":
         test_52_the_operator_can_order_code_and_the_forge_measures_it,
         test_53_the_complex_improves_itself_without_being_told,
         test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine,
+        test_55_the_platform_boundary_must_not_rot,
     ]
     failed = []
     for t in tests:

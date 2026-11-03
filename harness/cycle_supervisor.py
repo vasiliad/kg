@@ -83,6 +83,19 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "not_before_utc": 5,
     },
     {
+        # The cloud verification — the cycle that notices when a SUPPLIER
+        # changes something the complex depends on. It had no artefact and
+        # no supervisor entry: the very check meant to catch drift was the
+        # one cycle the scheduler could silently drop for weeks. The report
+        # it now writes down is its proof of life.
+        "name": "cloud_tests",
+        "workflow": "cloud_tests.yml",
+        "artefact": "data/cloud_tests_report.json",
+        "field": "checked_at",
+        "max_age_h": 7.0,
+        "retry_h": 3.0,
+    },
+    {
         # The forge's own attempt to improve itself. The artefact's stamp is
         # `checked_at` — the cycle runs daily, but the ATTEMPT is rationed to
         # one per day inside the autopilot, so a re-dispatch after a forgotten

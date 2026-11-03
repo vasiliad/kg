@@ -27,15 +27,20 @@ jobs:
     concurrency:
       group: heartbeat
       cancel-in-progress: false
-    timeout-minutes: 30
+    # Measured 2026-11-03: the orchestrator run took 29m21s against a 30
+    # minute limit — a heartbeat that starts two minutes late was cancelled
+    # mid-job, and the bot revival and the state sync never ran. The
+    # heartbeat is the last line of defence; a slow queue must not be the
+    # first thing that kills it.
+    timeout-minutes: 45
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 10
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -70,7 +75,11 @@ jobs:
       # ever breaks, this workflow — whose own cron demonstrably fires — is
       # the safety net. It starts a window only when none is running and none
       # is waiting, so it can never race a live bot.
+      # `if: always()` — measured 2026-11-03: without it, ANY failure of
+      # the orchestrator above removed the bot's second recovery path at
+      # exactly the moment the chain was already dead.
       - name: Revive the bot window if the chain is dead
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -108,7 +117,18 @@ jobs:
         run: |
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
-          git add active_models.json nim_history.log config.yaml data/.bot_silence_alarm.json data/.cycle_supervisor.json || true
+          # `git add` ABORTS the WHOLE command when one pathspec does not
+          # match — measured 2026-11-03: `data/.bot_silence_alarm.json` is
+          # written ONLY when the alarm actually fires, so on a healthy day
+          # the path did not exist, the add aborted, and NONE of the state
+          # was staged. The heartbeat's memory (the supervisor's report, the
+          # roster, the event log) never reached the repository — and the
+          # `|| true` hid it. Each path is added on its own.
+          git add active_models.json 2>/dev/null || true
+          git add nim_history.log 2>/dev/null || true
+          git add config.yaml 2>/dev/null || true
+          git add data/.bot_silence_alarm.json 2>/dev/null || true
+          git add data/.cycle_supervisor.json 2>/dev/null || true
 
           if ! git diff --staged --quiet; then
             git commit -m "chore(heartbeat): autonomous state sync [skip ci]"
