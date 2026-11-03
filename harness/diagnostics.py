@@ -251,22 +251,51 @@ def check_github_state() -> Dict[str, Any]:
     return {"ok": True, "files": out}
 
 
-def check_credentials_present() -> Dict[str, Any]:
-    """Lists which credentials are configured without leaking their values."""
+def check_credentials_present(measured: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """
+    Lists which credentials are configured without leaking their values.
+
+    Measured 2026-11-03: a DEAD key was reported as «[+] KEENABLE_API_KEY:
+    43 chars» in the same report whose live probe said DEGRADED — "the
+    variable is set" and "the credential works" are different facts, and the
+    inventory used to publish the first as if it were the second. Now each
+    key that has a live probe in this report carries the probe's verdict
+    beside the char count, and a key without one says «не измерялся здесь».
+    """
     _hdr("[5] Credential inventory")
+    # The key -> the check in THIS report that measured it live.
+    measured_by = {
+        "NVIDIA_API_KEY": "nvidia",
+        "KEENABLE_API_KEY": "keenable",
+        "TELEGRAM_BOT_TOKEN": "telegram",
+    }
     names = [
         "NVIDIA_API_KEY", "KEENABLE_API_KEY", "HF_TOKEN", "GH_PAT",
         "TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_PASSWORD",
         "GMAIL_SENDER", "GMAIL_APP_PASSWORD", "DISPATCH_RECIPIENT_EMAIL",
     ]
+    measured = measured if isinstance(measured, dict) else {}
     out: Dict[str, bool] = {}
+    verdicts: Dict[str, str] = {}
     for n in names:
         val = os.getenv(n, "")
         present = bool(val.strip())
         out[n] = present
-        shown = f"{len(val)} chars" if present else "MISSING"
-        print(f"  {'[+]' if present else '[-]'} {n}: {shown}")
-    return {"ok": all(out.values()), "inventory": out}
+        if not present:
+            print(f"  [-] {n}: MISSING")
+            verdicts[n] = "missing"
+            continue
+        check_name = measured_by.get(n)
+        probe = measured.get(check_name) if check_name else None
+        if isinstance(probe, dict) and "ok" in probe:
+            verdict = "живой (замер пройден)" if probe.get("ok") else \
+                f"МЁРТВ ИЛИ ДЕГРАДАЦИЯ (замер: {probe.get('reason', 'без причины')})"
+            print(f"  {'[+]' if probe.get('ok') else '[!]'} {n}: {len(val)} chars — {verdict}")
+        else:
+            verdict = "присутствует (в этом отчёте не измерялся)"
+            print(f"  [+] {n}: {len(val)} chars — {verdict}")
+        verdicts[n] = verdict
+    return {"ok": all(out.values()), "inventory": out, "verdicts": verdicts}
 
 
 def check_bot_health() -> Dict[str, Any]:
@@ -347,9 +376,15 @@ def main() -> int:
         "keenable": check_keenable(),
         "telegram": check_telegram(),
         "state": check_github_state(),
-        "credentials": check_credentials_present(),
         "bot_health": check_bot_health(),
     }
+    # The inventory runs AFTER the live probes, so «присутствует» can carry
+    # the probe's verdict instead of standing in for it.
+    report["credentials"] = check_credentials_present({
+        "nvidia": report["nvidia"],
+        "keenable": report["keenable"],
+        "telegram": report["telegram"],
+    })
 
     _hdr("SUMMARY")
     nvidia = report["nvidia"]
@@ -359,7 +394,16 @@ def main() -> int:
     print(f"  Keenable   : {'OK' if report['keenable'].get('ok') else 'DEGRADED (' + str(report['keenable'].get('reason')) + ')'}")
     print(f"  Telegram   : {'OK' if report['telegram'].get('ok') else 'DEGRADED (' + str(report['telegram'].get('reason')) + ')'}")
     print(f"  Bot health : {'OK' if report['bot_health'].get('ok') else 'SILENT (' + str(report['bot_health'].get('reason')) + ')'}")
-    print(f"  Credentials: {'ALL SET' if report['credentials'].get('ok') else 'INCOMPLETE'}")
+    creds = report["credentials"]
+    dead = [n for n, v in (creds.get("verdicts") or {}).items()
+            if "МЁРТВ" in v or "ДЕГРАДАЦИЯ" in v]
+    if not creds.get("ok"):
+        cred_line = "INCOMPLETE"
+    elif dead:
+        cred_line = f"SET, НО {len(dead)} МЁРТВ ({', '.join(dead)})"
+    else:
+        cred_line = "ALL SET (живость — см. пробы выше)"
+    print(f"  Credentials: {cred_line}")
 
     out_path = PROJECT_ROOT / "diagnostics_report.json"
     # Atomic: the supervisor reads this file's age to decide whether the

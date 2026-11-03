@@ -18,17 +18,30 @@ TELEGRAM_BOT_TOKEN=1234567890:AA...
 NVIDIA_API_KEY=nvapi-...
 NVIDIA_API_KEY_2=nvapi-...
 TAVILY_API_KEY=tvly-...        # опционально
-TELEGRAM_BOT_PASSWORD=...      # опционально, иначе пароль по умолчанию из кода
+TELEGRAM_BOT_PASSWORD=...      # ОБЯЗАТЕЛЬНО: пароля в коде нет — без него бот отклоняет все подключения
+TELEGRAM_OPERATOR_CHAT_ID=...  # реальный chat id оператора; в репозиторий идёт только отпечаток (чат#x)
 ```
 
 2. `pip install -r requirements.txt` (нужны только requests/pyyaml/pysocks — torch не требуется).
 3. `python -m harness.telegram_bot` (или `python harness/telegram_bot.py`).
 
-На сервере бот живёт под systemd: `kg-telegram-bot.service` с `Restart=always` — падение/ребут поднимаются автоматически.
+**Прод-среда — не сервер, а GitHub Actions.** Комплекс целиком живёт в облаке: бот работает окнами по 50 минут (`telegram_bot.yml`), окно само ставит следующее (watchdog), упавшая цепочка поднимается heartbeat'ом (`emergency_cron.yml`, каждые 6 часов) и супервизором циклов (`harness/cycle_supervisor.py`), который перезапускает то, что планировщик пропустил. Состояние переживает перезапуск: демоном коммитится в репозиторий через `scripts/sync_state.sh` (ребейз + повтор при гонке пушей). Локальный запуск — для отладки, не для продакшена.
 
-## Цикл мониторинга
+## Циклы (их нельзя уронить одним пропуском cron)
 
-`python main_cron.py` — healthcheck ключа, скан каталога NIM, бенчмарк-рейтинг, синхронизация `active_models.json`. По расписанию его гоняет GitHub Actions (`emergency_cron.yml`, каждые 6 часов) — это «пульс» комплекса.
+У каждого цикла есть артефакт — доказательство, что он реально исполнялся; `harness/cycle_supervisor.py` читает возраст артефакта и перезапускает просроченное:
+
+| Цикл | Workflow | Артефакт |
+|------|----------|----------|
+| Замер флота | `fleet_tuner.yml` | `data/fleet_report.json` |
+| Диагностика | `diagnostics.yml` | `diagnostics_report.json` |
+| Самотест бота | `bot_selftest.yml` | `data/bot_selftest_report.json` |
+| Ежедневные письма (12:00 НСК) | `daily_dispatch_novt.yml` | `nim_history.log` |
+| Облачная проверка (67 тестов) | `cloud_tests.yml` | `data/cloud_tests_report.json` |
+| Самоулучшение (forge) | `forge_autopilot.yml` | `data/forge_autopilot.json` |
+| Лестница выживания | `survival_protocol.yml` | `data/survival_report.json` |
+
+`python main_cron.py` — healthcheck ключа, скан каталога NIM, синхронизация `active_models.json`; его вызывает `emergency_cron.yml` (каждые 6 часов) вместе с супервизором циклов, восстановлением окна бота и сигнализацией тишины (`harness/bot_silence_alarm.py`).
 
 ## Память
 

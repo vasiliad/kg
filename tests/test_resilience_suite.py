@@ -4976,6 +4976,75 @@ def test_63_the_survival_ladder_must_be_wired_not_written():
           "not just written.")
 
 
+def test_64_the_docs_must_describe_this_complex_not_a_former_one():
+    """
+    The docs are the map the operator reads when the complex is on fire. A
+    map to a place that no longer exists is worse than none: on 2026-11-03
+    the README still described a systemd unit (`kg-telegram-bot.service`)
+    that was never part of this design, a «пароль по умолчанию из кода»
+    that the password guard explicitly forbids, and a private-repo
+    minutes story that is not why the repository is public. The notebook
+    still called the repository PRIVATE and told the reader to embed a
+    token. And the diagnostics inventory reported a measured-DEAD key as
+    «[+] KEENABLE_API_KEY: 43 chars» — "the variable is set" standing in
+    for "the credential works".
+
+    The rule: every claim in the docs must describe the machine that
+    actually runs.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 64: the docs describe THIS complex")
+    print("=" * 60)
+    from harness import diagnostics
+
+    # --- the inventory: "set" is not "works" ------------------------------
+    saved_env = {n: os.environ.get(n) for n in ("NVIDIA_API_KEY", "KEENABLE_API_KEY", "HF_TOKEN")}
+    try:
+        os.environ["NVIDIA_API_KEY"] = "x" * 40
+        os.environ["KEENABLE_API_KEY"] = "y" * 40
+        os.environ["HF_TOKEN"] = "z" * 30
+        inv = diagnostics.check_credentials_present({
+            "nvidia": {"ok": True},
+            "keenable": {"ok": False, "reason": "http_401"},
+        })
+        v = inv["verdicts"]
+        assert "МЁРТВ" in v["KEENABLE_API_KEY"], \
+            f"a measured-dead key must be called dead: {v['KEENABLE_API_KEY']}"
+        assert "живой" in v["NVIDIA_API_KEY"], \
+            f"a measured-alive key must be called alive: {v['NVIDIA_API_KEY']}"
+        assert "не измерялся" in v["HF_TOKEN"], \
+            f"a key without a probe must say so: {v['HF_TOKEN']}"
+    finally:
+        for n, val in saved_env.items():
+            if val is None:
+                os.environ.pop(n, None)
+            else:
+                os.environ[n] = val
+
+    # --- the README describes the Actions complex -------------------------
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "systemd" not in readme, \
+        "the README must not describe a systemd unit that does not exist"
+    assert "пароль по умолчанию из кода" not in readme, \
+        "the README must not promise a default password the guard forbids"
+    assert "telegram_bot.yml" in readme and "cycle_supervisor" in readme, \
+        "the README must describe how the bot REALLY stays alive"
+
+    # --- the notebook must not send the reader hunting for a token --------
+    nb_text = (PROJECT_ROOT / "DeepSeek_R1_TPU_NIM_Orchestrator.ipynb").read_text(encoding="utf-8")
+    assert "The repo is PRIVATE" not in nb_text, \
+        "the repository is public — the notebook must not claim otherwise"
+    assert "x-access-token" not in nb_text, \
+        "the notebook must not embed a token into a clone URL"
+
+    # --- the quick reference names the secrets that now exist -------------
+    quick = (PROJECT_ROOT / "QUICK_REFERENCE.md").read_text(encoding="utf-8")
+    for secret in ("TELEGRAM_OPERATOR_CHAT_ID", "REDACTION_SALT"):
+        assert secret in quick, f"the quick reference must name {secret}"
+
+    print("[+] Test 64 Passed: the docs describe the machine that actually runs.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5049,6 +5118,7 @@ if __name__ == "__main__":
         test_61_the_annotations_must_survive_the_clouds_python,
         test_62_the_operator_chat_never_reaches_the_public_repository,
         test_63_the_survival_ladder_must_be_wired_not_written,
+        test_64_the_docs_must_describe_this_complex_not_a_former_one,
     ]
     failed = []
     for t in tests:
