@@ -3090,8 +3090,8 @@ def test_49_when_every_nvidia_model_dies_the_keeper_holds():
         yesterday = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         today_fail = (now - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
         (tmp / "nim_history.log").write_text(
-            f"[{yesterday} UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Дайджест\n"
-            f"[{today_fail} UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Дайджест\n", encoding="utf-8")
+            f"[{yesterday} UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ\n"
+            f"[{today_fail} UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ\n", encoding="utf-8")
         sup = cs.supervise(repo="", now=now, root=tmp, dry_run=True)
         entry = next(c for c in sup["cycles"] if c["name"] == "daily_dispatch")
         assert entry.get("due_today") is True and entry["stale"],             f"a failed delivery must be re-played today ({entry})"
@@ -4168,6 +4168,136 @@ def test_56_two_writers_must_not_erase_each_others_log():
     print("[+] Test 56 Passed: two writers cannot erase each other's log, and a lost push is loud.")
 
 
+def test_57_a_silent_github_is_not_an_idle_cycle():
+    """
+    The supervisor asks three questions: did the cycle leave an artefact, did
+    GitHub start a run, and did WE already try. A question without an answer
+    is not a "no".
+
+    Measured in the cloud on 2026-11-02: `workflow_busy` returned None when
+    GitHub did not answer, `if busy:` read None as "idle", and the cooldown
+    was skipped because the run history was empty too — so the supervisor
+    dispatched on every tick. Nothing in the complex remembered the attempt.
+
+    And the daily report's marker must name the DIGEST: the cycle sends two
+    letters, and a health letter on its own does not fulfil the daily
+    promise.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 57: A silent GitHub is not an idle cycle")
+    print("=" * 60)
+
+    from harness import cycle_supervisor as cs
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 11, 2, 10, 31, 0, tzinfo=timezone.utc)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "data").mkdir(parents=True, exist_ok=True)
+        (root / "nim_history.log").write_text(
+            "[2026-11-01 11:47:58 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n",
+            encoding="utf-8",
+        )
+        cycles = (
+            {"name": "daily_dispatch", "workflow": "daily_dispatch_novt.yml",
+             "artefact": "nim_history.log",
+             "marker": "ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ",
+             "max_age_h": 26.0, "retry_h": 3.0, "daily": True,
+             "not_before_utc": 5},
+        )
+
+        dispatched = []
+        original_busy = cs.workflow_busy
+        original_last = cs.last_run_age_h
+        original_dispatch = cs.dispatch_cycle
+        try:
+            # GitHub answers NOTHING: both the busy check and the run
+            # history come back empty.
+            cs.workflow_busy = lambda repo, workflow: None
+            cs.last_run_age_h = lambda repo, workflow, now=None: None
+            cs.dispatch_cycle = lambda repo, workflow, ref="": dispatched.append(workflow) or True
+
+            # --- The first tick: nothing is known, so ONE attempt is made —
+            #     and the attempt is remembered.
+            report = cs.supervise(repo="owner/repo", now=now, cycles=cycles, root=root)
+            assert dispatched == ["daily_dispatch_novt.yml"], \
+                f"a cycle nobody knows about is owed one attempt: {dispatched}"
+            entry = report["cycles"][0]
+            assert entry["busy"] is None, \
+                "the report must say the answer was unknown — not that the cycle was idle"
+            assert entry["effective_age_h"] is None, \
+                "without any witness there is no age to judge"
+            assert report["dispatch_log"].get("daily_dispatch"), \
+                "the ATTEMPT must be written down — a refused dispatch must not retry every tick"
+
+            # --- The ledger is what the next tick reads. It survives the
+            #     runner's filesystem being wiped: the heartbeat commits it.
+            cs.write_report(report, root / "data" / ".cycle_supervisor.json")
+            dispatched.clear()
+            report = cs.supervise(repo="owner/repo", now=now + timedelta(minutes=10),
+                                  cycles=cycles, root=root)
+            assert not dispatched, \
+                f"the supervisor must remember its own attempt: {dispatched}"
+            entry = report["cycles"][0]
+            assert entry["action"] == "cooldown", \
+                f"a silent GitHub plus a fresh ledger must hold the cooldown: {entry}"
+            assert entry["local_dispatch_age_h"] is not None, \
+                "the local witness must be visible in the report"
+
+            # --- The ledger is not a lock forever: after the cooldown the
+            #     cycle is due again.
+            dispatched.clear()
+            report = cs.supervise(repo="owner/repo", now=now + timedelta(hours=4),
+                                  cycles=cycles, root=root)
+            assert dispatched == ["daily_dispatch_novt.yml"], \
+                f"a stale cycle must be tried again after the cooldown: {dispatched}"
+
+            # --- A health letter does NOT fulfil the daily promise.
+            (root / "nim_history.log").write_text(
+                "[2026-11-02 09:02:30 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Проверка связи | статус=DELIVERED\n",
+                encoding="utf-8",
+            )
+            dispatched.clear()
+            cs.write_report({"dispatch_log": {}}, root / "data" / ".cycle_supervisor.json")
+            report = cs.supervise(repo="owner/repo", now=now.replace(hour=9),
+                                  cycles=cycles, root=root)
+            entry = report["cycles"][0]
+            assert entry.get("due_today") is True, \
+                f"only the DIGEST fulfils the daily promise: {entry}"
+
+            # --- The digest does.
+            (root / "nim_history.log").write_text(
+                "[2026-11-02 09:09:45 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | статус=DELIVERED\n",
+                encoding="utf-8",
+            )
+            dispatched.clear()
+            report = cs.supervise(repo="owner/repo", now=now.replace(hour=9),
+                                  cycles=cycles, root=root)
+            entry = report["cycles"][0]
+            assert entry.get("due_today") is False, \
+                f"today's digest must stop the daily cycle: {entry}"
+            assert not dispatched, f"a delivered digest must not be sent again: {dispatched}"
+        finally:
+            cs.workflow_busy = original_busy
+            cs.last_run_age_h = original_last
+            cs.dispatch_cycle = original_dispatch
+
+    # The shipped cycle table must name the digest, not "some report".
+    daily = [c for c in cs.CYCLES if c.get("name") == "daily_dispatch"]
+    assert daily, "the daily dispatch must be a supervised cycle"
+    assert "Ежедневный дайджест ИИ" in daily[0].get("marker", ""), \
+        "the daily marker must name the digest — a health letter is not the daily report"
+
+    # And the bot must carry the ledger to the repository, or the next
+    # window starts with no memory at all.
+    daemon = (PROJECT_ROOT / "scripts" / "run_telegram_daemon.sh").read_text(encoding="utf-8")
+    assert "data/.cycle_supervisor.json" in daemon, \
+        "the bot must persist the supervisor's ledger — otherwise every window starts amnesiac"
+
+    print("[+] Test 57 Passed: a silent GitHub is not an idle cycle, and the attempt is remembered.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4234,6 +4364,7 @@ if __name__ == "__main__":
         test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine,
         test_55_the_platform_boundary_must_not_rot,
         test_56_two_writers_must_not_erase_each_others_log,
+        test_57_a_silent_github_is_not_an_idle_cycle,
     ]
     failed = []
     for t in tests:

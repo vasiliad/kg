@@ -29,6 +29,10 @@ STATE_FILES=(
   # The duty shift outlives the 50-minute runner window: without this file
   # the next window would pick a new model every time.
   "data/duty_shift.json"
+  # The supervisor's own memory of what it dispatched. Without it in the
+  # repository the next window cannot know that this one already tried —
+  # and "GitHub did not answer" would be read as "idle" all over again.
+  "data/.cycle_supervisor.json"
   "nim_history.log"
 )
 

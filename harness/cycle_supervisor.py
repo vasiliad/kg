@@ -23,6 +23,17 @@ two processes that demonstrably run (the bot window every ~50 minutes and
 the heartbeat every few hours), dispatches a cycle whose artefact is stale,
 and never dispatches a duplicate: a cycle with a run in progress or queued is
 left alone, and a cycle that was attempted recently is left to its cooldown.
+
+Three witnesses, and a silent one is not a negative answer:
+
+    the artefact       when the cycle last proved it ran
+    the repository     how long ago GitHub started the last run
+    the ledger         when THIS supervisor last attempted the cycle
+
+Measured in the cloud on 2026-11-02: the supervisor read "GitHub did not
+answer" as "idle", skipped its own cooldown and dispatched on every tick.
+Now an unanswered question only means the other witnesses are consulted —
+and the attempt is written into the ledger, so the next tick remembers.
 """
 
 import json
@@ -72,7 +83,11 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "name": "daily_dispatch",
         "workflow": "daily_dispatch_novt.yml",
         "artefact": "nim_history.log",
-        "marker": "ОТЧЁТЫ ОТПРАВЛЕНЫ",
+        # The marker must name the DIGEST, not "some report": the daily
+        # cycle sends two letters, and a health letter on its own does not
+        # fulfil the daily promise. Measured 2026-11-02: a generic marker
+        # let one letter stand in for the whole report.
+        "marker": "ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ",
         "max_age_h": 26.0,
         # A crashed dispatch must be retried long before the next report is
         # owed: the report is a daily promise, not a weekly one.
@@ -149,6 +164,40 @@ def _hours_since(ts: Optional[datetime], now: Optional[datetime] = None) -> Opti
         return None
     now = now or datetime.now(timezone.utc)
     return max(0.0, (now - ts).total_seconds() / 3600.0)
+
+
+def read_dispatch_ledger(path: Path) -> Dict[str, Any]:
+    """
+    The supervisor's own memory of what it dispatched, and WHEN.
+
+    GitHub is not always able to answer. Measured in the cloud: a tick that
+    could not read the run history treated "unknown" as "idle" and dispatched
+    the cycle again — and again, on every tick, because nothing in the
+    complex remembered the attempt. This ledger is that memory: it lives in
+    the supervisor's own report, which the heartbeat commits to the
+    repository, so it survives the runner's filesystem being wiped.
+    """
+    if not path or not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    ledger = data.get("dispatch_log")
+    return ledger if isinstance(ledger, dict) else {}
+
+
+def dispatch_ledger_age_h(
+    ledger: Dict[str, Any],
+    cycle_name: str,
+    now: Optional[datetime] = None,
+) -> Optional[float]:
+    """How long ago THIS supervisor last attempted this cycle."""
+    if not ledger:
+        return None
+    return _hours_since(parse_timestamp(ledger.get(cycle_name)), now)
 
 
 def artefact_timestamp(
@@ -297,12 +346,16 @@ def supervise(
     repo = repo or os.getenv("GITHUB_REPOSITORY", "") or os.getenv("GITHUB_REPO", "")
     now = now or datetime.now(timezone.utc)
     root = Path(root) if root else PROJECT_ROOT
+    # The ledger is read BEFORE the first dispatch: it is what turns
+    # "GitHub did not answer" from "idle" into "we already tried".
+    ledger = read_dispatch_ledger(root / "data" / ".cycle_supervisor.json")
     report: Dict[str, Any] = {
         "checked_at": now.isoformat(),
         "repo": repo,
         "dry_run": dry_run,
         "cycles": [],
         "dispatched": [],
+        "dispatch_log": dict(ledger),
     }
 
     for cycle in cycles:
@@ -353,14 +406,26 @@ def supervise(
 
         busy = workflow_busy(repo, cycle["workflow"])
         entry["busy"] = busy
-        if busy:
+        # "Unknown" is NOT "idle". When GitHub cannot answer, the run
+        # history below is the second witness — and the supervisor's own
+        # ledger is the third. Only a confirmed "busy" stops the cycle.
+        if busy is True:
             entry["action"] = "busy"
             report["cycles"].append(entry)
             continue
 
         last = last_run_age_h(repo, cycle["workflow"], now)
+        local = dispatch_ledger_age_h(ledger, cycle["name"], now)
         entry["last_run_age_h"] = None if last is None else round(last, 2)
-        if last is not None and last < float(cycle["retry_h"]):
+        entry["local_dispatch_age_h"] = None if local is None else round(local, 2)
+        # The cooldown uses the YOUNGEST evidence: if either the repository
+        # or the supervisor's own memory says we tried recently, the cycle
+        # waits. Before this, a missing answer skipped the cooldown
+        # entirely and the supervisor dispatched on every tick.
+        known = [a for a in (last, local) if a is not None]
+        effective = min(known) if known else None
+        entry["effective_age_h"] = None if effective is None else round(effective, 2)
+        if effective is not None and effective < float(cycle["retry_h"]):
             entry["action"] = "cooldown"
             report["cycles"].append(entry)
             continue
@@ -372,6 +437,9 @@ def supervise(
 
         ok = dispatch_cycle(repo, cycle["workflow"], ref)
         entry["action"] = "dispatched" if ok else "dispatch_failed"
+        # The ATTEMPT is remembered, not only the success: a dispatch that
+        # was refused must not be retried on every tick either.
+        report["dispatch_log"][cycle["name"]] = now.isoformat()
         if ok:
             report["dispatched"].append(cycle["workflow"])
         report["cycles"].append(entry)
