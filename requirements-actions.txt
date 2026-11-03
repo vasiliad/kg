@@ -1,0 +1,15 @@
+# The cloud runtime's exact dependency contract.
+#
+# Pinned 2026-11-04 to the versions the Actions runners already resolve:
+# `pip install pyyaml requests pydantic httpx` fetches the LATEST on every
+# run, so one supplier-side release could silently change the complex's
+# runtime overnight — the same decay class that turned a green suite red
+# across Python versions (PEP 649, measured 2026-11-03). With pins, the
+# runtime changes only when WE change it, and the change arrives as a
+# commit this suite can judge.
+#
+# Measured (pip index versions, 2026-11-04):
+pyyaml==6.0.3
+requests==2.34.2
+pydantic==2.14.2
+httpx==0.28.1

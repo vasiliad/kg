@@ -5282,6 +5282,58 @@ def test_66_the_reports_survive_one_dead_google_account():
           "and the log says which account served.")
 
 
+def test_67_the_runtime_contract_must_be_pinned():
+    """
+    The third killer of a 10-year complex is dependency rot: `pip install
+    pyyaml requests pydantic httpx` fetches the LATEST on every run, so a
+    supplier-side release silently changes the runtime overnight. The
+    complex already met this class once — Python 3.14's deferred annotations
+    hid a NameError that killed the cloud suite (measured 2026-11-03) — and
+    that time the difference was between two machines; an unpinned pip
+    puts the SAME machine a week apart.
+
+    The contract: the cloud installs from requirements-actions.txt with
+    `==` pins, so the runtime changes only when a COMMIT changes it —
+    a change the suite can judge before it goes live.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 67: the runtime contract is pinned")
+    print("=" * 60)
+    import re
+
+    contract = PROJECT_ROOT / "requirements-actions.txt"
+    assert contract.exists(), "the pinned contract must exist"
+    text = contract.read_text(encoding="utf-8")
+    pins = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            m = re.match(r"([A-Za-z0-9_.\-]+)==([A-Za-z0-9_.\-]+)", line)
+            assert m, f"every runtime dependency must be pinned with ==: {line}"
+            pins[m.group(1).lower().replace("_", "-")] = m.group(2)
+    for required in ("pyyaml", "requests", "pydantic", "httpx"):
+        assert required in pins, f"the contract must pin {required}: {sorted(pins)}"
+    assert len(pins) == len(set(pins)), "no duplicate pins"
+
+    # Every workflow that runs Python must install from the contract —
+    # no unpinned `pip install <packages>` line may remain.
+    offenders = []
+    for wf in (PROJECT_ROOT / ".github" / "workflows").glob("*.yml"):
+        body = wf.read_text(encoding="utf-8")
+        for m in re.finditer(r"pip install ((?:[A-Za-z0-9_.\[\]>=<!~,\-]+[ ]+){2,})", body):
+            offenders.append(f"{wf.name}: pip install {m.group(1).strip()}")
+    assert not offenders, \
+        "an unpinned runtime install survived: " + "; ".join(offenders)
+    wired = sum(
+        1 for wf in (PROJECT_ROOT / ".github" / "workflows").glob("*.yml")
+        if "requirements-actions.txt" in wf.read_text(encoding="utf-8")
+    )
+    assert wired >= 9, f"the workflows must install from the contract ({wired} wired)"
+
+    print(f"[+] Test 67 Passed: {len(pins)} dependencies pinned, {wired} workflows "
+          f"install from the contract — the runtime changes only by commit.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5358,6 +5410,7 @@ if __name__ == "__main__":
         test_64_the_docs_must_describe_this_complex_not_a_former_one,
         test_65_the_digest_link_must_confirm_the_source,
         test_66_the_reports_survive_one_dead_google_account,
+        test_67_the_runtime_contract_must_be_pinned,
     ]
     failed = []
     for t in tests:
