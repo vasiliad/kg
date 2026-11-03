@@ -88,7 +88,15 @@ jobs:
         run: |
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
-          git add data/forge_autopilot.json data/forge_autopilot || true
+          # `git add` ABORTS the whole command when one pathspec does not
+          # match — measured 2026-11-03: the patch directory did not exist
+          # (the attempt produced no patch), so the verdict JSON was never
+          # staged either, and the operator would never have seen it. Each
+          # path is added on its own.
+          git add data/forge_autopilot.json 2>/dev/null || true
+          if [ -d data/forge_autopilot ]; then
+            git add data/forge_autopilot/ 2>/dev/null || true
+          fi
           if ! git diff --staged --quiet; then
             git commit -m "feat(forge): the autopilot's own attempt at improving itself [skip ci]"
           else

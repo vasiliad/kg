@@ -206,9 +206,23 @@ def attempt(
     content = str(writer.get("content") or "")
     diff = code_forge.extract_diff(content)
     if not diff:
+        # What DID the model say? A verdict that hides the answer hides the
+        # only thing that could explain the failure — the answer is kept
+        # (short, masked) next to the verdict.
+        preview = content.strip()[:800]
+        try:
+            from harness import redaction
+
+            preview = redaction.mask_emails_deep(preview)
+        except Exception:
+            pass
         verdict.update(
             stage="no_patch",
-            summary="Модель ответила без патча — улучшать нечего.",
+            answer_preview=preview,
+            summary=(
+                "Модель ответила без патча — улучшать нечего."
+                if preview else "Модель не ответила — улучшать нечего."
+            ),
         )
         return verdict
 

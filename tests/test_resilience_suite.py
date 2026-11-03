@@ -3502,6 +3502,25 @@ def test_53_the_complex_improves_itself_without_being_told():
     saved_artefact = forge_autopilot.ARTEFACT
     saved_patch_dir = forge_autopilot.PATCH_DIR
     workdir = _tmp_dir()
+
+    # --- the parser must READ a plain unified diff -----------------------
+    # Measured 2026-11-03 in the cloud: the model answered with a valid
+    # unified diff (--- file / +++ file) and the strict parser called it
+    # "no patch" — the complex could not read the proposal it had asked for.
+    plain_diff = (
+        "вот:\n```diff\n--- harness/x.py\n+++ harness/x.py\n"
+        "@@ -1 +1 @@\n-a\n+b\n```"
+    )
+    parsed = code_forge.extract_diff(plain_diff)
+    assert parsed.startswith("--- harness/x.py"), \
+        f"a valid unified diff without the git header must still be read ({parsed!r})"
+    assert "@@" in parsed and "```" not in parsed, \
+        f"the diff must be clean of the fence ({parsed!r})"
+    assert code_forge.extract_diff("просто текст без патча") == "", \
+        "prose is not a diff"
+    assert code_forge.extract_diff("```diff\n--- a/x.py\n```") == "", \
+        "a diff without hunks is not a diff"
+
     try:
         # --- the bench: the reserve replaces a silent duty holder ----------
         forge_writers.duty_writer = lambda ask, ex: {
@@ -3554,10 +3573,27 @@ def test_53_the_complex_improves_itself_without_being_told():
         assert "конституц" in str(verdict.get("summary") or "").lower(), \
             f"the summary must name the constitution ({verdict.get('summary')})"
 
+        # --- a proposal-less answer must be KEPT, not swallowed ------------
+        # Measured 2026-11-03 in the cloud: the duty model answered without
+        # a patch and the verdict said only «нет патча». The ANSWER is the
+        # only thing that can explain the failure — it must be kept.
+        forge_writers.duty_writer = lambda ask, ex: {
+            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
+            "verified": True, "elapsed": 3.0,
+            "content": "NO_PATCH — улучшать нечего, всё в порядке.",
+            "status": "SUCCESS"}
+        verdict = forge_autopilot.attempt(reason="тест", executor=object(), engine=object())
+        assert verdict.get("stage") == "no_patch", "an answer without a patch is no patch"
+        assert "NO_PATCH" in str(verdict.get("answer_preview") or ""), \
+            f"the model's answer must be kept next to the verdict ({verdict})"
+
         # --- the ration: ONE attempt a day ---------------------------------
         forge_autopilot.ARTEFACT = workdir / "forge_autopilot.json"
         forge_autopilot.PATCH_DIR = workdir / "patches"
         code_forge.apply_self_improvement = _fake_apply
+        forge_writers.duty_writer = lambda ask, ex: {
+            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
+            "verified": True, "elapsed": 3.0, "content": diff_text, "status": "SUCCESS"}
         first = forge_autopilot.run_daily()
         assert not first.get("skipped"), "the first attempt of the day must happen"
         assert forge_autopilot.ARTEFACT.exists(), "the verdict must be written down"
@@ -3627,6 +3663,20 @@ def test_53_the_complex_improves_itself_without_being_told():
     names = [c.get("workflow") for c in cycle_supervisor.CYCLES]
     assert "forge_autopilot.yml" in names, \
         f"the autopilot must be a supervised cycle ({names})"
+
+    # --- the verdict must REACH the repository even without a patch ------
+    # Measured 2026-11-03 in the cloud: `git add data/forge_autopilot.json
+    # data/forge_autopilot` ABORTS when the patch directory does not exist
+    # — so the verdict JSON was never staged, the operator never saw it, and
+    # the supervisor saw a cycle that never ran. Each path is added alone.
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "forge_autopilot.yml")
+    wf_text = workflow.read_text(encoding="utf-8")
+    assert "git add data/forge_autopilot.json" in wf_text, \
+        "the verdict must be staged on its own"
+    assert "git add data/forge_autopilot/" in wf_text, \
+        "the patch directory must be staged on its own"
+    assert "git add data/forge_autopilot.json data/forge_autopilot" not in wf_text, \
+        "one missing pathspec must not abort the whole staging"
 
     print("[+] Test 53 Passed: the complex improves itself on its own — honestly, once a day.")
 

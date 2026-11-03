@@ -243,15 +243,26 @@ def extract_diff(text: str) -> str:
     raw = (text or "").strip()
     if not raw:
         return ""
+    # A unified diff announces itself either with the git header or with the
+    # ---/+++ pair. Measured 2026-11-03: the model answered with a plain
+    # unified diff (--- harness/x.py / +++ harness/x.py) and the strict
+    # parser called it "no patch" — the complex declared itself unable to
+    # read a perfectly valid diff. A parser that cannot READ the proposal
+    # is a parser that silences the complex.
     start = raw.find("diff --git")
     if start < 0:
-        start = raw.find("--- a/")
+        m = re.search(r"^--- \S+.*$", raw, re.M)
+        if m and re.search(r"^\+\+\+ \S+.*$", raw[m.end():], re.M):
+            start = m.start()
     if start < 0:
         return ""
     tail = raw[start:].strip()
     fence_end = tail.find("```")     # the closing fence is not part of the diff
     if fence_end >= 0:
         tail = tail[:fence_end].strip()
+    # A diff without hunks is not a diff.
+    if "@@" not in tail:
+        return ""
     return tail
 
 
@@ -276,7 +287,10 @@ SELF_IMPROVEMENT_PROMPT = (
     "2. патч меняет ОДИН файл и решает ОДНУ задачу;\n"
     "3. никаких ключей, паролей и токенов в патче;\n"
     "4. патч не должен ломать существующие тесты;\n"
-    "5. если задача не требует изменения кода — верни пустой ответ."
+    "5. ответ ДОЛЖЕН начинаться с `diff --git` — патч без этого заголовка "
+    "комплекс прочитать не сможет;\n"
+    "6. если задача не требует изменения кода — ответь ровно `NO_PATCH` "
+    "(это честный отказ, а не пустой ответ)."
 )
 
 
