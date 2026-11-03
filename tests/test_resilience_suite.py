@@ -2643,14 +2643,17 @@ def test_44_a_failed_letter_raises_a_backup_alert():
     from datetime import datetime, timezone
     from harness import alert_channel
 
-    # The dedupe key: one issue per label per UTC day.
-    t1 = alert_channel.issue_title("Проверка связи")
-    assert t1 == alert_channel.issue_title("Проверка связи"), "same day = same title"
-    t2 = alert_channel.issue_title(
-        "Проверка связи", datetime(2026, 11, 3, 10, 0, tzinfo=timezone.utc)
-    )
+    # The dedupe key: one issue per label per UTC day. The days are PINNED:
+    # a test that compares "now" with a fixed date fails on the day it was
+    # written and passes the next day — the wall clock is not a fixture.
+    day_one = datetime(2026, 11, 2, 10, 0, tzinfo=timezone.utc)
+    day_two = datetime(2026, 11, 3, 10, 0, tzinfo=timezone.utc)
+    t1 = alert_channel.issue_title("Проверка связи", day_one)
+    assert t1 == alert_channel.issue_title("Проверка связи", day_one), "same day = same title"
+    t2 = alert_channel.issue_title("Проверка связи", day_two)
     assert t1 != t2, "a new day must be a new alert"
     assert alert_channel.ALERT_MARKER in t1, "the title must be findable"
+    assert "2026-11-02" in t1 and "2026-11-03" in t2, "the title must carry the UTC day"
 
     # Without a token the alert must degrade to the log, not crash the cycle.
     saved = (os.environ.pop("GH_TOKEN", None), os.environ.pop("GITHUB_TOKEN", None),
@@ -3041,12 +3044,20 @@ def test_49_when_every_nvidia_model_dies_the_keeper_holds():
 
         # 6. A failed delivery makes the dispatch DUE today: the supervisor
         #    re-plays it the same day instead of waiting 24 hours.
-        old = (datetime.now(timezone.utc) - timedelta(hours=20)).strftime("%Y-%m-%d %H:%M:%S")
+        #    The clock is PINNED to 06:00 UTC — the daily report is due from
+        #    05:00 UTC, and a test that runs at 02:00 UTC measures the wrong
+        #    thing (the wall clock is not a fixture).
+        now = datetime.now(timezone.utc).replace(hour=6, minute=0, second=0, microsecond=0)
+        yesterday = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        today_fail = (now - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
         (tmp / "nim_history.log").write_text(
-            f"[{old} UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Дайджест\n", encoding="utf-8")
-        sup = cs.supervise(repo="", now=datetime.now(timezone.utc), root=tmp, dry_run=True)
+            f"[{yesterday} UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Дайджест\n"
+            f"[{today_fail} UTC] ОТЧЁТЫ НЕ ОТПРАВЛЕНЫ | тип=Дайджест\n", encoding="utf-8")
+        sup = cs.supervise(repo="", now=now, root=tmp, dry_run=True)
         entry = next(c for c in sup["cycles"] if c["name"] == "daily_dispatch")
         assert entry.get("due_today") is True and entry["stale"],             f"a failed delivery must be re-played today ({entry})"
+        assert entry.get("age_h") is not None and entry["age_h"] < 26.0, \
+            f"the last SUCCESS was yesterday — the failure alone must make it due ({entry})"
     finally:
         ft.PROJECT_ROOT, cs.PROJECT_ROOT, cs.REPORT_PATH = saved
 
@@ -3177,6 +3188,13 @@ def test_51_the_model_forge_runs_code_and_gates_self_improvement():
     print("\n" + "=" * 60)
     print("TEST 51: The code forge — sandboxed execution, suite-gated improvement")
     print("=" * 60)
+    # Measured 2026-11-03: the forge's inner suite run would forge ITSELF —
+    # the inner test_51 clones again and chokes on the already-applied
+    # patch, an endless recursion of smiths. The forge marks its inner run,
+    # and this test steps aside inside it.
+    if os.getenv("FORGE_SKIP_SELF") == "1":
+        print("[skip] the forge's inner run does not forge itself")
+        return
     from harness import code_forge
 
     # --- ORDER: the sandbox measures, and secrets stay outside ------------
@@ -3223,12 +3241,43 @@ def test_51_the_model_forge_runs_code_and_gates_self_improvement():
     assert "PASSED" in (outcome.get("suite_tail") or ""), \
         "the suite must be the gate, not a formality"
 
-    # A patch that BREAKS the suite must be rejected by the gate.
+    # The branch must be VISIBLE in the complex's OWN repository — a branch
+    # that lives only in a temp folder is a fiction nobody can review.
+    import subprocess as _sp
+    branch = outcome["branch"]
+    shown = _sp.run(["git", "rev-parse", "--verify", f"refs/heads/{branch}"],
+                     cwd=str(PROJECT_ROOT), capture_output=True, text=True)
+    assert shown.returncode == 0, \
+        f"the improvement branch must exist in the complex's repo ({shown.stderr.strip()})"
+
+    # A patch that BREAKS the suite must be rejected by the gate — and must
+    # leave no branch behind.
     broken_text = original.replace(
         "import json", "import json" + "\nimport nonexistent_module_xyz", 1)
     assert broken_text != original, "the broken variant must actually differ"
     bad_outcome = code_forge.apply_self_improvement(_diff(original, broken_text))
     assert not bad_outcome["ok"], f"a breaking patch must not branch ({bad_outcome})"
+    leaked = _sp.run(["git", "branch", "--list", "forge/*"],
+                     cwd=str(PROJECT_ROOT), capture_output=True, text=True).stdout
+    assert branch not in leaked or len([b for b in leaked.splitlines() if b.strip()]) == 1, \
+        f"a rejected patch must not leave a branch behind ({leaked})"
+
+    # The forge's own recursion guard: inside a forge run the forge refuses.
+    saved_flag = os.environ.get("FORGE_SKIP_SELF")
+    os.environ["FORGE_SKIP_SELF"] = "1"
+    try:
+        guarded = code_forge.apply_self_improvement(_diff(original, improved))
+        assert not guarded["ok"] and guarded["stage"] == "guarded", \
+            f"the forge must not forge itself ({guarded})"
+    finally:
+        if saved_flag is None:
+            os.environ.pop("FORGE_SKIP_SELF", None)
+        else:
+            os.environ["FORGE_SKIP_SELF"] = saved_flag
+
+    # The branch was verified — the complex's repo must not collect them.
+    _sp.run(["git", "branch", "-D", branch], cwd=str(PROJECT_ROOT),
+            capture_output=True, text=True)
 
     print("[+] Test 51 Passed: the forge runs code in a sandbox and improves itself only suite-green.")
 

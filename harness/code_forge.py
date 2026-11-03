@@ -32,7 +32,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -42,6 +42,16 @@ if str(PROJECT_ROOT) not in sys.path:
 FORGE_TIMEOUT_SEC = float(os.getenv("FORGE_TIMEOUT_SEC", "60"))
 FORGE_MAX_OUTPUT = 8000
 FORGE_TESTS_TIMEOUT_SEC = float(os.getenv("FORGE_TESTS_TIMEOUT_SEC", "900"))
+# The forge's inner suite run carries this marker: the suite-in-the-scratch
+# must not forge ITSELF (measured 2026-11-03: the inner test_51 cloned again
+# and choked on the already-applied patch — an endless recursion of smiths).
+FORGE_SKIP_SELF_ENV = "FORGE_SKIP_SELF"
+# Measured 2026-11-03: this host has a SYSTEM core.autocrlf=true. The working
+# tree therefore holds CRLF while the blobs hold LF — a patch written from the
+# working tree (LF) does not match the clone's checkout (CRLF) and `git apply`
+# refuses it. The forge pins LF for every git call it makes: the gate must
+# depend on the CONTENT of the patch, not on the host's line-ending policy.
+GIT = ["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf"]
 FORBIDDEN_IN_PATCH = (
     "GH_TOKEN", "GITHUB_TOKEN", "TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_PASSWORD",
     "GMAIL_APP_PASSWORD", "NVIDIA_API_KEY", "DISPATCH_RECIPIENT_EMAIL",
@@ -129,6 +139,7 @@ def apply_self_improvement(
     patch_text: str,
     suite_command: Optional[List[str]] = None,
     dry_run: bool = False,
+    target_repo: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     The self-improvement flow: patch → scratch copy → FULL suite → branch.
@@ -137,7 +148,19 @@ def apply_self_improvement(
     constitution: 50+ offline suites must pass in the scratch copy before
     the patch becomes a branch; the branch (not main) is what the operator
     or the cloud verification judges next.
+
+    The branch lands in the COMPLEX'S OWN repository (a local branch, not
+    pushed): a branch that lives only in a temp folder is a fiction nobody
+    can review.
     """
+    # The recursion guard lives in the CODE, not only in the test: a patch
+    # that rewrites the test must not be able to restart the forge inside
+    # the forge. Fail-closed — the inner run then fails the suite, and a
+    # patch that breaks the suite never reaches a branch.
+    if os.getenv(FORGE_SKIP_SELF_ENV) == "1":
+        return {"ok": False, "stage": "guarded",
+                "error": "forge внутри forge — рекурсия запрещена"}
+
     clean, why = _patch_is_clean(patch_text)
     if not clean:
         return {"ok": False, "stage": "vetting", "error": why}
@@ -147,30 +170,36 @@ def apply_self_improvement(
         return {"ok": True, "stage": "dry_run", "scratch": str(scratch)}
 
     try:
-        subprocess.run(["git", "clone", "--shared", str(PROJECT_ROOT), str(scratch)],
+        subprocess.run(GIT + ["clone", "--shared", str(PROJECT_ROOT), str(scratch)],
                        check=True, capture_output=True, timeout=300)
     except Exception as e:
         return {"ok": False, "stage": "clone", "error": f"{type(e).__name__}: {e}"}
 
     # The patch is a unified diff; it is applied in the scratch copy only.
+    # The line endings are normalised first: the model writes text, and CRLF
+    # in a diff is a transport accident, not an intention. The file is
+    # written in BYTES on purpose — Windows' text mode would put the CRLF
+    # back (measured: the patch then refuses to apply to its own clone).
     patch_file = scratch / "proposed.patch"
-    patch_file.write_text(patch_text, encoding="utf-8")
+    patch_file.write_bytes((patch_text or "").replace("\r\n", "\n").encode("utf-8"))
     try:
-        proc = subprocess.run(["git", "apply", "--check", str(patch_file)],
-                              cwd=str(scratch), capture_output=True, text=True, timeout=60)
+        proc = subprocess.run(GIT + ["apply", "--check", str(patch_file)],
+                              cwd=str(scratch), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=60)
         if proc.returncode != 0:
             return {"ok": False, "stage": "apply_check",
                     "error": (proc.stderr or "патч не накладывается")[:500]}
-        subprocess.run(["git", "apply", str(patch_file)], cwd=str(scratch),
+        subprocess.run(GIT + ["apply", str(patch_file)], cwd=str(scratch),
                        check=True, capture_output=True, timeout=60)
     except Exception as e:
         return {"ok": False, "stage": "apply", "error": f"{type(e).__name__}: {e}"}
 
     suite = suite_command or [sys.executable, "tests/test_resilience_suite.py"]
     try:
+        forge_env = {**os.environ, FORGE_SKIP_SELF_ENV: "1"}
         proc = subprocess.run(suite, cwd=str(scratch), capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
-                              timeout=FORGE_TESTS_TIMEOUT_SEC)
+                              env=forge_env, timeout=FORGE_TESTS_TIMEOUT_SEC)
         tail = (proc.stdout or "")[-1500:]
         if proc.returncode != 0:
             return {
@@ -182,24 +211,35 @@ def apply_self_improvement(
 
     branch = f"forge/improvement-{time.strftime('%Y%m%d-%H%M%S')}"
     try:
-        subprocess.run(["git", "config", "user.name", "vasiliad"], cwd=str(scratch),
+        subprocess.run(GIT + ["config", "user.name", "vasiliad"], cwd=str(scratch),
                        check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email",
-                        "vasiliadi@users.noreply.github.com"], cwd=str(scratch),
+        subprocess.run(GIT + ["config", "user.email",
+                              "vasiliadi@users.noreply.github.com"], cwd=str(scratch),
                        check=True, capture_output=True)
-        subprocess.run(["git", "add", "-A"], cwd=str(scratch), check=True, capture_output=True)
-        subprocess.run(["git", "commit", "-m",
-                        "forge: model-proposed improvement (suite green in scratch)"],
+        subprocess.run(GIT + ["add", "-A"], cwd=str(scratch), check=True, capture_output=True)
+        subprocess.run(GIT + ["commit", "-m",
+                              "forge: model-proposed improvement (suite green in scratch)"],
                        cwd=str(scratch), check=True, capture_output=True, timeout=120)
-        subprocess.run(["git", "branch", branch], cwd=str(scratch),
+        subprocess.run(GIT + ["branch", branch], cwd=str(scratch),
                        check=True, capture_output=True)
     except Exception as e:
         return {"ok": False, "stage": "commit", "error": f"{type(e).__name__}: {e}"}
+
+    # The branch becomes VISIBLE in the complex's own repository (local only:
+    # nothing is pushed — the operator or the cloud verification decides).
+    repo = Path(target_repo) if target_repo else PROJECT_ROOT
+    try:
+        subprocess.run(GIT + ["fetch", str(scratch), f"{branch}:{branch}"],
+                       cwd=str(repo), check=True, capture_output=True, timeout=120)
+    except Exception as e:
+        return {"ok": False, "stage": "publish_branch",
+                "error": f"{type(e).__name__}: {e}", "branch": branch}
 
     return {
         "ok": True,
         "stage": "branched",
         "branch": branch,
+        "repo": str(repo),
         "scratch": str(scratch),
         "suite_tail": tail,
         "note": "патч прошёл весь suite в копии; ветка ждёт оператора или облачную проверку",
