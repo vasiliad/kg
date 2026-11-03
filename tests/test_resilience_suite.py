@@ -5038,9 +5038,21 @@ def test_64_the_docs_must_describe_this_complex_not_a_former_one():
         "the notebook must not embed a token into a clone URL"
 
     # --- the quick reference names the secrets that now exist -------------
-    quick = (PROJECT_ROOT / "QUICK_REFERENCE.md").read_text(encoding="utf-8")
-    for secret in ("TELEGRAM_OPERATOR_CHAT_ID", "REDACTION_SALT"):
-        assert secret in quick, f"the quick reference must name {secret}"
+    # LESSON (measured in the cloud, run 41669707039): this file is
+    # local-only (.git/info/exclude), so the cloud checkout does not have
+    # it — and a test that requires an UNTRACKED file does not just fail,
+    # it fails the FORGE's inner suite too (test 51 runs the whole suite in
+    # the sandbox, and one missing file refused every green patch). The
+    # suite must be hermetic to the COMMITTED tree: a local-only file is
+    # checked when it is present, and skipped with a named reason when the
+    # cloud cannot see it.
+    quick_path = PROJECT_ROOT / "QUICK_REFERENCE.md"
+    if quick_path.exists():
+        quick = quick_path.read_text(encoding="utf-8")
+        for secret in ("TELEGRAM_OPERATOR_CHAT_ID", "REDACTION_SALT"):
+            assert secret in quick, f"the quick reference must name {secret}"
+    else:
+        print("[i] QUICK_REFERENCE.md is local-only — absent in the cloud checkout, skipped")
 
     print("[+] Test 64 Passed: the docs describe the machine that actually runs.")
 
