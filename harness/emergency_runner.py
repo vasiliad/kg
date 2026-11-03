@@ -26,7 +26,7 @@ import yaml
 import argparse
 import subprocess
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 from harness.api_healthcheck import APIHealthChecker
 from harness.nim_scanner import NIMScanner
@@ -90,6 +90,68 @@ def _push_state() -> None:
             subprocess.run(["git", "push", "origin", "main"], check=False)
     except Exception as e:
         print(f"[!] Warning during state push: {e}")
+
+
+def choose_emergency_fleet(
+    measured_fleet: Optional[List[Dict[str, Any]]] = None,
+    previous_fleet: Optional[List[Dict[str, Any]]] = None,
+    previous_state: Optional[Dict[str, Any]] = None,
+    ranked_fleet: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[List[Dict[str, Any]], str, str]:
+    """
+    The roster the complex will work with during an emergency — and WHY.
+
+    The order is the policy:
+
+        1. the fleet MEASURED in this cycle;
+        2. the fleet MEASURED earlier — an outage cannot re-measure a team,
+           and a measured team beats a seeded one;
+        3. the seed registry — explicitly marked as unverified, because it
+           is not a measurement.
+
+    Measured: the emergency runner used to replace a duty team that had been
+    MEASURED with one that was only SEEDED, because the network was down and
+    the measurement could not be repeated. The unverified team then looked
+    verified (its scores came from the seed registry) and the complex
+    quietly lost the team it had earned.
+
+    Returns (fleet, origin, note).
+    """
+    measured = list(measured_fleet or [])
+    previous = list(previous_fleet or [])
+    state = previous_state or {}
+    ranked = list(ranked_fleet or [])
+
+    if measured:
+        return measured, "live_probe", "measured live in this cycle"
+
+    if previous and state.get("fleet_source") == "live_probe":
+        return (
+            previous,
+            "live_probe",
+            "kept from the previous measurement: the network is down, so the "
+            "measurement cannot be repeated — and a measured team beats a seeded one",
+        )
+
+    if ranked:
+        return (
+            ranked[:5],
+            "static_seed",
+            "unverified: the seed registry, not a measurement — the complex "
+            "could not measure a team in this cycle",
+        )
+
+    return (
+        [
+            {"id": "minimaxai/minimax-m3.1-flash", "tier": "Ultra-Flash-Reasoning", "quality_score": 99.2, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+            {"id": "z-ai/glm-5.3-flash", "tier": "Ultra-Agentic-Code", "quality_score": 98.8, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+            {"id": "deepseek-ai/deepseek-v4.1-flash", "tier": "Ultra-Sparse-MTP", "quality_score": 98.5, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+            {"id": "stepfun-ai/step-5-preview", "tier": "Ultra-Multimodal-Preview", "quality_score": 96.0, "status": "APPROVED", "source": "static_seed", "score_verified": False},
+            {"id": "nvidia/nemotron-3-ultra-550b-a55b", "tier": "Unranked / Experimental", "quality_score": None, "status": "UNRANKED", "source": "none", "score_verified": False},
+        ],
+        "none",
+        "unverified: the built-in seed list — the complex has never measured a team",
+    )
 
 
 def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> Dict[str, Any]:
@@ -177,7 +239,13 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             if not dry_run:
                 try:
                     _ensure_git_identity()
-                    subprocess.run(["git", "add", "active_models.json", "data/fleet_report.json", "nim_history.log", "config.yaml"], check=False)
+                    # One path at a time: a multi-path `git add` aborts
+                    # entirely when one pathspec does not match, and then
+                    # NOTHING is staged — the migration would never reach
+                    # the repository (measured 2026-11-03).
+                    for path in ("active_models.json", "data/fleet_report.json",
+                                 "nim_history.log", "config.yaml"):
+                        subprocess.run(["git", "add", path], check=False)
                     subprocess.run(["git", "commit", "-m", f"chore(sovereign): migrate to CPU SLM {target_model} [Total API Blackout]"], check=False)
                     _push_state()
                 except Exception as e:
@@ -216,9 +284,13 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
 
     # Step 2c: The MEASURED duty fleet outranks the static seed. A tuner
     # report younger than 24h is used as-is; a stale or missing one triggers
-    # a quick in-cycle re-tune. If both fail, the seeded fleet below remains
-    # the fallback — degraded, but never empty.
+    # a quick in-cycle re-tune. If both fail, the PREVIOUSLY MEASURED roster
+    # remains — an outage cannot re-measure a team, and a measured team
+    # beats a seeded one. Only a complex that never measured anything falls
+    # back to the seed registry, which says so on every entry.
     measured_fleet: List[Dict[str, Any]] = []
+    previous_fleet: List[Dict[str, Any]] = []
+    previous_state: Dict[str, Any] = {}
     try:
         from harness.fleet_tuner import FleetTuner
         report_path = PROJECT_ROOT / "data" / "fleet_report.json"
@@ -227,8 +299,11 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             age_hours = (time.time() - report_path.stat().st_mtime) / 3600.0
             fresh = age_hours < 24.0
         current_state = state_mgr.load_local_state()
-        if fresh and current_state.get("fleet_source") == "live_probe" and current_state.get("active_fleet"):
-            measured_fleet = current_state["active_fleet"]
+        if isinstance(current_state, dict):
+            previous_state = current_state
+        previous_fleet = previous_state.get("active_fleet") or []
+        if fresh and previous_state.get("fleet_source") == "live_probe" and previous_fleet:
+            measured_fleet = previous_fleet
             print(f"[+] Using the measured duty fleet ({len(measured_fleet)} models, report <24h old).")
         else:
             print("[+] Measured fleet missing or stale - running a quick live re-tune...")
@@ -238,17 +313,17 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     except Exception as e:
         print(f"[!] Fleet tuner unavailable in this cycle: {e}")
 
-    # Fallback fleet: only used when neither the measured fleet nor the live
-    # ranking is available. Scores come from the seeded registry, so they are
-    # explicitly flagged as unverified instead of presented as measurements.
-    emergency_fleet = measured_fleet or (ranked_fleet[:5] if ranked_fleet else [
-        {"id": "minimaxai/minimax-m3.1-flash", "tier": "Ultra-Flash-Reasoning", "quality_score": 99.2, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "z-ai/glm-5.3-flash", "tier": "Ultra-Agentic-Code", "quality_score": 98.8, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "deepseek-ai/deepseek-v4.1-flash", "tier": "Ultra-Sparse-MTP", "quality_score": 98.5, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "stepfun-ai/step-5-preview", "tier": "Ultra-Multimodal-Preview", "quality_score": 96.0, "status": "APPROVED", "source": "static_seed", "score_verified": False},
-        {"id": "nvidia/nemotron-3-ultra-550b-a55b", "tier": "Unranked / Experimental", "quality_score": None, "status": "UNRANKED", "source": "none", "score_verified": False}
-    ])
-    fleet_origin = "live_probe" if measured_fleet else ("static_seed" if ranked_fleet else "none")
+    emergency_fleet, fleet_origin, fleet_note = choose_emergency_fleet(
+        measured_fleet=measured_fleet,
+        previous_fleet=previous_fleet,
+        previous_state=previous_state,
+        ranked_fleet=ranked_fleet,
+    )
+    if fleet_origin == "live_probe" and not measured_fleet:
+        print(f"[+] Keeping the previously MEASURED roster ({len(emergency_fleet)} models): "
+              "an outage cannot re-measure it, and a measured team beats a seeded one.")
+    elif fleet_origin != "live_probe":
+        print(f"[!] No measured roster available ({fleet_note}).")
 
     # Step 3: Web Research via Keenable (100% Unpruned)
     print("\n[STEP 3] Fetching latest LLM benchmarks & releases via Keenable...")
@@ -320,6 +395,9 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         },
         "active_fleet": emergency_fleet,
         "fleet_source": fleet_origin,
+        # WHY this roster — the operator and the next cycle must be able to
+        # tell a measured team from a seeded one without reading the code.
+        "fleet_note": fleet_note,
         # Full catalogue snapshot: the next cycle diffs against this, so
         # "new models" means "appeared since the last scan" rather than
         # "not part of the selected fleet".
@@ -342,7 +420,13 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         print("\n[STEP 6] Syncing emergency updates to Git...")
         try:
             _ensure_git_identity()
-            subprocess.run(["git", "add", "active_models.json", "data/fleet_report.json", "nim_history.log", "config.yaml"], check=False)
+            # `git add` ABORTS the WHOLE command when one pathspec does not
+            # match (measured 2026-11-03): one missing file and NOTHING is
+            # staged — the emergency state silently never reached the repo.
+            # Each path is added on its own.
+            for path in ("active_models.json", "data/fleet_report.json",
+                         "nim_history.log", "config.yaml"):
+                subprocess.run(["git", "add", path], check=False)
             commit_res = subprocess.run(
                 ["git", "commit", "-m", f"chore(emergency): autonomous fallback heartbeat update [{now_iso}]"],
                 capture_output=True,

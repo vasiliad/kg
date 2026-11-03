@@ -4479,6 +4479,89 @@ def test_59_an_unreadable_log_is_not_a_quiet_day():
     print("[+] Test 59 Passed: an unreadable log says so — it does not fake a calm day.")
 
 
+def test_60_an_outage_may_not_replace_the_measured_team():
+    """
+    The duty roster is the complex's earned team. The emergency runner used
+    to replace a MEASURED team with a SEEDED one whenever the network was
+    down — because the measurement could not be repeated — and the seeded
+    team's scores came from the seed registry, so the unverified team read
+    like a verified one.
+
+    The order is the policy: measured now → measured before → seeded (and
+    labelled as seeded). And the reason travels with the roster.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 60: An outage may not replace the measured team")
+    print("=" * 60)
+
+    from harness.emergency_runner import choose_emergency_fleet
+
+    measured = [{"id": "measured/one", "quality_score": 91.0, "score_verified": True}]
+    previous = [{"id": "measured/before", "quality_score": 88.0, "score_verified": True}]
+    seeded = [{"id": "seeded/one", "quality_score": 99.2, "score_verified": False}]
+
+    # 1. A fleet measured in this cycle wins.
+    fleet, origin, note = choose_emergency_fleet(
+        measured_fleet=measured,
+        previous_fleet=previous,
+        previous_state={"fleet_source": "live_probe"},
+        ranked_fleet=seeded,
+    )
+    assert fleet == measured and origin == "live_probe", \
+        f"the measured fleet must win: {fleet} / {origin}"
+
+    # 2. The network is down: the MEASURED roster from before must survive.
+    fleet, origin, note = choose_emergency_fleet(
+        measured_fleet=[],
+        previous_fleet=previous,
+        previous_state={"fleet_source": "live_probe"},
+        ranked_fleet=seeded,
+    )
+    assert fleet == previous, \
+        f"an outage must not cost the complex its measured team: {fleet}"
+    assert origin == "live_probe", \
+        f"a kept measurement stays a measurement: {origin}"
+    assert "measured" in note.lower(), \
+        f"the note must explain why the roster was kept: {note}"
+
+    # 3. Nothing was ever measured: the seed registry, labelled as such.
+    fleet, origin, note = choose_emergency_fleet(
+        measured_fleet=[],
+        previous_fleet=[],
+        previous_state={},
+        ranked_fleet=seeded,
+    )
+    assert fleet == seeded, f"the seeded ranking is the last resort: {fleet}"
+    assert origin == "static_seed", f"a seeded roster must say so: {origin}"
+    assert "unverified" in note.lower(), \
+        f"the note must say the scores are not a measurement: {note}"
+
+    # 4. A previous UNVERIFIED roster is not a measurement either.
+    fleet, origin, note = choose_emergency_fleet(
+        measured_fleet=[],
+        previous_fleet=[{"id": "seeded/old", "score_verified": False}],
+        previous_state={"fleet_source": "static_seed"},
+        ranked_fleet=seeded,
+    )
+    assert origin == "static_seed", \
+        f"an unverified previous roster must not pass as measured: {origin}"
+
+    # 5. Nothing at all: the built-in seed list, still labelled.
+    fleet, origin, note = choose_emergency_fleet()
+    assert fleet and origin == "none", f"the complex must never be left without a roster: {fleet}"
+    assert all(not m.get("score_verified", False) for m in fleet), \
+        "a seed roster must never claim a verified score"
+    assert "unverified" in note.lower(), f"the note must say it: {note}"
+
+    # The emergency runner must also stage its state one path at a time:
+    # `git add` with several paths aborts entirely when one is missing.
+    source = (PROJECT_ROOT / "harness" / "emergency_runner.py").read_text(encoding="utf-8")
+    assert '"git", "add", "active_models.json", "data/fleet_report.json"' not in source, \
+        "a multi-path `git add` aborts entirely — the emergency state would never be staged"
+
+    print("[+] Test 60 Passed: an outage keeps the measured team, and a seeded team says so.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -4548,6 +4631,7 @@ if __name__ == "__main__":
         test_57_a_silent_github_is_not_an_idle_cycle,
         test_58_the_dispatcher_keeps_the_daily_promise_itself,
         test_59_an_unreadable_log_is_not_a_quiet_day,
+        test_60_an_outage_may_not_replace_the_measured_team,
     ]
     failed = []
     for t in tests:
