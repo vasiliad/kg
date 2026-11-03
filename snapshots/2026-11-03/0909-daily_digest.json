@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-11-03T09:09:42Z",
+  "subject": "Ежедневный дайджест ИИ: 03.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 39,
+  "selection_mode": "источники показаны как есть",
+  "full_news_count": 0,
+  "items_count": 4,
+  "items": [
+    {
+      "title": "модели с открытыми весами",
+      "summary": "14 апреля 2025 года компания Meta выпустила многомодальную модель понимания и генерации MetaMorph и объявила о планах открыть исходные веса этой модели. 2. 2 ...",
+      "url": "https://baike.baidu.com/ru/item/%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D0%B8%20%D1%81%20%D0%BE%D1%82%D0%BA%D1%80%D1%8B%D1%82%D1%8B%D0%BC%D0%B8%20%D0%B2%D0%B5%D1%81%D0%B0%D0%BC%D0%B8/4799477",
+      "source": "baike.baidu.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Агентные фреймворки: обещали революцию, что ...",
+      "summary": "Просто: prompt → tool call → check result → next step. RAG + структурированный вывод > агентные цепочки. Если честно, большинство задач ...",
+      "url": "https://habr.com/ru/articles/1041274/",
+      "source": "habr.com",
+      "date": "",
+      "category": "Агенты",
+      "detail": ""
+    },
+    {
+      "title": "Как TPU от Google меняют экономику масштабного ИИ ...",
+      "summary": "И GPU, и TPU ускоряют обучение моделей, однако они выражают разные философии дизайна. GPU — универсальные параллельные процессоры, тогда как TPU ...",
+      "url": "https://habr.com/ru/companies/technokratos/articles/975830/",
+      "source": "habr.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Benchmarking Reasoning Models: From Tokens to Answers",
+      "summary": "Learn how to benchmark reasoning tasks. Use Qwen3 and vLLM to test true reasoning performance, not just how fast words are generated.",
+      "url": "https://rocm.blogs.amd.com/artificial-intelligence/benchmark-reasoning-models/README.html",
+      "source": "rocm.blogs.amd.com",
+      "date": "",
+      "category": "Исследования",
+      "detail": ""
+    }
+  ]
+}
