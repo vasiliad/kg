@@ -82,6 +82,20 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "daily": True,
         "not_before_utc": 5,
     },
+    {
+        # The forge's own attempt to improve itself. The artefact's stamp is
+        # `checked_at` — the cycle runs daily, but the ATTEMPT is rationed to
+        # one per day inside the autopilot, so a re-dispatch after a forgotten
+        # scheduler slot costs a check, not another model call.
+        "name": "forge_autopilot",
+        "workflow": "forge_autopilot.yml",
+        "artefact": "data/forge_autopilot.json",
+        "field": "checked_at",
+        "max_age_h": 26.0,
+        "retry_h": 6.0,
+        "daily": True,
+        "not_before_utc": 4,
+    },
 )
 
 REPORT_PATH = PROJECT_ROOT / "data" / ".cycle_supervisor.json"

@@ -170,6 +170,17 @@ SELF_MARKER_RE = re.compile(
     re.I,
 )
 
+# Applying a proposal that ALREADY EXISTS: the operator's «да» to a
+# specific patch the complex wrote down. It is not a request to imagine
+# something new — it is a request to run the stored diff through the same
+# constitution.
+APPLY_PROPOSAL_RE = re.compile(
+    r"(примен\w*\s+(?:последн\w*\s+|эт\w*\s+|предложен\w*\s+|готов\w*\s+)?"
+    r"(?:улучшен\w*|патч\w*|предложен\w*)|"
+    r"apply\s+(?:the\s+)?(?:last\s+)?(?:proposal|improvement|patch))",
+    re.I,
+)
+
 FENCE_RE = re.compile(r"```(?:python|py)?[ \t]*\r?\n(.*?)```", re.S | re.I)
 PY_HINT_RE = re.compile(r"^[ \t]*(import\s|from\s|def\s|class\s|print\(|if\s__name__)", re.M)
 
@@ -182,6 +193,8 @@ def looks_like_code_order(text: str) -> bool:
     if t == "/code" or t == "/forge" or t.startswith("/code ") or t.startswith("/forge "):
         return True
     if SELF_MARKER_RE.search(t):
+        return True
+    if APPLY_PROPOSAL_RE.search(t):
         return True
     verb = CODE_VERB_RE.search(t)
     if not verb:
@@ -199,6 +212,11 @@ def looks_like_code_order(text: str) -> bool:
 def is_self_improvement_order(text: str) -> bool:
     """The order to improve the complex itself (a patch, suite-gated)."""
     return bool(SELF_MARKER_RE.search((text or "").strip()))
+
+
+def is_apply_proposal_order(text: str) -> bool:
+    """The order to apply a proposal that already exists (the autopilot's)."""
+    return bool(APPLY_PROPOSAL_RE.search((text or "").strip()))
 
 
 def extract_code(text: str) -> str:

@@ -1323,12 +1323,22 @@ class HarnessTelegramBot:
         from harness import code_forge
 
         self.send_chat_action(chat_id, "typing")
+        apply_proposal = code_forge.is_apply_proposal_order(task)
         placeholder_id = self.send_message(
             chat_id,
-            "⚙️ <i>Кузница: модель пишет код, песочница запускает…</i>",
+            ("⚙️ <i>Кузница: применяю сохранённое улучшение, конституция решает…</i>"
+             if apply_proposal else
+             "⚙️ <i>Кузница: модель пишет код, песочница запускает…</i>"),
             parse_mode="HTML",
             reply_markup=NO_MARKUP,
         )
+
+        # The operator's «да» to a proposal that ALREADY exists: the stored
+        # diff goes through the same constitution. No model is asked to
+        # invent a second patch — the proposal is applied as it was written.
+        if apply_proposal:
+            self._apply_stored_proposal(chat_id, placeholder_id)
+            return
 
         self_improve = code_forge.is_self_improvement_order(task)
         ask = (
@@ -1382,77 +1392,21 @@ class HarnessTelegramBot:
 
     def _duty_writer(self, ask: str) -> Dict[str, Any]:
         """The holder of the duty shift writes the code."""
-        from harness.duty_team import DutyTeam
-        from harness import duty_shift
+        from harness import forge_writers
 
-        try:
-            team = DutyTeam()
-            roster = team.load_roster()
-            shift, _ = duty_shift.current_duty(roster)
-        except Exception as e:
-            return {"ok": False, "status": f"ROSTER_ERROR:{type(e).__name__}", "content": ""}
-
-        model_id = str(shift.get("model_id") or "")
-        if not model_id:
-            return {"ok": False, "status": "NO_DUTY_MODEL", "content": "", "shift": shift}
-        entry = next(
-            (m for m in (roster.get("duty") or []) if str(m.get("id")) == model_id), {}
-        )
-        try:
-            res = self.executor.execute_task(
-                task_prompt=ask,
-                context="",
-                enable_search=False,
-                max_tokens=8192,
-                temperature=0.2,
-                top_p=0.9,
-                model_id=model_id,
-            )
-        except Exception as e:
-            return {"ok": False, "status": f"EXECUTOR_ERROR:{type(e).__name__}",
-                    "model": model_id, "content": "", "shift": shift}
-
-        content = str(res.get("content") or "")
-        elapsed = res.get("elapsed_sec")
-        ok = res.get("status") == "SUCCESS" and bool(content.strip())
-        duty_shift.note_outcome(
-            model_id, elapsed, ok,
-            measured_latency=(entry.get("measured") or {}).get("latency_sec")
-            or entry.get("latency_sec"),
-        )
-        return {
-            "ok": ok, "model": model_id, "role": "duty_primary",
-            "score": entry.get("score"), "verified": entry.get("verified"),
-            "elapsed": elapsed, "content": content,
-            "status": res.get("status"), "shift": shift,
-        }
+        return forge_writers.duty_writer(ask, self.executor)
 
     def _local_writer(self, ask: str) -> Dict[str, Any]:
         """
         The RESERVE LOCAL model writes the code when the network is gone.
         The deterministic kernel cannot write programs — and says so.
         """
-        try:
-            sov = self.arbiter_engine.execute_sovereign_mission(
-                task_description=ask,
-                context={"mode": "forge_order"},
-            )
-        except Exception as e:
-            self._record_error(f"local writer: {type(e).__name__}: {e}")
-            return {"ok": False, "status": f"LOCAL_ENGINE_ERROR:{type(e).__name__}", "content": ""}
+        from harness import forge_writers
 
-        engine = str(sov.get("engine") or "")
-        text = str(sov.get("output") or "").strip()
-        if engine == "deterministic_kernel":
-            return {"ok": False, "status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
-                    "model": "локальное ядро (детерминированное)", "content": "",
-                    "elapsed": sov.get("elapsed_sec")}
-        return {
-            "ok": bool(text), "model": f"локальная модель ({engine})",
-            "role": "sovereign_local", "score": None, "verified": False,
-            "elapsed": sov.get("elapsed_sec"), "content": text,
-            "status": sov.get("status"),
-        }
+        result = forge_writers.local_writer(ask, self.arbiter_engine)
+        if str(result.get("status") or "").startswith("LOCAL_ENGINE_ERROR"):
+            self._record_error(f"local writer: {result.get('status')}")
+        return result
 
     def _deliver_code_result(
         self,
@@ -1548,6 +1502,143 @@ class HarnessTelegramBot:
                 "<i>Ветка не создана: без зелёного suite улучшение не становится кодом.</i>"
             )
         self._deliver_answer(chat_id, placeholder_id, body, parse_mode="HTML")
+
+    def _apply_stored_proposal(self, chat_id: int, placeholder_id: Optional[int]) -> None:
+        """
+        The operator's «да» to the proposal the complex already wrote down.
+
+        The stored diff goes through the SAME constitution as any other
+        patch: vetted, applied in a scratch clone of the committed tree,
+        and the whole offline suite must be green before a branch appears.
+        Nothing is written to main, nothing is pushed outward.
+        """
+        from harness import code_forge
+        from harness import forge_autopilot
+
+        verdict = forge_autopilot.read_verdict()
+        patch_file = str(verdict.get("patch_file") or "")
+        if not patch_file:
+            self._deliver_answer(
+                chat_id, placeholder_id,
+                "[-] <b>Сохранённого улучшения нет.</b>\n\n"
+                "Автопилот ещё не предлагал патч — нечего применять. "
+                "Скажите «улучши себя», и я предложу.",
+                parse_mode="HTML",
+            )
+            return
+
+        patch_path = Path(patch_file)
+        if not patch_path.is_absolute():
+            patch_path = PROJECT_ROOT / patch_path
+        try:
+            diff = patch_path.read_text(encoding="utf-8")
+        except Exception as e:
+            self._deliver_answer(
+                chat_id, placeholder_id,
+                "[-] <b>Не удалось прочитать предложение.</b>\n"
+                f"{html.escape(str(e)[:200])}",
+                parse_mode="HTML",
+            )
+            return
+
+        try:
+            outcome = code_forge.apply_self_improvement(diff)
+        except Exception as e:
+            self._deliver_answer(
+                chat_id, placeholder_id,
+                "[-] <b>Гейт не отработал.</b>\n"
+                f"{html.escape(f'{type(e).__name__}: {e}'[:300])}",
+                parse_mode="HTML",
+            )
+            return
+
+        if outcome.get("ok"):
+            body = (
+                "✅ <b>Улучшение применено и прошло конституцию.</b>\n"
+                f"🌿 Ветка: {html.escape(str(outcome.get('branch') or '?'))}\n"
+                f"Автор предложения: {html.escape(str((verdict.get('writer') or {}).get('model') or '?'))}\n\n"
+                "<i>Ветка ждёт вашего решения: в main она не вошла и наружу не отправлена.</i>"
+            )
+        else:
+            body = (
+                "[-] <b>Улучшение отклонено конституцией.</b>\n"
+                f"🔎 Этап: {html.escape(str(outcome.get('stage') or '?'))}\n"
+                f"Причина: {html.escape(str(outcome.get('error') or 'патч отклонён')[:400])}\n\n"
+                "<i>Ветка не создана: без зелёного suite улучшение не становится кодом.</i>"
+            )
+        self._deliver_answer(chat_id, placeholder_id, body, parse_mode="HTML")
+
+    def maybe_push_forge_verdict(self) -> None:
+        """
+        The complex's own verdict about itself — pushed once to the operator.
+
+        The autopilot works without an order, so nobody asked for its
+        result. A verdict nobody sees is a verdict nobody can accept: the
+        proposal is written into the artefact, and THIS is the pipe that
+        tells the operator that the complex tried, what it proposed and
+        what the constitution said about it.
+        """
+        chat_id = int(self.health.get("last_chat_id") or 0)
+        if not chat_id:
+            return  # nobody to tell yet
+        from harness import forge_autopilot
+
+        try:
+            verdict = forge_autopilot.read_verdict()
+        except Exception as e:
+            self._record_error(f"forge verdict: {type(e).__name__}: {e}")
+            return
+
+        verdict_id = str(verdict.get("verdict_id") or "")
+        if not verdict_id:
+            return
+        if self.health.get("last_forge_push") == verdict_id:
+            return  # already pushed
+
+        writer = verdict.get("writer") or {}
+        model = str(writer.get("model") or "?")
+        score = writer.get("score")
+        score_txt = f" — балл {score}" if score is not None else ""
+        ok = bool(verdict.get("ok"))
+        mark = "✅" if ok else "⛔"
+
+        lines = [
+            f"🛠 <b>Автопилот кузницы: попытка улучшить себя</b> {mark}",
+            f"Когда: {html.escape(str(verdict.get('attempted_at') or '?'))}",
+            f"✍️ Автор: {html.escape(model)}{html.escape(score_txt)}",
+        ]
+        if verdict.get("branch"):
+            lines.append(f"🌿 Ветка: {html.escape(str(verdict.get('branch')))}")
+        if verdict.get("patch_file"):
+            lines.append(f"📄 Патч: {html.escape(str(verdict.get('patch_file')))}")
+        lines.append("")
+        lines.append(html.escape(str(verdict.get("summary") or "")))
+        if verdict.get("error"):
+            lines.append("")
+            lines.append(f"Причина: {html.escape(str(verdict.get('error'))[:400])}")
+
+        facts = str(verdict.get("facts_digest") or "")
+        if facts:
+            lines.append("")
+            lines.append("<i>На каких замерах это было построено:</i>")
+            lines.append(f"<pre>{html.escape(facts[:700])}</pre>")
+
+        if ok:
+            lines.append("")
+            lines.append(
+                "<i>Скажите «примени последнее улучшение» — патч пройдёт "
+                "конституцию ещё раз и станет веткой.</i>"
+            )
+
+        try:
+            self.send_message(chat_id, "\n".join(lines), parse_mode="HTML",
+                              reply_markup=NO_MARKUP)
+            self.health["last_forge_push"] = verdict_id
+            self._save_health()
+            print(f"[*] Forge autopilot verdict pushed ({verdict_id}).")
+        except Exception as e:
+            self._record_error(f"forge verdict push: {type(e).__name__}: {e}")
+            print(f"[!] Forge verdict push failed: {e}")
 
     def handle_email_dispatch(self, chat_id: int) -> None:
         """Triggers manual email dispatch."""
@@ -1794,6 +1885,12 @@ class HarnessTelegramBot:
                         self.maybe_push_daily_digest()
                     except Exception as e:
                         self._record_error(f"digest push: {type(e).__name__}: {e}")
+                    # The complex's own verdict about itself: nobody ordered
+                    # it, so nobody would see it unless the bot says so.
+                    try:
+                        self.maybe_push_forge_verdict()
+                    except Exception as e:
+                        self._record_error(f"forge verdict push: {type(e).__name__}: {e}")
                     data = res.json()
                     for update in data.get("result", []):
                         update_id = int(update.get("update_id", 0))

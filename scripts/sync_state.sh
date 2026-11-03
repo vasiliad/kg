@@ -28,6 +28,10 @@ CONFLICT_FILES=(
   "data/model_sizes.json"
   "data/daily_digest.json"
   "data/duty_shift.json"
+  # Written by forge_autopilot.yml — the complex's own verdict about
+  # itself, and the patch it proposed (the operator reads both).
+  "data/forge_autopilot.json"
+  "data/forge_autopilot"
   # Written by bot_selftest.yml — without them a rebase conflict on a
   # self-test report could not be resolved and the push would be lost.
   "data/bot_selftest_report.json"

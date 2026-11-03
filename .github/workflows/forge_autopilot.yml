@@ -1,0 +1,97 @@
+name: Forge Autopilot (Self-Improvement Attempt)
+
+# The complex tries to improve ITSELF — nobody orders this.
+#
+# The attempt is safe by construction, not by promise:
+#   - a MODEL proposes the patch (the duty holder; the reserve local model
+#     if the network tier is silent — the deterministic kernel refuses
+#     honestly instead of inventing a program);
+#   - the patch is vetted (no secrets) and applied ONLY in a scratch clone
+#     of the COMMITTED tree;
+#   - the FULL offline suite must be green in that clone;
+#   - only then a `forge/*` branch appears. Never `main`, never pushed
+#     outward — the operator decides;
+#   - the verdict and the patch itself are committed as artefacts, and the
+#     bot tells the operator about the result in its next window.
+#
+# One attempt per UTC day. An unbounded self-improvement loop is a self-DoS,
+# and the complex has a rule against exactly that.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Ignore the once-a-day ration and attempt again'
+        required: false
+        default: '0'
+        type: string
+  schedule:
+    # Daily at 04:13 UTC (09:13 NOVT) — after the morning self-test and
+    # before the 12:00 NOVT report, so the operator reads the proposal
+    # together with the day's letter.
+    - cron: '13 4 * * *'
+
+permissions:
+  contents: write
+  # The cycle supervisor dispatches this workflow when GitHub's scheduler
+  # forgets its slot — the self-improvement attempt must come back too.
+  actions: write
+
+jobs:
+  attempt:
+    runs-on: ubuntu-latest
+    # One attempt at a time: two proposals racing for the same branch name
+    # and the same artefact would leave the operator with two verdicts.
+    concurrency:
+      group: forge-autopilot
+      cancel-in-progress: false
+    # The gate runs the whole offline suite inside the scratch clone, and
+    # the proposal itself is a live model call.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests pydantic httpx
+
+      - name: Attempt to improve itself (the constitution decides)
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
+          # The sovereign neural tier downloads multiple GB; the deterministic
+          # kernel is the fast, dependency-free path — and it honestly
+          # refuses to write programs instead of inventing them.
+          SOVEREIGN_FORCE_DETERMINISTIC: '1'
+          FORCE_ATTEMPT: ${{ inputs.force || '0' }}
+        run: |
+          if [ "$FORCE_ATTEMPT" = "1" ]; then
+            python harness/forge_autopilot.py --force
+          else
+            python harness/forge_autopilot.py
+          fi
+
+      - name: Commit & Push the verdict (the proposal the operator reads)
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add data/forge_autopilot.json data/forge_autopilot || true
+          if ! git diff --staged --quiet; then
+            git commit -m "feat(forge): the autopilot's own attempt at improving itself [skip ci]"
+          else
+            git commit --allow-empty -m "chore(forge): autopilot cycle, no verdict change [skip ci]"
+          fi
+          bash scripts/sync_state.sh

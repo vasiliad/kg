@@ -3444,6 +3444,165 @@ def test_52_the_operator_can_order_code_and_the_forge_measures_it():
     print("[+] Test 52 Passed: the operator orders code; the forge runs it and reports the measurement.")
 
 
+def test_53_the_complex_improves_itself_without_being_told():
+    """
+    The OTHER half of the operator's question: «сама» — the complex tries to
+    improve itself without an order.
+
+    The attempt must be REAL (a model proposes, the constitution judges) and
+    HONEST (no writer = no proposal; a failed suite = no improvement), the
+    ration must hold (one attempt a day, not an endless loop), the verdict
+    must reach the operator even though nobody asked for it, and the
+    operator's «да» must apply the stored patch through the same gate.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 53: The complex attempts to improve itself — and says so honestly")
+    print("=" * 60)
+    import json as _json
+
+    from harness import code_forge, forge_autopilot, forge_writers
+    from harness.telegram_bot import HarnessTelegramBot
+
+    diff_text = (
+        "вот патч:\n```diff\ndiff --git a/harness/x.py b/harness/x.py\n"
+        "@@ -1 +1 @@\n-a\n+b\n```"
+    )
+
+    saved_duty = forge_writers.duty_writer
+    saved_local = forge_writers.local_writer
+    saved_apply = code_forge.apply_self_improvement
+    saved_artefact = forge_autopilot.ARTEFACT
+    saved_patch_dir = forge_autopilot.PATCH_DIR
+    workdir = _tmp_dir()
+    try:
+        # --- the bench: the reserve replaces a silent duty holder ----------
+        forge_writers.duty_writer = lambda ask, ex: {
+            "ok": False, "status": "NO_DUTY_MODEL", "content": ""}
+        forge_writers.local_writer = lambda ask, en: {
+            "ok": True, "model": "локальная модель (gguf)", "role": "sovereign_local",
+            "score": None, "verified": False, "elapsed": 2.0,
+            "content": diff_text, "status": "SUCCESS"}
+        picked = forge_writers.pick_writer("напиши улучшение", None, None)
+        assert picked["ok"], "the reserve must take over a silent duty holder"
+        assert picked["writer"].get("role") == "sovereign_local", \
+            "the reserve must be named as the author"
+
+        # --- and when NOBODY can write, nobody writes ----------------------
+        forge_writers.local_writer = lambda ask, en: {
+            "ok": False, "status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+            "model": "локальное ядро (детерминированное)", "content": ""}
+        picked = forge_writers.pick_writer("напиши улучшение", None, None)
+        assert not picked["ok"], "no writer means no proposal"
+        assert picked["local"].get("status") == "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE", \
+            "the refusal must stay explicit"
+
+        # --- the attempt itself: propose → gate → verdict ------------------
+        gated = []
+
+        def _fake_apply(diff):
+            gated.append(diff)
+            return {"ok": True, "stage": "branched",
+                    "branch": "forge/autopilot-test"}
+
+        code_forge.apply_self_improvement = _fake_apply
+        forge_writers.duty_writer = lambda ask, ex: {
+            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
+            "verified": True, "elapsed": 3.0, "content": diff_text, "status": "SUCCESS"}
+        verdict = forge_autopilot.attempt(reason="тест", executor=object(), engine=object())
+        assert verdict.get("ok"), f"a green gate must mean an improvement ({verdict})"
+        assert verdict.get("branch") == "forge/autopilot-test", "the branch must be reported"
+        assert gated and gated[0].startswith("diff --git"), \
+            f"the gate must receive the diff itself ({gated})"
+        assert (verdict.get("writer") or {}).get("model") == "n/a", \
+            "the author of the proposal must be named"
+        assert verdict.get("facts_digest"), "the proposal must be grounded in measurements"
+
+        # --- a REJECTED proposal must never read as an improvement --------
+        code_forge.apply_self_improvement = lambda diff: {
+            "ok": False, "stage": "suite", "error": "suite упал в песочнице"}
+        verdict = forge_autopilot.attempt(reason="тест", executor=object(), engine=object())
+        assert not verdict.get("ok"), "a failed suite is not an improvement"
+        assert verdict.get("stage") == "suite", "the stage of the refusal must be visible"
+        assert "конституц" in str(verdict.get("summary") or "").lower(), \
+            f"the summary must name the constitution ({verdict.get('summary')})"
+
+        # --- the ration: ONE attempt a day ---------------------------------
+        forge_autopilot.ARTEFACT = workdir / "forge_autopilot.json"
+        forge_autopilot.PATCH_DIR = workdir / "patches"
+        code_forge.apply_self_improvement = _fake_apply
+        first = forge_autopilot.run_daily()
+        assert not first.get("skipped"), "the first attempt of the day must happen"
+        assert forge_autopilot.ARTEFACT.exists(), "the verdict must be written down"
+        stored = _json.loads(forge_autopilot.ARTEFACT.read_text(encoding="utf-8"))
+        assert stored.get("verdict_id"), "the verdict must carry its own id"
+        assert stored.get("patch_file"), "the proposal itself must be kept next to the verdict"
+        patch_path = Path(stored["patch_file"])
+        if not patch_path.is_absolute():
+            patch_path = Path(str(forge_autopilot.PROJECT_ROOT)) / patch_path
+        assert patch_path.exists(), f"the patch file must exist ({patch_path})"
+        assert patch_path.read_text(encoding="utf-8").startswith("diff --git"), \
+            "the stored patch must be the diff itself"
+
+        second = forge_autopilot.run_daily()
+        assert second.get("skipped"), \
+            "the second attempt of the same day must be skipped — no self-DoS loop"
+        assert second.get("verdict_id") == first.get("verdict_id"), \
+            "a skipped check must not invent a new verdict"
+
+        # --- the verdict reaches the operator even though nobody asked ----
+        bot = HarnessTelegramBot()
+        bot.sessions_file = workdir / "sessions.json"
+        pushed = []
+        bot.send_message = lambda chat_id, text, **kw: pushed.append((chat_id, text)) or True
+        bot.edit_message = lambda chat_id, message_id, text, **kw: pushed.append((chat_id, text)) or True
+        bot.health["last_chat_id"] = 424242
+        bot.maybe_push_forge_verdict()
+        assert pushed, "the operator must learn what the complex decided about itself"
+        reply = "\n".join(t for _, t in pushed)
+        assert "n/a" in reply, "the author must be named in the verdict"
+        assert "forge/autopilot-test" in reply, "the branch must be shown"
+        bot.maybe_push_forge_verdict()
+        assert len(pushed) == 1, "the same verdict must not be pushed twice"
+
+        # --- the operator's «да» applies the stored patch through the gate -
+        bot._duty_writer = lambda ask: {
+            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
+            "verified": True, "elapsed": 1.0, "content": diff_text, "status": "SUCCESS"}
+        applied = []
+        code_forge.apply_self_improvement = lambda diff: (
+            applied.append(diff) or {"ok": True, "stage": "branched",
+                                     "branch": "forge/applied-test"})
+        pushed.clear()
+        bot.handle_code_order(424242, "примени последнее улучшение")
+        reply = "\n".join(t for _, t in pushed)
+        assert applied, "the stored patch must go through the gate"
+        assert "forge/applied-test" in reply, \
+            f"the branch must be reported ({reply[-300:]})"
+
+        # --- the order must be recognised in free form ---------------------
+        assert code_forge.is_apply_proposal_order("примени последнее улучшение"), \
+            "the «да» to a stored proposal must be recognised"
+        assert code_forge.looks_like_code_order("примени предложенный патч"), \
+            "the «да» must reach the forge path"
+        assert not code_forge.is_self_improvement_order("примени последнее улучшение"), \
+            "applying a proposal is not proposing a new one"
+
+    finally:
+        forge_writers.duty_writer = saved_duty
+        forge_writers.local_writer = saved_local
+        code_forge.apply_self_improvement = saved_apply
+        forge_autopilot.ARTEFACT = saved_artefact
+        forge_autopilot.PATCH_DIR = saved_patch_dir
+
+    # --- the cycle must come back without GitHub's scheduler -------------
+    from harness import cycle_supervisor
+    names = [c.get("workflow") for c in cycle_supervisor.CYCLES]
+    assert "forge_autopilot.yml" in names, \
+        f"the autopilot must be a supervised cycle ({names})"
+
+    print("[+] Test 53 Passed: the complex improves itself on its own — honestly, once a day.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -3506,6 +3665,7 @@ if __name__ == "__main__":
         test_50_the_survival_ladder_local_first_apis_last,
         test_51_the_model_forge_runs_code_and_gates_self_improvement,
         test_52_the_operator_can_order_code_and_the_forge_measures_it,
+        test_53_the_complex_improves_itself_without_being_told,
     ]
     failed = []
     for t in tests:
