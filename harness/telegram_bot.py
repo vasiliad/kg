@@ -1341,11 +1341,15 @@ class HarnessTelegramBot:
             return
 
         self_improve = code_forge.is_self_improvement_order(task)
-        ask = (
-            (code_forge.SELF_IMPROVEMENT_PROMPT if self_improve
-             else code_forge.CODE_ORDER_PROMPT)
-            + "\n\nЗадача оператора:\n" + task
-        )
+        if self_improve:
+            # The GROUNDED proposal — the very same path the autopilot uses.
+            # One truth about how a proposal is made: the writer names a REAL
+            # file of this repository, sees its real content, and the
+            # constitution judges the diff.
+            self._handle_grounded_proposal(chat_id, placeholder_id, task)
+            return
+
+        ask = code_forge.CODE_ORDER_PROMPT + "\n\nЗадача оператора:\n" + task
 
         # 1. The duty holder writes. The bench replaces it only if it stays
         #    silent — one voice, the keeper's shift.
@@ -1371,9 +1375,6 @@ class HarnessTelegramBot:
 
         # 3. The artifact, as written.
         content = str(writer.get("content") or "")
-        if self_improve:
-            self._deliver_self_improvement(chat_id, placeholder_id, writer, content)
-            return
 
         code = code_forge.extract_code(content)
         if not code:
@@ -1462,43 +1463,95 @@ class HarnessTelegramBot:
         self._deliver_answer(chat_id, placeholder_id, "\n".join(p for p in parts if p is not None),
                              parse_mode="HTML")
 
+    def _handle_grounded_proposal(
+        self,
+        chat_id: int,
+        placeholder_id: Optional[int],
+        task: str,
+    ) -> None:
+        """
+        The operator's order to improve the complex: the GROUNDED proposal.
+
+        The writer names a REAL file of this repository, sees that file's
+        real content, and writes the diff; the constitution (the whole
+        offline suite in a scratch clone) judges it. Measured 2026-11-03 in
+        the cloud: a proposal to a file that did not exist, with a hunk
+        header that did not match its own body, could never apply — the
+        complex was asking for something it had not made possible.
+        """
+        from harness import code_forge
+        from harness import forge_writers
+
+        proposal = forge_writers.propose_patch(
+            task=task,
+            executor=self.executor,
+            engine=self.arbiter_engine,
+            gate=code_forge.apply_self_improvement,
+            duty=self._duty_writer,
+            local=self._local_writer,
+        )
+        self._deliver_self_improvement(chat_id, placeholder_id, proposal)
+
     def _deliver_self_improvement(
         self,
         chat_id: int,
         placeholder_id: Optional[int],
-        writer: Dict[str, Any],
-        content: str,
+        proposal: Dict[str, Any],
     ) -> None:
-        """The self-improvement order: a patch, and the suite as the judge."""
-        from harness import code_forge
+        """The grounded proposal, as it was judged — or why it was not."""
+        stage = str(proposal.get("stage") or "?")
+        writer = proposal.get("writer") or {}
+        author = str(writer.get("model") or "?")
+        target = str(proposal.get("target") or "")
 
-        diff = code_forge.extract_diff(content)
-        if not diff:
+        if stage == "no_writer":
             self._deliver_answer(
                 chat_id, placeholder_id,
-                "[-] <b>Модель не предложила патч.</b>\n"
-                f"Автор: {html.escape(str(writer.get('model') or '?'))}\n\n"
-                "Самоулучшение идёт через unified diff — без него улучшать нечего.",
+                "[-] <b>Ни одна модель не предложила улучшение.</b>\n"
+                f"Сетевая дежурная: {html.escape(str(proposal.get('duty_status') or 'нет ответа'))}\n"
+                f"Локальная резервная: {html.escape(str(proposal.get('local_status') or 'нет ответа'))}\n\n"
+                "Детерминированное ядро Хранителя не выдумывает программы.",
                 parse_mode="HTML",
             )
             return
 
-        outcome = code_forge.apply_self_improvement(diff)
-        if outcome.get("ok"):
+        if stage in ("no_patch", "no_target"):
+            preview = str(proposal.get("answer_preview") or "")[:600]
+            why = ("Модель ответила без патча" if stage == "no_patch"
+                   else "Модель не назвала ни одного РЕАЛЬНОГО файла комплекса")
+            body = (
+                f"[-] <b>{html.escape(why)}.</b>\n"
+                f"✍️ Автор: {html.escape(author)}\n\n"
+                + (f"<pre>{html.escape(preview)}</pre>\n\n" if preview else "")
+                + "<i>Улучшать нечего — комплекс не придумывает патчи из воздуха.</i>"
+            )
+            self._deliver_answer(chat_id, placeholder_id, body, parse_mode="HTML")
+            return
+
+        if proposal.get("ok"):
             body = (
                 "✅ <b>Патч прошёл весь офлайн-suite в песочнице.</b>\n"
-                f"✍️ Автор: {html.escape(str(writer.get('model') or '?'))}\n"
-                f"🌿 Ветка: <code>{html.escape(str(outcome.get('branch') or ''))}</code>\n\n"
+                f"✍️ Автор: {html.escape(author)}\n"
+                f"🎯 Файл: <code>{html.escape(target)}</code>\n"
+                f"🌿 Ветка: <code>{html.escape(str(proposal.get('branch') or ''))}</code>\n\n"
                 "<i>Ветка ждёт оператора или облачную проверку — в main она не попала.</i>"
             )
         else:
-            stage = str(outcome.get("stage") or "?")
-            error = str(outcome.get("error") or "патч отклонён")
+            error = str(proposal.get("error") or "патч отклонён")
+            repair = proposal.get("repair") or {}
+            repair_line = ""
+            if repair.get("attempted"):
+                repair_line = (
+                    f"🛠 Ремонт: {'помог' if repair.get('ok') else 'не помог'} "
+                    f"({html.escape(str(repair.get('status') or '?'))})\n"
+                )
             body = (
                 "[-] <b>Патч отклонён конституцией.</b>\n"
-                f"✍️ Автор: {html.escape(str(writer.get('model') or '?'))}\n"
+                f"✍️ Автор: {html.escape(author)}\n"
+                f"🎯 Файл: <code>{html.escape(target)}</code>\n"
                 f"🔎 Этап: {html.escape(stage)}\n"
-                f"Причина: {html.escape(error[:400])}\n\n"
+                f"Причина: {html.escape(error[:400])}\n"
+                f"{repair_line}\n"
                 "<i>Ветка не создана: без зелёного suite улучшение не становится кодом.</i>"
             )
         self._deliver_answer(chat_id, placeholder_id, body, parse_mode="HTML")

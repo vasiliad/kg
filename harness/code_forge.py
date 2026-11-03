@@ -266,6 +266,197 @@ def extract_diff(text: str) -> str:
     return tail
 
 
+# ---------------------------------------------------------------------------
+# THE GROUND TRUTH: the repository the model is asked to patch.
+# ---------------------------------------------------------------------------
+# Measured 2026-11-03 in the cloud: the model proposed a patch to
+# `autopilot/model_selection_policy.py` — a directory and a file that DO NOT
+# EXIST in this repository. The gate rejected the patch (correctly), but the
+# complex lost the whole day: it had asked a model to patch a tree it had
+# never shown it. Two laws follow, and both are now enforced in code:
+#
+#   1. the proposal is grounded in the REAL inventory of the repository —
+#      a file that is not in the inventory does not exist;
+#   2. the model sees the CONTENT of the file it patches — a unified diff
+#      without the exact context lines is a guess, and a guess does not apply.
+#
+# The gate stays the judge either way: grounding only makes the proposal
+# POSSIBLE, it never makes it TRUE.
+
+INVENTORY_MAX_FILES = int(os.getenv("FORGE_INVENTORY_MAX_FILES", "90"))
+INVENTORY_MAX_FILE_LINES = int(os.getenv("FORGE_INVENTORY_MAX_FILE_LINES", "700"))
+INVENTORY_SKIP_DIRS = {
+    ".git", "__pycache__", ".zcode", ".zcode_tmp", "data", "node_modules",
+    ".venv", "venv", ".pytest_cache", ".mypy_cache",
+}
+INVENTORY_SUFFIXES = (".py", ".sh", ".yml", ".yaml")
+
+
+def _inventory_rows(root: Optional[Path] = None) -> List[Tuple[str, int]]:
+    """The real files of the complex and their sizes."""
+    base = Path(root) if root else PROJECT_ROOT
+    rows: List[Tuple[str, int]] = []
+    try:
+        walker = os.walk(str(base))
+    except Exception:
+        return rows
+    for dirpath, dirnames, filenames in walker:
+        # The walk is PRUNED: `.git` alone holds thousands of objects, and
+        # walking it made the inventory take ten seconds (measured) — the
+        # proposal must not wait for a directory of history.
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in INVENTORY_SKIP_DIRS
+        )
+        for name in sorted(filenames):
+            if Path(name).suffix.lower() not in INVENTORY_SUFFIXES:
+                continue
+            path = Path(dirpath) / name
+            try:
+                rel = "/".join(path.relative_to(base).parts)
+                lines = len(path.read_text(encoding="utf-8", errors="replace").splitlines())
+            except Exception:
+                continue
+            rows.append((rel, lines))
+    return rows
+
+
+def inventory_paths(root: Optional[Path] = None) -> List[str]:
+    """The ONLY files a proposal may touch — the real ones."""
+    return [rel for rel, _ in _inventory_rows(root)]
+
+
+def repo_inventory(root: Optional[Path] = None, max_files: int = INVENTORY_MAX_FILES) -> str:
+    """The inventory as text — the ground truth shown to the writer."""
+    rows = _inventory_rows(root)[:max_files]
+    if not rows:
+        return ""
+    return "\n".join(f"{rel} ({n} строк)" for rel, n in rows)
+
+
+def read_target_file(
+    rel_path: str,
+    root: Optional[Path] = None,
+    max_lines: int = INVENTORY_MAX_FILE_LINES,
+) -> str:
+    """The content of the file a proposal patches — the exact context."""
+    base = (Path(root) if root else PROJECT_ROOT).resolve()
+    try:
+        candidate = (base / str(rel_path)).resolve()
+        candidate.relative_to(base)      # no path escapes the repository
+    except Exception:
+        return ""
+    if not candidate.is_file():
+        return ""
+    try:
+        text = candidate.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return "\n".join(lines)
+    head = lines[: max_lines - 150]
+    tail = lines[-150:]
+    elided = len(lines) - len(head) - len(tail)
+    return ("\n".join(head)
+            + f"\n... [СРЕДУЮЩИЕ {elided} СТРОК ПРОПУЩЕНЫ] ...\n"
+            + "\n".join(tail))
+
+
+HUNK_HEADER_RE = re.compile(
+    r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$"
+)
+
+
+def normalize_diff(diff_text: str) -> Tuple[str, List[str]]:
+    """
+    Repair the hunk headers whose counts do not match their body.
+
+    Measured 2026-11-03 in the cloud: the model answered with a diff whose
+    header said `@@ -12,7 +12,7 @@` while the body carried six lines — git
+    called it «corrupt patch» and the proposal died at the gate. The counts
+    in a header are REDUNDANT (git recomputes them from the body), so a
+    mismatch is a transport accident, not an intention: the counts are
+    rewritten to the measured ones. The constitution still judges the result
+    — a repaired hunk that does not fit the real file is still rejected.
+    """
+    if not diff_text:
+        return "", []
+    raw = diff_text.replace("\r\n", "\n").split("\n")
+    while raw and raw[-1].strip() == "":
+        raw.pop()
+    notes: List[str] = []
+    out: List[str] = []
+    i = 0
+    total = len(raw)
+    while i < total:
+        line = raw[i]
+        match = HUNK_HEADER_RE.match(line)
+        if not match:
+            out.append(line)
+            i += 1
+            continue
+        old_start = int(match.group(1))
+        old_declared = int(match.group(2)) if match.group(2) is not None else 1
+        new_start = int(match.group(3))
+        new_declared = int(match.group(4)) if match.group(4) is not None else 1
+        tail = match.group(5) or ""
+        j = i + 1
+        body: List[str] = []
+        old_count = 0
+        new_count = 0
+        while j < total:
+            b = raw[j]
+            if b.startswith("@@") or b.startswith("diff --git"):
+                break
+            if b.startswith("\\"):          # "\ No newline at end of file"
+                body.append(b)
+                j += 1
+                continue
+            if b.startswith("+"):
+                body.append(b)
+                new_count += 1
+            elif b.startswith("-"):
+                body.append(b)
+                old_count += 1
+            elif b.startswith(" ") or b == "":
+                # an empty line inside a hunk is a context line whose
+                # trailing space was stripped in transport
+                body.append(b)
+                old_count += 1
+                new_count += 1
+            else:
+                break
+            j += 1
+        if old_count != old_declared or new_count != new_declared:
+            notes.append(
+                f"заголовок @@ -{old_start},{old_declared} +{new_start},{new_declared} @@ "
+                f"исправлен на измеренные -{old_start},{old_count} +{new_start},{new_count}"
+            )
+        out.append(f"@@ -{old_start},{old_count} +{new_start},{new_count} @@{tail}")
+        out.extend(body)
+        i = j
+    return "\n".join(out), notes
+
+
+def patch_paths(patch_text: str) -> List[str]:
+    """The files a patch touches — used to keep the JUDGE pristine."""
+    paths: List[str] = []
+    for line in (patch_text or "").split("\n"):
+        if line.startswith("diff --git "):
+            parts = line.split(" ")
+            if len(parts) >= 4:
+                paths.append(parts[3][2:] if parts[3].startswith("b/") else parts[3])
+        elif line.startswith("+++ "):
+            path = line[4:].strip().split("\t")[0]
+            if path and path != "/dev/null":
+                paths.append(path[2:] if path.startswith(("a/", "b/")) else path)
+    out: List[str] = []
+    for path in paths:
+        if path not in out:
+            out.append(path)
+    return out
+
+
 # The two prompts. Both demand ONE artifact and nothing else — a model that
 # answers with prose is a model that did not do the work.
 CODE_ORDER_PROMPT = (
@@ -289,8 +480,35 @@ SELF_IMPROVEMENT_PROMPT = (
     "4. патч не должен ломать существующие тесты;\n"
     "5. ответ ДОЛЖЕН начинаться с `diff --git` — патч без этого заголовка "
     "комплекс прочитать не сможет;\n"
-    "6. если задача не требует изменения кода — ответь ровно `NO_PATCH` "
+    "6. строки контекста патча должны СОВПАДАТЬ с текстом файла, который тебе "
+    "показан, — иначе git не наложит патч;\n"
+    "7. количество строк в заголовке `@@ -N,K +M,L @@` должно совпадать с "
+    "числом строк в теле hunk — иначе git назовёт патч повреждённым;\n"
+    "8. если задача не требует изменения кода — ответь ровно `NO_PATCH` "
     "(это честный отказ, а не пустой ответ)."
+)
+
+# The FIRST question of a grounded proposal: WHICH real file? Measured
+# 2026-11-03 in the cloud: the model answered with a patch to
+# `autopilot/model_selection_policy.py` — a file that does not exist here.
+PATCH_TARGET_PROMPT = (
+    "Ты — инженер самого автономного комплекса. Выбери ОДИН файл комплекса, "
+    "который стоит улучшить.\n"
+    "Правила ответа:\n"
+    "1. ответь ТОЛЬКО путём к файлу из списка — без пояснений;\n"
+    "2. путь должен быть ТОЧНО из списка: других файлов не существует;\n"
+    "3. если улучшать нечего — ответь ровно `NO_PATCH`."
+)
+
+# The repair round: the patch did not apply, and the gate says WHY.
+PATCH_REPAIR_PROMPT = (
+    "Твой предыдущий патч не наложился на файл. Ошибка git:\n"
+    "{error}\n"
+    "\n"
+    "Исправь патч: строки контекста должны СОВПАДАТЬ с текстом файла, "
+    "а числа в заголовке `@@` — с телом hunk.\n"
+    "Ответь ТОЛЬКО исправленным патчем в одном блоке ```diff ... ``` "
+    "(или ровно `NO_PATCH`, если чинить нечего)."
 )
 
 
@@ -371,8 +589,31 @@ def apply_self_improvement(
                     "error": (proc.stderr or "патч не накладывается")[:500]}
         subprocess.run(GIT + ["apply", str(patch_file)], cwd=str(scratch),
                        check=True, capture_output=True, timeout=60)
+        # THE JUDGE MUST BE PRISTINE. The patch is applied to the scratch
+        # copy and the suite then runs FROM THAT COPY — so a patch that
+        # rewrites the tests could bribe the constitution and call itself
+        # green. The judge is restored from the committed tree: the
+        # defendant does not get to rewrite the law. The patch may still
+        # ADD tests (the branch keeps them), but it cannot BUY the verdict.
+        judge_restored = True
+        restore = subprocess.run(GIT + ["checkout", "HEAD", "--", "tests/"],
+                                 cwd=str(scratch), capture_output=True,
+                                 text=True, timeout=60)
+        if restore.returncode != 0:
+            judge_restored = False
+        subprocess.run(GIT + ["clean", "-fdq", "--", "tests/"],
+                       cwd=str(scratch), capture_output=True, timeout=60)
     except Exception as e:
         return {"ok": False, "stage": "apply", "error": f"{type(e).__name__}: {e}"}
+
+    # A judge that could not be restored is not a judge: fail closed rather
+    # than judge the patch with the patch's own rules.
+    if not judge_restored:
+        return {
+            "ok": False,
+            "stage": "judge",
+            "error": "судья (tests/) не восстановлен — конституцию нельзя чинить изнутри",
+        }
 
     suite = suite_command or [sys.executable, "tests/test_resilience_suite.py"]
     try:

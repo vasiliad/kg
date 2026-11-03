@@ -3457,15 +3457,28 @@ def test_52_the_operator_can_order_code_and_the_forge_measures_it():
         "ok": True, "stage": "branched", "branch": "forge/improvement-test",
     }
     try:
-        bot._duty_writer = lambda ask: {
-            "ok": True, "model": "n/a", "role": "duty_primary", "score": 91.0,
-            "verified": True, "elapsed": 3.2, "content": diff_text, "status": "SUCCESS",
-            "shift": {"model_id": "n/a", "chosen_by": "по живому замеру"},
-        }
+        def _grounded_writer(ask):
+            # The GROUNDED proposal asks twice: first WHICH real file to
+            # improve, then the diff for that file with its real content.
+            if "Выбери ОДИН файл" in ask:
+                return {
+                    "ok": True, "model": "n/a", "role": "duty_primary", "score": 91.0,
+                    "verified": True, "elapsed": 1.0,
+                    "content": "harness/survival.py", "status": "SUCCESS",
+                    "shift": {"model_id": "n/a", "chosen_by": "по живому замеру"},
+                }
+            return {
+                "ok": True, "model": "n/a", "role": "duty_primary", "score": 91.0,
+                "verified": True, "elapsed": 3.2, "content": diff_text, "status": "SUCCESS",
+                "shift": {"model_id": "n/a", "chosen_by": "по живому замеру"},
+            }
+        bot._duty_writer = _grounded_writer
         bot.handle_code_order(424242, "улучши себя: сделай дайджест короче")
         reply = "\n".join(t for _, t in sent)
         assert "forge/improvement-test" in reply, \
             f"the branch must be reported ({reply[-300:]})"
+        assert "harness/survival.py" in reply, \
+            f"the REAL file being improved must be named ({reply[-300:]})"
     finally:
         code_forge.apply_self_improvement = saved_apply
 
@@ -3502,6 +3515,22 @@ def test_53_the_complex_improves_itself_without_being_told():
     saved_artefact = forge_autopilot.ARTEFACT
     saved_patch_dir = forge_autopilot.PATCH_DIR
     workdir = _tmp_dir()
+
+    def _grounded_duty(ask, ex):
+        """
+        The GROUNDED proposal asks twice: first WHICH real file to improve,
+        then the diff for that file. The fake writer must answer both.
+        """
+        if "Выбери ОДИН файл" in ask:
+            return {
+                "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
+                "verified": True, "elapsed": 1.0,
+                "content": "harness/survival.py", "status": "SUCCESS",
+            }
+        return {
+            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
+            "verified": True, "elapsed": 3.0, "content": diff_text, "status": "SUCCESS",
+        }
 
     # --- the parser must READ a plain unified diff -----------------------
     # Measured 2026-11-03 in the cloud: the model answered with a valid
@@ -3552,9 +3581,7 @@ def test_53_the_complex_improves_itself_without_being_told():
                     "branch": "forge/autopilot-test"}
 
         code_forge.apply_self_improvement = _fake_apply
-        forge_writers.duty_writer = lambda ask, ex: {
-            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
-            "verified": True, "elapsed": 3.0, "content": diff_text, "status": "SUCCESS"}
+        forge_writers.duty_writer = _grounded_duty
         verdict = forge_autopilot.attempt(reason="тест", executor=object(), engine=object())
         assert verdict.get("ok"), f"a green gate must mean an improvement ({verdict})"
         assert verdict.get("branch") == "forge/autopilot-test", "the branch must be reported"
@@ -3563,6 +3590,8 @@ def test_53_the_complex_improves_itself_without_being_told():
         assert (verdict.get("writer") or {}).get("model") == "n/a", \
             "the author of the proposal must be named"
         assert verdict.get("facts_digest"), "the proposal must be grounded in measurements"
+        assert verdict.get("target") == "harness/survival.py", \
+            f"the REAL file being improved must be named ({verdict.get('target')})"
 
         # --- a REJECTED proposal must never read as an improvement --------
         code_forge.apply_self_improvement = lambda diff: {
@@ -3591,9 +3620,7 @@ def test_53_the_complex_improves_itself_without_being_told():
         forge_autopilot.ARTEFACT = workdir / "forge_autopilot.json"
         forge_autopilot.PATCH_DIR = workdir / "patches"
         code_forge.apply_self_improvement = _fake_apply
-        forge_writers.duty_writer = lambda ask, ex: {
-            "ok": True, "model": "n/a", "role": "duty_primary", "score": 90.0,
-            "verified": True, "elapsed": 3.0, "content": diff_text, "status": "SUCCESS"}
+        forge_writers.duty_writer = _grounded_duty
         first = forge_autopilot.run_daily()
         assert not first.get("skipped"), "the first attempt of the day must happen"
         assert forge_autopilot.ARTEFACT.exists(), "the verdict must be written down"
@@ -3681,6 +3708,229 @@ def test_53_the_complex_improves_itself_without_being_told():
     print("[+] Test 53 Passed: the complex improves itself on its own — honestly, once a day.")
 
 
+def test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine():
+    """
+    Measured 2026-11-03 in the cloud: the autopilot's proposal was a patch
+    to `autopilot/model_selection_policy.py` — a directory and a file that
+    DO NOT EXIST in this repository — and its hunk header (`@@ -12,7 +12,7 @@`)
+    did not match its own body, so git called the patch «corrupt». The gate
+    was right to refuse; the complex was wrong to ask. A proposal nobody can
+    make possible is a proposal that never happens.
+
+    And the judge must not be BOUGHT: the patch is applied to the scratch
+    copy and the suite runs FROM THAT COPY — so a patch that rewrote the
+    tests could call itself green. The defendant does not get to rewrite the
+    law.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 54: A possible proposal, and a judge that cannot be bribed")
+    print("=" * 60)
+    # The forge's inner suite runs with FORGE_SKIP_SELF=1: inside the forge,
+    # the forge refuses to forge. This test drives the REAL gate, so it
+    # steps aside there — exactly like test_51 does. Otherwise the inner
+    # suite would fail on its own guard and no patch could ever be green.
+    if os.getenv("FORGE_SKIP_SELF") == "1":
+        print("[skip] the forge's inner run does not forge itself")
+        return
+    import difflib
+    import subprocess as _sp
+    from harness import code_forge, forge_writers
+
+    # --- the ground truth: the inventory is REAL -------------------------
+    paths = code_forge.inventory_paths()
+    assert paths, "the repository must have files to improve"
+    assert "harness/code_forge.py" in paths, \
+        f"the forge itself must be in the inventory ({paths[:5]})"
+    for rel in paths[:20]:
+        assert (PROJECT_ROOT / rel).exists(), \
+            f"the inventory must not lie: {rel} does not exist"
+    assert "autopilot/model_selection_policy.py" not in paths, \
+        "the file the model invented must not be in the inventory"
+
+    assert forge_writers.choose_target(
+        "давай улучшим autopilot/model_selection_policy.py", paths) == "", \
+        "a file outside the inventory does not exist"
+    assert forge_writers.choose_target(
+        "улучшим harness/code_forge.py", paths) == "harness/code_forge.py", \
+        "a real file must be found"
+
+    # --- the hunk header that git called corrupt -------------------------
+    corrupt = (
+        "diff --git a/harness/x.py b/harness/x.py\n"
+        "--- a/harness/x.py\n+++ b/harness/x.py\n"
+        "@@ -12,7 +12,7 @@ def f():\n"
+        "     # a comment\n"
+        "     def score(m):\n"
+        "         penalty = max(0.0, m.s - 5.0)\n"
+        "-        return m.score - penalty\n"
+        "+        return m.score - penalty - 1.0\n"
+        " \n"
+        "     return max(metrics, key=score)\n"
+    )
+    fixed, notes = code_forge.normalize_diff(corrupt)
+    assert notes, "the broken header must be reported, not silently swallowed"
+    assert "@@ -12,6 +12,6 @@" in fixed, \
+        f"the counts must be rewritten to the measured ones ({fixed})"
+    assert "-        return m.score - penalty\n" in fixed, \
+        "the body of the hunk must survive the repair"
+
+    good = (
+        "diff --git a/harness/x.py b/harness/x.py\n"
+        "@@ -1,2 +1,2 @@\n"
+        "-a\n"
+        "+b\n"
+        " c\n"
+    )
+    fixed_good, notes_good = code_forge.normalize_diff(good)
+    assert not notes_good, "a correct patch must be left alone"
+    assert fixed_good == good.rstrip("\n"), "a correct patch must not change"
+
+    # --- the GROUNDED proposal -------------------------------------------
+    saved_duty = forge_writers.duty_writer
+    saved_local = forge_writers.local_writer
+    asks: list = []
+    gated: list = []
+
+    def _ok_writer(content: str) -> Dict[str, Any]:
+        return {"ok": True, "model": "n/a", "role": "duty_primary",
+                "content": content, "status": "SUCCESS"}
+
+    patch_text = (
+        "```diff\ndiff --git a/harness/survival.py b/harness/survival.py\n"
+        "@@ -1,1 +1,1 @@\n-a\n+b\n```"
+    )
+
+    def _writer(ask, ex):
+        asks.append(ask)
+        if "Выбери ОДИН файл" in ask:
+            return _ok_writer("harness/survival.py")
+        return _ok_writer(patch_text)
+
+    def _gate(diff):
+        gated.append(diff)
+        return {"ok": True, "stage": "branched", "branch": "forge/test-54"}
+
+    try:
+        forge_writers.duty_writer = _writer
+        forge_writers.local_writer = lambda ask, en: {
+            "ok": False, "status": "NO_RESERVE", "content": ""}
+        proposal = forge_writers.propose_patch(
+            task="улучшить замеры", executor=object(), engine=object(),
+            gate=_gate, facts="факт: задержка 5с")
+        assert proposal.get("ok"), f"a green gate must mean an improvement ({proposal})"
+        assert proposal.get("target") == "harness/survival.py", \
+            f"the real file must be named ({proposal.get('target')})"
+        assert gated and gated[0].startswith("diff --git"), \
+            "the gate must receive the diff itself"
+        assert len(asks) == 2, \
+            f"the proposal asks twice: choose, then write ({len(asks)})"
+        assert "harness/survival.py" in asks[0], \
+            "the chooser must see the real inventory"
+        assert "survival" in asks[1], \
+            "the writer must see the REAL content of the file it patches"
+
+        # --- a hallucinated target never reaches the gate -----------------
+        gated.clear()
+        def _hallucinating(ask, ex):
+            if "Выбери ОДИН файл" in ask:
+                return _ok_writer("autopilot/model_selection_policy.py")
+            return _ok_writer(
+                "```diff\ndiff --git a/autopilot/model_selection_policy.py "
+                "b/autopilot/model_selection_policy.py\n@@ -1,1 +1,1 @@\n-a\n+b\n```")
+        forge_writers.duty_writer = _hallucinating
+        proposal = forge_writers.propose_patch(
+            task="улучшить", executor=object(), engine=object(),
+            gate=_gate, facts="")
+        assert not proposal.get("ok"), \
+            "a proposal to a file that does not exist is not an improvement"
+        assert proposal.get("stage") == "no_target", \
+            f"the refusal must name the reason ({proposal.get('stage')})"
+        assert not gated, "a patch to a non-existent file must never reach the gate"
+
+        # --- ONE repair round when the patch does not apply ---------------
+        gated.clear()
+        calls = {"n": 0}
+        repaired_patch = (
+            "```diff\ndiff --git a/harness/survival.py b/harness/survival.py\n"
+            "@@ -2,1 +2,1 @@\n-c\n+d\n```"
+        )
+
+        def _writer_with_repair(ask, ex):
+            calls["n"] += 1
+            if "Выбери ОДИН файл" in ask:
+                return _ok_writer("harness/survival.py")
+            if "Твой прежний патч" in ask:
+                return _ok_writer(repaired_patch)
+            return _ok_writer(patch_text)
+
+        def _gate_refuses(diff):
+            gated.append(diff)
+            if len(gated) == 1:
+                return {"ok": False, "stage": "apply_check",
+                        "error": "error: patch failed: file:1"}
+            return {"ok": True, "stage": "branched", "branch": "forge/test-54-repaired"}
+
+        forge_writers.duty_writer = _writer_with_repair
+        proposal = forge_writers.propose_patch(
+            task="улучшить", executor=object(), engine=object(),
+            gate=_gate_refuses, facts="")
+        assert proposal.get("ok"), \
+            f"the repair round must be able to save the attempt ({proposal})"
+        assert (proposal.get("repair") or {}).get("attempted"), \
+            "the repair round must be recorded"
+        assert (proposal.get("repair") or {}).get("ok"), \
+            "the repair round must be recorded as successful"
+        assert len(gated) == 2, \
+            f"the gate must see the first and the repaired patch ({len(gated)})"
+        assert calls["n"] == 3, \
+            f"exactly ONE repair round — three writer calls at most ({calls})"
+    finally:
+        forge_writers.duty_writer = saved_duty
+        forge_writers.local_writer = saved_local
+
+    # --- THE JUDGE MUST BE PRISTINE --------------------------------------
+    # The patch tries to rewrite the tests AND to change the code. The judge
+    # must see the ORIGINAL tests — otherwise the defendant buys the verdict.
+    judge_rel = "tests/test_resilience_suite.py"
+    code_rel = "harness/survival.py"
+    judge_text = (PROJECT_ROOT / judge_rel).read_text(encoding="utf-8")
+    code_text = (PROJECT_ROOT / code_rel).read_text(encoding="utf-8")
+    anchor = "PROJECT_ROOT = Path(__file__).resolve().parent.parent"
+    assert anchor in judge_text, "the judge patch anchor must exist"
+    bribed_judge = judge_text.replace(
+        anchor, anchor + "\nBRIBE_MARKER = True", 1)
+    marked_code = code_text + "\n# a model-proposed improvement was here\n"
+
+    def _diff_of(rel: str, before: str, after: str) -> str:
+        return chr(10).join(difflib.unified_diff(
+            before.splitlines(), after.splitlines(),
+            fromfile="a/" + rel, tofile="b/" + rel, lineterm="")) + chr(10)
+
+    bribe = (_diff_of(judge_rel, judge_text, bribed_judge)
+             + _diff_of(code_rel, code_text, marked_code))
+    # The judge checks two things: the code change IS applied, and the tests
+    # are the ORIGINAL ones. If the patch could rewrite the judge, the second
+    # check would fail — and the gate would (correctly) refuse.
+    suite_cmd = [
+        sys.executable, "-c",
+        "import pathlib,sys;"
+        "j=pathlib.Path('tests/test_resilience_suite.py').read_text(encoding='utf-8');"
+        "c=pathlib.Path('harness/survival.py').read_text(encoding='utf-8');"
+        "sys.exit(0 if ('BRIBE_MARKER' not in j and "
+        "'model-proposed improvement' in c) else 3)",
+    ]
+    tmp_repo = _tmp_dir()
+    _sp.run(["git", "init", "-q", str(tmp_repo)], capture_output=True)
+    outcome = code_forge.apply_self_improvement(
+        bribe, suite_command=suite_cmd, target_repo=tmp_repo)
+    assert outcome.get("ok"), \
+        f"the patch must be judged by the PRISTINE judge ({outcome})"
+    assert outcome.get("stage") == "branched", \
+        f"the improvement must reach a branch ({outcome})"
+
+    print("[+] Test 54 Passed: the proposal is possible, and the judge cannot be bribed.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -3744,6 +3994,7 @@ if __name__ == "__main__":
         test_51_the_model_forge_runs_code_and_gates_self_improvement,
         test_52_the_operator_can_order_code_and_the_forge_measures_it,
         test_53_the_complex_improves_itself_without_being_told,
+        test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine,
     ]
     failed = []
     for t in tests:

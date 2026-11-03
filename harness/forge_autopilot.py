@@ -162,102 +162,41 @@ def attempt(
 
     facts = build_facts()
     verdict["facts_digest"] = facts[:1200]
-    ask = (
-        code_forge.SELF_IMPROVEMENT_PROMPT
-        + "\n\nЧто реально измерено в комплексе сейчас:\n"
-        + facts
-        + "\n\nЗадача автопилота:\n"
-        + reason
+
+    # The GROUNDED proposal: the writer names a REAL file of this repository,
+    # sees its real content, and writes the diff; the constitution judges.
+    # Measured 2026-11-03 in the cloud: a proposal to a file that does not
+    # exist, with a hunk header that did not match its own body, killed the
+    # whole attempt — the complex asked for something it had never made
+    # possible.
+    proposal = forge_writers.propose_patch(
+        task=reason,
+        executor=executor,
+        engine=engine,
+        gate=code_forge.apply_self_improvement,
+        facts=facts,
     )
 
-    # 1. Who writes: the duty holder, or the reserve when the network is gone.
-    try:
-        picked = forge_writers.pick_writer(ask, executor, engine)
-    except Exception as e:
-        verdict.update(stage="writer_error", error=f"{type(e).__name__}: {e}")
-        return verdict
+    for key in (
+        "ok", "stage", "branch", "error", "summary", "writer", "chooser",
+        "duty_status", "local_status", "target", "normalised", "notes",
+        "repair", "answer_preview",
+    ):
+        if key in proposal:
+            verdict[key] = proposal[key]
 
-    writer = picked.get("writer") or {}
-    verdict["writer"] = {
-        "model": writer.get("model"),
-        "role": writer.get("role"),
-        "score": writer.get("score"),
-        "verified": writer.get("verified"),
-        "elapsed": writer.get("elapsed"),
-        "status": writer.get("status"),
-    }
-    verdict["duty_status"] = picked.get("duty_status")
-    verdict["local_status"] = (picked.get("local") or {}).get("status")
-
-    if not picked.get("ok"):
-        verdict.update(
-            stage="no_writer",
-            error=(
-                "сетевая дежурная: "
-                f"{picked.get('duty_status') or 'нет ответа'}; "
-                "локальная резервная: "
-                f"{(picked.get('local') or {}).get('status') or 'нет ответа'}"
-            ),
-            summary="Ни одна модель не предложила патч — попытка честно пустая.",
-        )
-        return verdict
-
-    # 2. The proposal must BE a diff.
-    content = str(writer.get("content") or "")
-    diff = code_forge.extract_diff(content)
-    if not diff:
-        # What DID the model say? A verdict that hides the answer hides the
-        # only thing that could explain the failure — the answer is kept
-        # (short, masked) next to the verdict.
-        preview = content.strip()[:800]
-        try:
-            from harness import redaction
-
-            preview = redaction.mask_emails_deep(preview)
-        except Exception:
-            pass
-        verdict.update(
-            stage="no_patch",
-            answer_preview=preview,
-            summary=(
-                "Модель ответила без патча — улучшать нечего."
-                if preview else "Модель не ответила — улучшать нечего."
-            ),
-        )
-        return verdict
-
-    # The proposal itself is kept: the operator must be able to read WHAT
-    # was proposed, not only that something was.
-    verdict["_diff"] = diff
-
-    # 3. The gate: vet → scratch clone → the WHOLE offline suite → branch.
-    try:
-        outcome = code_forge.apply_self_improvement(diff)
-    except Exception as e:
-        verdict.update(stage="gate_error", error=f"{type(e).__name__}: {e}")
-        return verdict
-
+    outcome = proposal.get("outcome") or {}
     verdict["gate"] = {
         "ok": outcome.get("ok"),
         "stage": outcome.get("stage"),
         "branch": outcome.get("branch"),
         "error": outcome.get("error"),
     }
-    verdict["ok"] = bool(outcome.get("ok"))
-    verdict["stage"] = str(outcome.get("stage") or "gate")
-    verdict["branch"] = outcome.get("branch")
-    verdict["patch_bytes"] = len(diff.encode("utf-8"))
 
-    if outcome.get("ok"):
-        verdict["summary"] = (
-            f"Патч прошёл весь офлайн-suite; ветка {outcome.get('branch')} "
-            "ждёт оператора (в main не вошло, наружу не отправлено)."
-        )
-    else:
-        verdict["summary"] = (
-            f"Патч отклонён конституцией на этапе «{outcome.get('stage')}»: "
-            f"{outcome.get('error') or 'без причины'}"
-        )
+    # The proposal itself is kept: the operator must be able to read WHAT
+    # was proposed, not only that something was.
+    verdict["_diff"] = str(proposal.get("diff") or "")
+    verdict["patch_bytes"] = len(verdict["_diff"].encode("utf-8"))
     return verdict
 
 
