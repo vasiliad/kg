@@ -309,6 +309,11 @@ def supervise(
             ) and now_utc.hour >= not_before
             entry["due_today"] = due_today
             stale = stale or due_today
+            # The report must tell the truth: a cycle that is due TODAY is
+            # stale even when its artefact is younger than the limit
+            # (measured 2026-11-03: the entry said stale=false while the
+            # supervisor was re-dispatching it).
+            entry["stale"] = stale
 
         if not stale:
             entry["action"] = "fresh"
