@@ -31,6 +31,7 @@ import re
 import secrets
 import string
 import struct
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -53,6 +54,26 @@ class MegaCryptoError(RuntimeError):
     copy of the day's folder instead of reusing the first one
     (measured 2026-11-04). Only one of those two answers may be silent.
     """
+
+
+class MegaNetworkError(RuntimeError):
+    """
+    The wire did not deliver a usable answer.
+
+    This is the cloud's fault, not the complex's logic — and the two must
+    never be confused: one is retried, the other is a fact about the tree.
+    """
+
+
+# An address must never reach a PUBLIC report: the archive report is
+# committed to the repository.
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def _safe_excerpt(body: bytes) -> str:
+    """The first bytes of an answer, with the addresses masked."""
+    text = body[:200].decode("utf-8", "replace").replace("\n", " ")
+    return _EMAIL_RE.sub("[address]", text)[:200]
 
 
 # --- MEGA crypto primitives (ported 1:1 from the public protocol) ----------
@@ -122,6 +143,17 @@ def mpi_to_int(data: bytes) -> int:
 # --- the API ---------------------------------------------------------------
 
 class MegaClient:
+    # The wire's contract with itself: how many times a READ may be asked
+    # again, and how long the complex waits between the asks.
+    RETRIES = 3
+    RETRY_WAIT = 10
+    # Only the actions that ASK for something may be repeated. The ones that
+    # CHANGE the tree (p=put, d=delete, up=register, uc=confirm) must never
+    # be replayed blindly: a lost answer does not mean a lost change.
+    RETRYABLE_ACTIONS = frozenset({"us", "us0", "f", "g", "u"})
+    # MEGA's own transient codes: -4 EAGAIN, -5 ERATELIMIT.
+    TRANSIENT_CODES = frozenset({-4, -5})
+
     def __init__(self, timeout: int = 30):
         self.timeout = timeout
         self.seq = 0
@@ -132,17 +164,64 @@ class MegaClient:
         self._root_handle: Optional[str] = None
 
     def api(self, payload: Dict[str, Any]) -> Any:
+        """
+        One request to the cloud, with a bounded retry for the failures that
+        are safe to retry.
+
+        Measured 2026-11-04: the archive cycle died with «JSONDecodeError:
+        Expecting value» — the cloud's answer was not JSON (a throttle page,
+        a 503, a gateway's HTML), and the client swallowed the body, so the
+        report said only that the JSON was broken. Now the answer is quoted
+        with its status code, and a transient failure is retried.
+
+        The retry is only for READS. «a=p» creates a node and «a=d» removes
+        one: re-posting a node whose answer was lost in transit is how the
+        duplicate folder was born in the first place. A mutation that loses
+        its answer is reported, and the next cycle — the supervisor always
+        dispatches one — re-reads the tree and continues.
+        """
+        action = payload.get("a")
+        attempts = self.RETRIES if action in self.RETRYABLE_ACTIONS else 1
         self.seq += 1
         params = {"id": self.seq}
         if self.sid:
             params["sid"] = self.sid
-        r = requests.post(MEGA_API, params=params, data=json.dumps([payload]),
-                          headers=UA, timeout=self.timeout)
-        resp = r.json()
+        last: Optional[Exception] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._api_once(payload, params)
+            except MegaNetworkError as exc:
+                last = exc
+                if attempt >= attempts:
+                    break
+                wait = self.RETRY_WAIT * attempt
+                print(f"[mega] the cloud did not answer ({exc}); "
+                      f"retry {attempt}/{attempts - 1} in {wait}s")
+                time.sleep(wait)
+        raise last
+
+    def _api_once(self, payload: Dict[str, Any], params: Dict[str, Any]) -> Any:
+        """One request. The wire's failures are MegaNetworkError; the cloud's
+        ANSWERS (even the bad ones) are returned as they are."""
+        try:
+            r = requests.post(MEGA_API, params=params, data=json.dumps([payload]),
+                              headers=UA, timeout=self.timeout)
+        except requests.RequestException as exc:
+            raise MegaNetworkError(f"the cloud did not answer: {exc}") from exc
+        try:
+            resp = r.json()
+        except ValueError as exc:
+            raise MegaNetworkError(
+                f"HTTP {r.status_code} with a non-JSON body "
+                f"[{r.headers.get('content-type') or 'no content-type'}]: "
+                f"{_safe_excerpt(r.content or b'')!r}") from exc
         if isinstance(resp, list) and resp and isinstance(resp[0], int):
             code = resp[0]
             if code == 0:
                 return 0
+            if code in self.TRANSIENT_CODES:
+                raise MegaNetworkError(
+                    f"MEGA API error {code} (transient) for {payload.get('a')}")
             raise RuntimeError(f"MEGA API error {code} for {payload.get('a')}")
         return resp[0] if isinstance(resp, list) else resp
 

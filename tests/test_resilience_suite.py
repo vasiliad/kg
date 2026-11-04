@@ -6379,6 +6379,123 @@ def test_75_the_cloud_client_never_guesses_what_it_cannot_read():
           "no duplicate folders, no silent guesses, no green run over a blind spot.")
 
 
+def test_76_the_cloud_wire_retries_the_reads_and_never_the_changes():
+    """
+    Measured 2026-11-04: the archive cycle died with «JSONDecodeError:
+    Expecting value» while the cloud was throttling. The answer was not
+    JSON, the client swallowed the body, and the report could not say what
+    had happened — only that some JSON was broken.
+
+    Three contracts, proved here:
+    (a) a wire failure QUOTES the facts (status, content type, a masked
+        excerpt) — the report is committed to a PUBLIC repository, so an
+        address in the answer must never leak into it;
+    (b) a READ may be asked again — the cloud throttles, the answer is lost,
+        the request changed nothing;
+    (c) a CHANGE is never replayed blindly: «a=p» that loses its answer may
+        already have created the node, and re-posting it is exactly how the
+        duplicate folder was born.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 76: the cloud wire retries the reads and never the changes")
+    print("=" * 60)
+    from harness import mega_client as mc
+
+    class _Resp:
+        def __init__(self, body, status=200, ctype="text/html"):
+            self.content = body if isinstance(body, bytes) else body.encode()
+            self.status_code = status
+            self.headers = {"content-type": ctype}
+
+        def json(self):
+            return json.loads(self.content.decode())
+
+    calls: List[str] = []
+    queue: List[Any] = []
+    last: List[Any] = [None]
+
+    def _post(url, params=None, data=None, headers=None, timeout=None):
+        calls.append(json.loads(data)[0].get("a") if data else "?")
+        if queue:
+            last[0] = queue.pop(0)
+        return last[0]
+
+    class _FakeTime:
+        def __init__(self):
+            self.waits: List[int] = []
+
+        def sleep(self, seconds):
+            self.waits.append(seconds)
+
+    fake_time = _FakeTime()
+    saved_post = mc.requests.post
+    saved_time = mc.time
+    mc.requests.post = _post
+    mc.time = fake_time
+    try:
+        client = mc.MegaClient()
+
+        # (a) the facts are quoted, and an address never leaks
+        queue.extend([_Resp("<html>throttled for keeper@example.com</html>", status=503)])
+        try:
+            client.api({"a": "f", "c": 1})
+            raise AssertionError("a non-JSON answer must raise")
+        except mc.MegaNetworkError as exc:
+            text = str(exc)
+            assert "503" in text, f"the status must be in the message: {text}"
+            assert "text/html" in text, f"the content type must be in the message: {text}"
+            assert "keeper@example.com" not in text, f"an address must not leak: {text}"
+            assert "[address]" in text, f"the address must be masked: {text}"
+        assert len(calls) == mc.MegaClient.RETRIES, \
+            f"a read must be asked again: {calls}"
+
+        # (b) a read that fails once and then answers must succeed
+        calls.clear()
+        queue.clear()
+        queue.extend([_Resp("<html>try later</html>", status=503),
+                      _Resp('[{"f":[{"h":"ROOT","t":2}]}]', ctype="application/json")])
+        answer = client.api({"a": "f", "c": 1})
+        assert answer == {"f": [{"h": "ROOT", "t": 2}]}, answer
+        assert len(calls) == 2, f"the read must be retried once: {calls}"
+        assert fake_time.waits, "the retry must wait before asking again"
+
+        # (c) a change is NEVER replayed: one attempt, one error
+        calls.clear()
+        queue.clear()
+        queue.extend([_Resp("<html>try later</html>", status=503),
+                      _Resp('[{"f":[{"h":"NEW"}]}]', ctype="application/json")])
+        try:
+            client.api({"a": "p", "t": "ROOT", "n": []})
+            raise AssertionError("a change whose answer was lost must raise")
+        except mc.MegaNetworkError:
+            pass
+        assert len(calls) == 1, f"a change must not be replayed: {calls}"
+
+        # (d) MEGA's own transient code is retried; its permanent one is a fact
+        calls.clear()
+        queue.clear()
+        queue.extend([_Resp("[-5]"), _Resp('[{"f":[]}]', ctype="application/json")])
+        assert client.api({"a": "f", "c": 1}) == {"f": []}, "a throttled read must be asked again"
+        assert len(calls) == 2, calls
+        calls.clear()
+        queue.clear()
+        queue.extend([_Resp("[-15]"), _Resp('[{"f":[]}]', ctype="application/json")])
+        try:
+            client.api({"a": "f", "c": 1})
+            raise AssertionError("a permanent MEGA error must not be retried")
+        except RuntimeError as exc:
+            assert not isinstance(exc, mc.MegaNetworkError), \
+                "a permanent error is an ANSWER, not a wire failure"
+            assert "-15" in str(exc), exc
+        assert len(calls) == 1, calls
+    finally:
+        mc.requests.post = saved_post
+        mc.time = saved_time
+
+    print("[+] Test 76 Passed: the wire's failures are quoted with their facts, "
+          "the reads are asked again, and the changes are never replayed.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -6464,6 +6581,7 @@ if __name__ == "__main__":
         test_73_the_mail_wire_recovers_and_an_unkept_promise_ends_the_run_red,
         test_74_the_cloud_reaches_every_tier_and_the_state_survives_the_runner,
         test_75_the_cloud_client_never_guesses_what_it_cannot_read,
+        test_76_the_cloud_wire_retries_the_reads_and_never_the_changes,
     ]
     failed = []
     for t in tests:
