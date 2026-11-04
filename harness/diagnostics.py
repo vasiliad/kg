@@ -440,6 +440,12 @@ def main() -> int:
     # The heartbeat: every probed credential's last success / first failure,
     # so decay is visible in the report BEFORE the channel dies.
     report["heartbeat"] = record_heartbeat(report)
+    # The mailbox inventory, measured here — because this is the cycle that
+    # holds the vault's salt. The dispatch job does NOT (measured
+    # 2026-11-05: REDACTION_SALT does not open the vault; only VAULT_SALT
+    # does), so the letter cannot measure the inventory itself. It reads
+    # this artefact instead — the same pattern as the credential heartbeat.
+    report["mailboxes"] = record_mailbox_tiers()
 
     _hdr("SUMMARY")
     nvidia = report["nvidia"]
@@ -577,6 +583,48 @@ def record_heartbeat(report: Dict[str, Any], now: Optional[datetime] = None) -> 
 
     atomic_io.write_json_atomic(HEARTBEAT_PATH, heartbeat)
     return heartbeat
+
+
+# ---------------------------------------------------------------------------
+# The mailbox inventory — what the complex can actually USE.
+#
+# Measured 2026-11-05: the vault is sealed under VAULT_SALT, and
+# REDACTION_SALT (the salt the dispatch and diagnostics jobs carry) does NOT
+# open it. So the letter's job cannot measure the inventory itself — it can
+# only read what a cycle that HOLDS the salt measured. This cycle holds it.
+#
+# The file carries COUNTS and tiers, never an address and never a password:
+# the operator already has the addresses (they are his), and the letter only
+# needs to say «1 mailbox I can read unattended, 2 that need a human, 5 of
+# my own that are not sealed, 5 that were session-only from the start».
+# ---------------------------------------------------------------------------
+
+MAILBOX_TIERS_PATH = PROJECT_ROOT / "data" / ".mailbox_tiers.json"
+
+
+def record_mailbox_tiers(now: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    Measures the mailbox inventory and writes it as an artefact.
+
+    Counts and tiers only. If the vault cannot be opened the result says
+    «not measured» — never «zero»: a cycle that could not look must not
+    report an empty shelf.
+    """
+    from harness import mail_accounts
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    try:
+        tiers = mail_accounts.mailbox_tiers()
+    except Exception as exc:
+        tiers = {
+            "measured": False,
+            "api_readable": 0, "human_only": 0,
+            "own_durable_sealed": 0, "own_durable_local": 0,
+            "own_session": 0, "own_total": 0, "sealed_in_vault": 0,
+            "why": f"the inventory could not be measured: {exc}",
+        }
+    tiers["checked_at"] = stamp
+    atomic_io.write_json_atomic(MAILBOX_TIERS_PATH, tiers)
+    return tiers
 
 
 if __name__ == "__main__":

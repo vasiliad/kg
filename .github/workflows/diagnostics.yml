@@ -55,6 +55,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
           REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+          # The vault's salt. Measured 2026-11-05: REDACTION_SALT does NOT
+          # open the vault — only VAULT_SALT does. Without this secret the
+          # diagnostics cycle cannot tell a sealed mailbox from an unsealed
+          # one, and the health letter would have to say «не измерено»
+          # forever. The salt is never printed, only used to open entries.
+          VAULT_SALT: ${{ secrets.VAULT_SALT }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           # The backup account and the archive copy — wired here too
@@ -84,6 +90,12 @@ jobs:
           # committed by neither, so the history of the decay died with the
           # runner — the operator only ever saw the last verdict.
           git add data/.credential_heartbeat.json || true
+          # The mailbox inventory. The dispatch job cannot measure it (it
+          # carries only REDACTION_SALT, which does not open the vault), so
+          # the cycle that CAN measure it publishes the numbers here and the
+          # letter reads this artefact instead of guessing. The artefact
+          # holds COUNTS and tiers — never an address, never a password.
+          git add data/.mailbox_tiers.json || true
           if ! git diff --staged --quiet; then
             git commit -m "chore(diagnostics): cloud dependency health report [skip ci]"
             echo "Diagnostics report committed."
