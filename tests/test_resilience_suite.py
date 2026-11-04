@@ -5567,6 +5567,228 @@ def test_70_the_archive_copy_can_fan_out_to_several_mailboxes():
           "invalid ones skipped, nothing in headers.")
 
 
+def test_71_the_own_cloud_copy_is_wired_and_the_upload_is_correct():
+    """
+    The complex registered its own cloud account (test 69). An account that
+    only RECEIVES the signup mail is a mailbox, not a backup: the record must
+    be UPLOADED there every day, by the complex itself.
+
+    This test pins the upload wire format end-to-end against a mocked MEGA:
+    the chunk plan (128K, 256K, … 1M), AES-128-CTR per chunk with
+    iv=nonce‖BE64(offset/16), the per-chunk CBC-MAC over the PLAINTEXT
+    folded into meta_mac, the «<url>/<offset>?c=<xor-checksum>» POSTs, and
+    the a=p node whose 32-byte packed key decrypts back to the very key that
+    encrypted the bytes — so the uploaded file can be read again by MEGA (and
+    by us). It also pins the WIRING: the cycle is supervised, the workflow
+    exists, it commits its artefact, and the credentials come from the vault
+    and never from a file in the repository.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 71: the own-cloud copy is wired and the upload is correct")
+    print("=" * 60)
+    import tempfile as _tf
+    import struct
+    from harness import mega_client as mc
+    from harness import mega_archive as ma
+    from harness import cycle_supervisor as cs
+
+    # --- the wire format ---------------------------------------------------
+    plan = mc.chunk_plan(300 * 1024)
+    assert plan == [(0, 128 * 1024), (131072, 172 * 1024)], plan
+    assert sum(n for _, n in mc.chunk_plan(5 * 1024 * 1024 + 7)) == 5 * 1024 * 1024 + 7
+    assert mc.get_chunk_size(0) == 128 * 1024 and mc.get_chunk_size(7) == 1024 * 1024
+    assert mc.get_chunk_size(8) == 1024 * 1024
+
+    key = os.urandom(16)
+    nonce = os.urandom(8)
+    plain = os.urandom(1000)
+    iv = nonce + (0).to_bytes(8, "big")
+    cipher = mc.aes128_ctr(plain, key, iv)
+    assert cipher != plain
+    assert mc.aes128_ctr(cipher, key, iv) == plain, "CTR must be reversible"
+
+    macs = [mc.chunk_mac(nonce, key, plain[i:i + 500]) for i in range(0, 1000, 500)]
+    meta = mc.meta_mac_fold(macs, key)
+    assert len(meta) == 16
+    node_key = mc.pack_node_key(key, nonce, meta)
+    assert len(node_key) == 32
+    k2, n2, xor2 = mc.unpack_node_key(node_key)
+    assert k2 == key and n2 == nonce, "the node key must round-trip"
+    assert xor2 == (bytes(meta[i] ^ meta[i + 4] for i in range(4)) +
+                    bytes(meta[i + 8] ^ meta[i + 12] for i in range(4)))
+    assert len(mc.b64url_decode(mc.upload_checksum(cipher))) == 12
+
+    # --- the upload, against a mocked MEGA ---------------------------------
+    master = os.urandom(16)
+    payload = b"the complex's own record" * 100
+
+    class _FakeResponse:
+        status_code = 200
+        text = ""
+
+        def __init__(self, content=b""):
+            self.content = content
+
+        def json(self):
+            return []
+
+    posted = []
+
+    def _fake_post(url, data=None, headers=None, timeout=None, **kwargs):
+        posted.append((url, data, headers or {}))
+        return _FakeResponse(b"H" * 36)
+
+    class _FakeClient(mc.MegaClient):
+        def __init__(self):
+            super().__init__()
+            self.master_key = master
+            self.calls = []
+
+        def api(self, payload):
+            self.calls.append(payload)
+            action = payload.get("a")
+            if action == "u":
+                return {"p": "https://upload.example.invalid/session"}
+            if action == "p":
+                return {"f": [{"h": "NEWNODE", "t": 0}]}
+            if action == "f":
+                return {"f": [{"h": "ROOTNODE", "t": 2}]}
+            return {}
+
+    saved_post = mc.requests.post
+    mc.requests.post = _fake_post
+    try:
+        client = _FakeClient()
+        result = client.upload_file("DAYNODE", "daily_digest.json", payload)
+    finally:
+        mc.requests.post = saved_post
+
+    assert result["chunks"] == len(mc.chunk_plan(len(payload))), result
+    assert len(posted) == len(mc.chunk_plan(len(payload)))
+    # every chunk went to its own offset, with the checksum of ITS OWN bytes
+    for (url, data, headers), (offset, length) in zip(posted, mc.chunk_plan(len(payload))):
+        assert url.startswith(f"https://upload.example.invalid/session/{offset}?"), url
+        assert f"?c={mc.upload_checksum(data)}" in url, "the checksum must match the bytes sent"
+        assert len(data) == length
+        assert headers.get("Content-Type") == "application/octet-stream"
+
+    # the a=p call carries the node: the packed key and the attributes
+    put = [c for c in client.calls if c.get("a") == "p"]
+    assert len(put) == 1, put
+    node = put[0]["n"][0]
+    # the handle is the 36-byte server answer, carried base64url
+    assert node["h"] == mc.b64url_encode(b"H" * 36), node["h"]
+    assert node["t"] == 0
+    key_block = mc.aes_ecb_decrypt(mc.b64url_decode(node["k"]), master)
+    file_key, file_nonce, meta_xor = mc.unpack_node_key(key_block)
+    # the key that decrypts the uploaded bytes is the one inside the node key
+    for (url, data, _h), (offset, length) in zip(posted, mc.chunk_plan(len(payload))):
+        chunk_iv = file_nonce + struct.pack(">Q", offset // 16)
+        assert mc.aes128_ctr(data, file_key, chunk_iv) == payload[offset:offset + length], \
+            "the uploaded bytes must decrypt with the key the node carries"
+    # the meta_mac inside the node key is the fold of the per-chunk MACs
+    expect = [mc.chunk_mac(file_nonce, file_key, payload[o:o + n])
+              for o, n in mc.chunk_plan(len(payload))]
+    expect_meta = mc.meta_mac_fold(expect, file_key)
+    assert meta_xor == (bytes(expect_meta[i] ^ expect_meta[i + 4] for i in range(4)) +
+                        bytes(expect_meta[i + 8] ^ expect_meta[i + 12] for i in range(4)))
+    # the attributes decrypt to the name MEGA will show
+    from Crypto.Cipher import AES as _AES
+    attrs = _AES.new(file_key, _AES.MODE_CBC, iv=b"\0" * 16).decrypt(
+        mc.b64url_decode(node["a"])).decode("utf-8", "replace").rstrip("\x00")
+    assert attrs.startswith("MEGA")
+    assert json.loads(attrs[4:])["n"] == "daily_digest.json"
+
+    # --- the API v2 details that broke the first live run -----------------
+    # (a) the node key arrives SCOPED: «<user-handle>:<key>». Without
+    #     stripping the handle the base64 decode fails and every name stays
+    #     unreadable — which made the archive create a DUPLICATE folder
+    #     instead of reusing the day's copy.
+    # (b) the upload handle is 36 BINARY bytes; decoding it as text destroys
+    #     it, and every upload dies with «no 36-byte handle».
+    folder_key = os.urandom(16)
+    folder_node = {
+        "h": "FOLDERH", "p": "ROOTNODE", "t": 1, "ts": 10,
+        "k": "UHANDLE:" + mc.b64url_encode(mc.aes_ecb_encrypt(folder_key, master)),
+        "a": mc.b64url_encode(mc.aes128_cbc_encrypt_str(
+            mc.encode_node_attrs("kg-archive"), folder_key)),
+    }
+    scoped = _FakeClient()
+    scoped.nodes_list = [folder_node]
+    assert scoped.decrypt_attrs(folder_node) == "kg-archive", \
+        "a scoped key must still open the node's name"
+
+    # (c) the download request is a=g (a=d is the DELETE request — using it
+    #     for a download earns the error -2), and the bytes come back
+    #     encrypted: the reader must decrypt them with the node's own key.
+    file_node = {
+        "h": "FILEH", "p": "DAYNODE", "t": 0, "ts": 11, "s": len(payload),
+        "k": "UHANDLE:" + mc.b64url_encode(
+            mc.aes_ecb_encrypt(mc.pack_node_key(key, nonce, meta), master)),
+        "a": mc.b64url_encode(mc.aes128_cbc_encrypt_str(
+            mc.encode_node_attrs("daily_digest.json"), key)),
+    }
+
+    class _ReaderClient(mc.MegaClient):
+        def __init__(self):
+            super().__init__()
+            self.master_key = master
+
+        def api(self, req):
+            if req.get("a") == "g":
+                return {"g": "https://download.example.invalid/file"}
+            if req.get("a") == "f":
+                return {"f": [file_node]}
+            return {}
+
+    encrypted = mc.aes128_ctr(payload, key, nonce + b"\0" * 8)
+    saved_get = mc.requests.get
+    mc.requests.get = lambda url, timeout=None, **kw: _FakeResponse(encrypted)
+    try:
+        reader = _ReaderClient()
+        back = reader.download_file("FILEH")
+    finally:
+        mc.requests.get = saved_get
+    assert back == payload, "the archive must be READABLE — a backup you cannot open is not a backup"
+
+    # --- the vault: the credentials come from the vault, not from a file ---
+    tmp = Path(_tf.mkdtemp(prefix="mega-archive-test-"))
+    vpath = tmp / ".sealed_vault.json"
+    from harness import sealed_vault
+    sealed_vault.put("mega:email", "keeper@example.invalid", salt="salt-x", path=vpath)
+    sealed_vault.put("mega:password", "pw-123456", salt="salt-x", path=vpath)
+    creds = ma.load_credentials(salt="salt-x", path=vpath)
+    assert creds["email"] == "keeper@example.invalid"
+    assert creds["password"] == "pw-123456"
+    assert "keeper@example.invalid" not in vpath.read_text(encoding="utf-8"), \
+        "the credentials must never sit in the repository in plaintext"
+    # the vault file itself is archived — the ciphertext is the backup of the
+    # backup keys
+    assert "data/.sealed_vault.json" in ma.ARTEFACTS
+
+    # --- the wiring: a supervised cycle, a workflow, an artefact ------------
+    names = {c["name"]: c for c in cs.CYCLES}
+    assert "mega_archive" in names, f"the archive cycle must be supervised: {sorted(names)}"
+    cycle = names["mega_archive"]
+    assert cycle["workflow"] == "mega_archive.yml"
+    assert cycle["artefact"] == "data/mega_archive_report.json", \
+        "the cycle must have an artefact — the proof that the copy happened"
+    assert cycle["field"] == "checked_at"
+    assert cycle.get("daily") is True, "the copy is owed once a day"
+    assert 0 <= int(cycle["not_before_utc"]) <= 23
+
+    wf_path = PROJECT_ROOT / ".github" / "workflows" / "mega_archive.yml"
+    assert wf_path.exists(), "the archive workflow must exist"
+    wf = wf_path.read_text(encoding="utf-8")
+    assert "contents: write" in wf, "the workflow must be able to commit its artefact"
+    assert "harness/mega_archive.py" in wf
+    assert "scripts/sync_state.sh" in wf, "the artefact must go through the race-safe helper"
+    assert "VAULT_SALT" in wf, "the vault must be opened from the secret, not from a file"
+
+    print("[+] Test 71 Passed: the own-cloud copy is supervised, the upload "
+          "wire format is correct and the credentials stay in the vault.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5647,6 +5869,7 @@ if __name__ == "__main__":
         test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies,
         test_69_the_self_registered_mega_account_is_sealed_and_usable,
         test_70_the_archive_copy_can_fan_out_to_several_mailboxes,
+        test_71_the_own_cloud_copy_is_wired_and_the_upload_is_correct,
     ]
     failed = []
     for t in tests:

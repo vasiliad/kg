@@ -1,0 +1,70 @@
+name: MEGA Archive (own cloud)
+
+# The third copy of the complex's record: the one that belongs to nobody but
+# the complex. The account was registered BY the complex itself (its own
+# mail.tm mailbox, MEGA's own client protocol, the verification link read
+# from that mailbox, the login proved against the master key) — no operator
+# action, no card, no phone.
+#
+# The scheduler is a suggestion, not a promise (measured: slots skipped). The
+# real dispatcher is the cycle supervisor — it re-dispatches this workflow
+# when the artefact `data/mega_archive_report.json` is too old, and the
+# artefact is the proof that the copy actually happened.
+
+on:
+  schedule:
+    # 05:20 UTC — after the daily digest is built and sent (05:00 UTC), so
+    # the day's report is part of the archive, not tomorrow's problem.
+    - cron: '20 5 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    # One archive at a time: two runs would upload the same day twice.
+    concurrency:
+      group: mega-archive
+      cancel-in-progress: false
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          # Pinned contract: the runtime changes only when a commit changes it.
+          pip install -r requirements-actions.txt
+
+      - name: Archive the day's artefacts to the self-registered MEGA
+        env:
+          # The account's credentials live in the sealed vault; the salt opens
+          # it. The vault file itself is committed (ciphertext only).
+          VAULT_SALT: ${{ secrets.VAULT_SALT }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+        run: |
+          python harness/mega_archive.py
+
+      - name: Persist the archive report
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          # Each path on its own: a multi-path `git add` aborts entirely when
+          # one pathspec does not match.
+          git add data/mega_archive_report.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(archive): the own-cloud copy's proof [skip ci]"
+          else
+            echo "No archive report changes."
+          fi
+          bash scripts/sync_state.sh

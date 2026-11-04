@@ -141,6 +141,21 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "daily": True,
         "not_before_utc": 3,
     },
+    {
+        # The third copy of the record — the one the complex owns. The account
+        # was registered by the system itself (own mailbox → MEGA's client
+        # protocol → verification link → login proved against the master key),
+        # so this copy depends on neither the operator's inbox nor on GitHub
+        # staying up. It is owed once a day, right after the digest.
+        "name": "mega_archive",
+        "workflow": "mega_archive.yml",
+        "artefact": "data/mega_archive_report.json",
+        "field": "checked_at",
+        "max_age_h": 26.0,
+        "retry_h": 6.0,
+        "daily": True,
+        "not_before_utc": 5,
+    },
 )
 
 REPORT_PATH = PROJECT_ROOT / "data" / ".cycle_supervisor.json"

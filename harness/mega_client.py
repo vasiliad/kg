@@ -23,9 +23,11 @@ generate here (base64url of the 16 bytes) — register_request returns it.
 """
 
 import base64
+import binascii
 import hashlib
 import json
 import os
+import re
 import secrets
 import string
 import struct
@@ -108,6 +110,11 @@ def mpi(n: int) -> bytes:
     return struct.pack(">H", n.bit_length()) + n.to_bytes(size, "big")
 
 
+def mpi_to_int(data: bytes) -> int:
+    """The inverse of mpi(): two header bytes (bit length) + big-endian body."""
+    return int.from_bytes(data[2:], "big")
+
+
 def encrypt_key_a32(a, key: bytes) -> bytes:
     """Encrypt a 4-int (16-byte) key block-wise with the master key (ECB)."""
     data = a32_to_str(a)
@@ -121,6 +128,10 @@ class MegaClient:
         self.timeout = timeout
         self.seq = 0
         self.sid: Optional[str] = None
+        # Set by login(): the account master key — needed to pack node keys
+        # for uploads. Never printed, never returned in a result dict.
+        self.master_key: Optional[bytes] = None
+        self._root_handle: Optional[str] = None
 
     def api(self, payload: Dict[str, Any]) -> Any:
         self.seq += 1
@@ -221,10 +232,225 @@ class MegaClient:
         resp = self.api({"a": "us", "user": email, "uh": uh})
         if isinstance(resp, int):
             raise RuntimeError(f"login failed: MEGA error {resp}")
-        self.sid = resp.get("tsid") or resp.get("csid")
         k = resp.get("k")
         master = aes_ecb_decrypt(b64url_decode(k), pw_key) if k else None
+        self.master_key = master
+        # API v2 (measured 2026-11-04): the login answer carries `csid` — an
+        # RSA-ENCRYPTED session id, NOT the session id itself. Passing it
+        # straight back earns MEGA error -15 (ESID, invalid session). The real
+        # id is opened with the account's own private key, which the server
+        # hands over encrypted under the master key (`privk`) — the very key
+        # WE generated at registration and sealed into the vault.
+        self.sid = resp.get("tsid")
+        if not self.sid and resp.get("csid") and resp.get("privk"):
+            self.sid = self._open_session_id(resp)
+        if not self.sid:
+            raise RuntimeError(f"login returned no usable session: {sorted(resp)}")
         return {"sid": self.sid, "master_key_ok": master is not None}
+
+    def _open_session_id(self, resp: Dict[str, Any]) -> str:
+        """Decrypt the `csid` blob with the account's RSA key -> the session id."""
+        if not self.master_key:
+            raise RuntimeError("the master key is needed to open the session")
+        raw = aes_ecb_decrypt(b64url_decode(resp["privk"]), self.master_key)
+        parts: List[int] = []
+        for _ in range(4):
+            if len(raw) < 4:
+                raise RuntimeError("the account's private key block is truncated")
+            bitlen = raw[0] * 256 + raw[1]
+            bytelen = (bitlen + 7) // 8 + 2
+            parts.append(mpi_to_int(raw[:bytelen]))
+            raw = raw[bytelen:]
+        p, q, d, _u = parts
+        n = p * q
+        e = pow(d, -1, (p - 1) * (q - 1))
+        key = RSA.construct((n, e, d, p, q))
+        encrypted = mpi_to_int(b64url_decode(resp["csid"]))
+        plain_int = key._decrypt(encrypted)
+        hexed = "%x" % plain_int
+        if len(hexed) % 2:
+            hexed = "0" + hexed
+        sid_bytes = binascii.unhexlify(hexed)
+        return b64url_encode(sid_bytes[:43])
+
+    # --- filesystem: list, root, mkdir, upload ------------------------------
+    # Ported from the same public protocol's filesystem path (megatools'
+    # mega_session_refresh / mega_session_mkdir / mega_session_put in lib/mega.c).
+
+    def list_files(self) -> List[Dict[str, Any]]:
+        """a=f c=1 — the whole node list. The root node carries t=2."""
+        resp = self.api({"a": "f", "c": 1})
+        nodes = resp.get("f") if isinstance(resp, dict) else None
+        return nodes if isinstance(nodes, list) else []
+
+    def root_handle(self) -> str:
+        """The cloud root's handle (the node with t=2)."""
+        if self._root_handle:
+            return self._root_handle
+        for node in self.list_files():
+            if isinstance(node, dict) and node.get("t") == 2 and node.get("h"):
+                self._root_handle = node["h"]
+                return self._root_handle
+        raise RuntimeError("no root node (t=2) in the file list — not logged in?")
+
+    def decrypt_attrs(self, node: Dict[str, Any]) -> Optional[str]:
+        """Decrypt a node's «MEGA{...}» attributes with its own node key."""
+        k = node.get("k")
+        a = node.get("a")
+        if not (k and a and self.master_key):
+            return None
+        try:
+            # API v2 (measured 2026-11-04): the key arrives scoped to its
+            # owner — «<user-handle>:<key>». The handle is not part of the
+            # key; without stripping it the base64 decode fails with
+            # «33 data characters» and every name stays unreadable.
+            if ":" in k:
+                k = k.rsplit(":", 1)[-1]
+            key_block = aes_ecb_decrypt(b64url_decode(k), self.master_key)
+            if node.get("t") == 0:  # file: 32-byte packed key
+                aes_key, _, _ = unpack_node_key(key_block)
+            else:                   # folder: the key is the 16 bytes as-is
+                aes_key = key_block[:16]
+            cipher = AES.new(aes_key, AES.MODE_CBC, iv=b"\0" * 16)
+            plain = cipher.decrypt(b64url_decode(a))
+            text = plain.decode("utf-8", "replace").rstrip("\x00")
+            if not text.startswith("MEGA"):
+                return None
+            return json.loads(text[4:]).get("n")
+        except Exception:
+            return None
+
+    def find_child(self, parent_handle: str, name: str) -> Optional[str]:
+        """
+        The handle of the child called `name`, or None. When several children
+        bear the name (measured 2026-11-04: a run that could not decrypt the
+        names once created a second copy), the NEWEST wins — the older one is
+        a leftover, and the archive must keep using one branch.
+        """
+        matches = []
+        for node in self.list_files():
+            if not (isinstance(node, dict) and node.get("p") == parent_handle):
+                continue
+            if self.decrypt_attrs(node) == name and node.get("h"):
+                matches.append(node)
+        if not matches:
+            return None
+        matches.sort(key=lambda n: int(n.get("ts") or 0))
+        return matches[-1].get("h")
+
+    def mkdir(self, parent_handle: str, name: str) -> str:
+        """Create a folder; returns its new handle. Idempotent via find_child."""
+        existing = self.find_child(parent_handle, name)
+        if existing:
+            return existing
+        folder_key = secrets.token_bytes(16)
+        attrs_enc = b64url_encode(aes128_cbc_encrypt_str(encode_node_attrs(name), folder_key))
+        key_enc = b64url_encode(aes_ecb_encrypt(folder_key, self.master_key))
+        resp = self.api({"a": "p", "t": parent_handle,
+                         "n": [{"h": "xxxxxxxx", "t": 1, "k": key_enc, "a": attrs_enc}]})
+        arr = resp.get("f") if isinstance(resp, dict) else None
+        if not (isinstance(arr, list) and arr and isinstance(arr[0], dict) and arr[0].get("h")):
+            raise RuntimeError(f"mkdir returned {resp!r}")
+        return arr[0]["h"]
+
+    def upload_file(self, parent_handle: str, name: str, data: bytes) -> Dict[str, Any]:
+        """
+        Upload one file into a folder. The wire format (measured against the
+        public protocol): AES-128-CTR per chunk with iv=nonce‖BE64(offset/16),
+        a per-chunk CBC-MAC over the PLAINTEXT folded into meta_mac, chunked
+        POSTs to the a=u URL («<p>/<offset>?c=<xor-checksum>»), then one a=p
+        with the 32-byte packed node key ECB-encrypted under the master key.
+        """
+        if not self.master_key:
+            raise RuntimeError("upload needs login() first (master key)")
+        aes_key = secrets.token_bytes(16)
+        nonce = secrets.token_bytes(8)
+
+        # ask for an upload URL
+        resp = self.api({"a": "u", "e": 0, "ms": 0, "r": 0,
+                         "s": len(data), "ssl": 0, "v": 2})
+        p_url = resp.get("p") if isinstance(resp, dict) else None
+        if not p_url:
+            raise RuntimeError(f"a=u returned {resp!r}")
+
+        macs: List[bytes] = []
+        upload_handle: Optional[str] = None
+        for offset, length in chunk_plan(len(data)):
+            plain = data[offset:offset + length]
+            macs.append(chunk_mac(nonce, aes_key, plain))
+            iv = nonce + struct.pack(">Q", offset // 16)
+            cipher = aes128_ctr(plain, aes_key, iv)
+            url = f"{p_url}/{offset}?c={upload_checksum(cipher)}"
+            r = requests.post(url, data=cipher, timeout=self.timeout,
+                              headers={"Content-Type": "application/octet-stream", **UA})
+            # The answer is BINARY: the 36-byte upload handle. Decoding it as
+            # text (r.text) destroys it — measured 2026-11-04: the handle came
+            # back as mojibake, its length stopped being 36, and every upload
+            # failed with «no chunk returned the 36-byte upload handle».
+            raw = r.content or b""
+            text = raw.decode("utf-8", "replace").strip()
+            if r.status_code >= 400 or re.match(r"^-\d+$", text):
+                raise RuntimeError(f"chunk at {offset} refused: HTTP {r.status_code} {text[:40]}")
+            if len(raw) == 36:
+                upload_handle = b64url_encode(raw)
+        if not upload_handle:
+            raise RuntimeError("no chunk returned the 36-byte upload handle")
+
+        meta_mac = meta_mac_fold(macs, aes_key)
+        attrs_enc = b64url_encode(aes128_cbc_encrypt_str(encode_node_attrs(name), aes_key))
+        node_key_enc = b64url_encode(
+            aes_ecb_encrypt(pack_node_key(aes_key, nonce, meta_mac), self.master_key))
+        resp = self.api({"a": "p", "t": parent_handle,
+                         "n": [{"h": upload_handle, "t": 0,
+                                "k": node_key_enc, "a": attrs_enc}]})
+        arr = resp.get("f") if isinstance(resp, dict) else None
+        node = arr[0] if isinstance(arr, list) and arr and isinstance(arr[0], dict) else {}
+        return {"name": name, "size": len(data), "handle": node.get("h"),
+                "chunks": len(macs), "parent": parent_handle}
+
+    def find_children(self, parent_handle: str, name: str) -> List[str]:
+        """Every child called `name` (a day may hold an older and a newer copy)."""
+        found: List[str] = []
+        for node in self.list_files():
+            if not (isinstance(node, dict) and node.get("p") == parent_handle):
+                continue
+            if node.get("h") and self.decrypt_attrs(node) == name:
+                found.append(node["h"])
+        return found
+
+    def delete_node(self, handle: str) -> bool:
+        """Move a node to the trash (the delete request is a=d with n=handle)."""
+        self.api({"a": "d", "n": handle})
+        return True
+
+    def download_file(self, handle: str) -> bytes:
+        """
+        Fetch a node's bytes back and decrypt them with its own node key.
+
+        A backup that cannot be read is not a backup (measured 2026-11-04:
+        the archive proved itself only after the roundtrip — 12 files in,
+        12 files out, byte-identical). The download request in the current
+        API is a=g (a=d is the DELETE request — using it here earned the
+        error -2 and cost one debugging round).
+        """
+        resp = self.api({"a": "g", "g": 1, "ssl": 0, "n": handle})
+        url = resp.get("g") if isinstance(resp, dict) else None
+        if not url:
+            raise RuntimeError(f"a=g returned no download URL for {handle}")
+        raw = requests.get(url, timeout=self.timeout).content
+        node = None
+        for candidate in self.list_files():
+            if isinstance(candidate, dict) and candidate.get("h") == handle:
+                node = candidate
+                break
+        if not node or not node.get("k"):
+            raise RuntimeError(f"the node {handle} is not in the file list")
+        k = node["k"]
+        if ":" in k:
+            k = k.rsplit(":", 1)[-1]
+        key_block = aes_ecb_decrypt(b64url_decode(k), self.master_key)
+        aes_key, nonce, _meta_xor = unpack_node_key(key_block)
+        return aes128_ctr(raw, aes_key, nonce + b"\0" * 8)
 
 
 def signup_key_from_link(link: str) -> str:
@@ -239,3 +465,107 @@ def signup_key_from_link(link: str) -> str:
 def random_password(length: int = 24) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+# --- the upload wire format (ported 1:1 from the public protocol) ----------
+# Reference: megatools' lib/mega.c — prepare_transfer / tman_worker_upload_chunk /
+# chunk_mac_calculate / meta_mac_calculate / pack_node_key / mega_session_put.
+
+def get_chunk_size(idx: int) -> int:
+    """Chunk sizes grow: 128K, 256K, … 1M, then 1M until EOF."""
+    return (idx + 1 if idx < 8 else 8) * 128 * 1024
+
+
+def chunk_plan(size: int) -> List[Tuple[int, int]]:
+    """[(offset, length), …] covering the file exactly."""
+    plan: List[Tuple[int, int]] = []
+    off, idx = 0, 0
+    while off < size:
+        n = min(get_chunk_size(idx), size - off)
+        plan.append((off, n))
+        off += n
+        idx += 1
+    return plan
+
+
+def aes128_ctr(data: bytes, key: bytes, iv: bytes) -> bytes:
+    """AES-128-CTR over the full 16-byte counter (what EVP_aes_128_ctr does)."""
+    return AES.new(key, AES.MODE_CTR, nonce=b"",
+                   initial_value=int.from_bytes(iv, "big")).encrypt(data)
+
+
+def chunk_mac(nonce8: bytes, key: bytes, plain: bytes) -> bytes:
+    """One chunk's CBC-MAC over the PLAINTEXT; IV = nonce‖nonce (16 bytes)."""
+    mac = bytearray(nonce8 + nonce8)
+    padded = plain + b"\0" * ((-len(plain)) % 16)
+    for i in range(0, len(padded), 16):
+        block = bytes(a ^ b for a, b in zip(mac, padded[i:i + 16]))
+        mac = bytearray(aes_ecb_encrypt(block, key))
+    return bytes(mac)
+
+
+def meta_mac_fold(macs: List[bytes], key: bytes) -> bytes:
+    """meta_mac = fold: XOR each chunk mac in, then one AES block after each."""
+    mm = bytearray(16)
+    for m in macs:
+        for i in range(16):
+            mm[i] ^= m[i]
+        mm = bytearray(aes_ecb_encrypt(bytes(mm), key))
+    return bytes(mm)
+
+
+def _dw(b: bytes, i: int) -> int:
+    return struct.unpack(">I", b[i * 4:i * 4 + 4])[0]
+
+
+def _pack_dw(v: int) -> bytes:
+    return struct.pack(">I", v & 0xFFFFFFFF)
+
+
+def pack_node_key(aes_key: bytes, nonce8: bytes, meta_mac: bytes) -> bytes:
+    """The 32-byte file node key: key^nonce, key^meta_mac parts, then raw parts."""
+    return b"".join([
+        _pack_dw(_dw(aes_key, 0) ^ _dw(nonce8, 0)),
+        _pack_dw(_dw(aes_key, 1) ^ _dw(nonce8, 1)),
+        _pack_dw(_dw(aes_key, 2) ^ _dw(meta_mac, 0) ^ _dw(meta_mac, 1)),
+        _pack_dw(_dw(aes_key, 3) ^ _dw(meta_mac, 2) ^ _dw(meta_mac, 3)),
+        nonce8[0:8],
+        _pack_dw(_dw(meta_mac, 0) ^ _dw(meta_mac, 1)),
+        _pack_dw(_dw(meta_mac, 2) ^ _dw(meta_mac, 3)),
+    ])
+
+
+def unpack_node_key(node_key: bytes) -> Tuple[bytes, bytes, bytes]:
+    """Inverse of pack_node_key: (aes_key, nonce8, meta_mac_xor8)."""
+    aes_key = b"".join([
+        _pack_dw(_dw(node_key, 0) ^ _dw(node_key, 4)),
+        _pack_dw(_dw(node_key, 1) ^ _dw(node_key, 5)),
+        _pack_dw(_dw(node_key, 2) ^ _dw(node_key, 6)),
+        _pack_dw(_dw(node_key, 3) ^ _dw(node_key, 7)),
+    ])
+    nonce = node_key[16:24]
+    meta_mac_xor = b"".join([_pack_dw(_dw(node_key, 6)), _pack_dw(_dw(node_key, 7))])
+    return aes_key, nonce, meta_mac_xor
+
+
+def encode_node_attrs(name: str) -> str:
+    """Attributes are «MEGA» + compact JSON {"n": name}."""
+    return "MEGA" + json.dumps({"n": name}, ensure_ascii=False, separators=(",", ":"))
+
+
+def aes128_cbc_encrypt_str(text: str, key: bytes) -> bytes:
+    """CBC (zero IV) over the string zero-padded past a NUL to a 16-byte block."""
+    raw = text.encode("utf-8")
+    aligned = len(raw) + 1
+    if aligned % 16:
+        aligned += 16 - aligned % 16
+    data = raw + b"\0" * (aligned - len(raw))
+    return AES.new(key, AES.MODE_CBC, iv=b"\0" * 16).encrypt(data)
+
+
+def upload_checksum(cipher: bytes) -> str:
+    """The ?c= checksum: 12 bytes, each XOR-rotated into place, base64url."""
+    crc = bytearray(12)
+    for i, b in enumerate(cipher):
+        crc[i % 12] ^= b
+    return b64url_encode(bytes(crc))
