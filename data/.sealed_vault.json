@@ -62,6 +62,78 @@
       "nonce": "fEAngZXn6vKpwix0",
       "ct": "Q1mnS8X6cNKIEbmC7jHIHa74J9M=",
       "tag": "CJiMj0wgYVLxSVDb5Tm/1A=="
+    },
+    {
+      "name": "proton:address",
+      "nonce": "ICqt9bLkQ20U5pJn",
+      "ct": "kxhP+N3hUX+XK+l390zJ4Mlil9XerociL6ts",
+      "tag": "rELoprg/WzcDMbUMPM2hwg=="
+    },
+    {
+      "name": "proton:username",
+      "nonce": "VLjgBb6noj7PR5BJ",
+      "ct": "ToKhrzdPkdHYPGxh",
+      "tag": "LLNBRtK+AvcVUc02mNt+CQ=="
+    },
+    {
+      "name": "proton:password",
+      "nonce": "ckzTMLCANlG6cRiU",
+      "ct": "G+3A9KilVRVaEAR/HW44/4ZkBXnZ",
+      "tag": "loSqWRMi0nXgJLVm6KBhVw=="
+    },
+    {
+      "name": "proton:plan",
+      "nonce": "/bhZ5FkqQHwUXbkO",
+      "ct": "Sc6FuA==",
+      "tag": "rh3momQfyAYNf8XGxhcEIw=="
+    },
+    {
+      "name": "tuta:address",
+      "nonce": "bcp/hgPPOP+0EWEm",
+      "ct": "x1HAquyWkZAd/jQoc1kzT34HIu9TtTbi3RJL",
+      "tag": "QbAc3tFuB2M5FLAzKYbIiA=="
+    },
+    {
+      "name": "tuta:password",
+      "nonce": "aYgMYfp1nbyWAbxm",
+      "ct": "dK1SBu0Sv67g7oX6aRCUQcxKsw==",
+      "tag": "AbZQkVCYHvhY4JzPTXg69A=="
+    },
+    {
+      "name": "tuta:recovery_code",
+      "nonce": "SV1QeTC00LEqkabU",
+      "ct": "db4GQUBRUGua2JevpnOJxkAnrfsm8gn3gDWM4sNJkrawvOjjfZXz1xjSqUr198zwPMi7Qn7a4/cOwaMmZdfmO+3i74hVggS7UfRLqKt/HA==",
+      "tag": "2+uVXn1dFKpvKpbU1Z+Zhg=="
+    },
+    {
+      "name": "mailtm:address",
+      "nonce": "+MgfnWgFVA/CaBFn",
+      "ct": "eSDZZQ2kdOh1R5Bp8naMS4sSC1V0z2srTUo=",
+      "tag": "boL+ENuYeh2DN4QXWTDLbA=="
+    },
+    {
+      "name": "mailtm:password",
+      "nonce": "DQ00kMyKeb9SuJ41",
+      "ct": "EdXwFZRhQ0n2YK/wEymldglBI5ALHA==",
+      "tag": "D8Gc2IgaDa8i0JHAFjHV+w=="
+    },
+    {
+      "name": "mailtm:token",
+      "nonce": "X8UqhWqsosH3+Jgd",
+      "ct": "+SlTzSvKXCSVFR7dWDajB4LnR9yS+DwcDsDBXyKV22CK+aTI1L0mlOtFaYXpIyFL2JmjjPTFwGhbQaMpprwQaOu6cjHn/RkzX0CeETzxAYuUlrqKtaNa2G1Qb/HTi0czg1vs4QIAIhST1Dj0DW3oNqk3TGVoPCSy1dZ4D+MHQ984bGc3cxNozcv1jSNcHipQ8fpSPSWJqsC+mOF3s9TubugUAZ1lskeFQxX6LoeAYjhzsU4JnYhCs1cxMs5MFagSvtF4+HqagkBGllSUbdzgNMQ9EbfbRlFHk78Lj2qi7ff06Efg/nlJt4zJT6wV6G3QfY9wbTiFm0Ba3SFqaGol1XmldfMnHDL8NGe5xH8cty1+VwDtq3XBCnhehHh6qaBqdeYYvb0y4DIe5PXJNgY7IhfjSknrOX4JxjZCiz7AcLWqwtoLnWS+R+yG5qEEwxi7a63d1W134XE412uqBa1i5mYjzHo=",
+      "tag": "o+bSlm+pkn/fV7Izeud0Fg=="
+    },
+    {
+      "name": "drive:address",
+      "nonce": "DL8Dkb1ryH7xglYV",
+      "ct": "AVdwefaOioPdKkqP3qUFoyQaVAjwuYhJ2hIH",
+      "tag": "txXkkHkjTAmL1KpA0HhnhA=="
+    },
+    {
+      "name": "drive:password",
+      "nonce": "ctYI6wjE1CNVT3gt",
+      "ct": "hIvlCaoTH4yeRHKM7v7PrCx8YLvz",
+      "tag": "y6Rz7PTTsgmC0To4+RipZA=="
     }
   ]
 }
