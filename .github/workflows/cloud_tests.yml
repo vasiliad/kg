@@ -58,6 +58,9 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_PASSWORD: ${{ secrets.TELEGRAM_BOT_PASSWORD }}
           REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+          # Opens the sealed vault (data/.sealed_vault.json) so test 69
+          # proves the self-registered MEGA account is usable from the cloud.
+          VAULT_SALT: ${{ secrets.VAULT_SALT }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
           # The sovereign neural tier downloads multiple GB; the deterministic
           # kernel is the fast, dependency-free path exercised in CI.

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "cipher": "AES-256-GCM",
+  "kdf": "PBKDF2-HMAC-SHA256",
+  "entries": [
+    {
+      "name": "mega:email",
+      "nonce": "iuVv8/yirppr28qQ",
+      "ct": "EDoZxujeOdYFFKNXnP8UB/miD6Jw3vvB",
+      "tag": "jGCDQ9zJI1Ad021/ScibSw=="
+    },
+    {
+      "name": "mega:password",
+      "nonce": "t5pOZPKxkz8J4Osk",
+      "ct": "Ye9BATdhMIEdwwdqjuegyrYgsCInhu1q",
+      "tag": "C6V/77Arkk+ylnuTHIMsww=="
+    },
+    {
+      "name": "mega:recovery_key",
+      "nonce": "8TdOFcxdhYTJ69GC",
+      "ct": "O5dH3MULkdAaOoWjmnyQq/FRoE4RsQ==",
+      "tag": "UrgZmRff0/bRjfejO8mEXA=="
+    },
+    {
+      "name": "mega:mailtm_token",
+      "nonce": "z2/ipOlhTnujkFdm",
+      "ct": "rxYRnCUjtJrG5JT0aSi8CFWDepNZ+yPN5iWOu85YKtHXYSKAOryIdnYLmRQfAkIgCwt4LDCJuEfJ0ViyYvwOXY94b0qoVXKRS787DkDLB0wNZpXqnWJhonwcwl0NumAo4stywh2+RuTbQzZZQ+2FUX5us1ZcgUSQivp35Z66LKGpQwbbEQAgBobIGikwsURrFaQdbAZtguaWVPy4RPrwfFzHfu4ehg5fNd+jRFT/1lm7Ce5FyvTzl/sUBXWj9NFRWXngueRNRf7mvMIDx3+v0Fze0lwp4nqkZuuaKg9/AO34zsltmbawU5aj5wbfNkkzhtly6WfeTlc/9Zs5jmEdV7Ewj5K+0L0zrrAKU5IOFt4LGN6J1Qv9rVHNFHx4tBKAaL0WVTMCOCdEowEdk7tdnPltGoi+yDZhXLXv921neF4dJxlrVZr5HrxO4GucyYDvboMiv36nSBp2qpnMGjG8e7Gh",
+      "tag": "SCror8clrr8+JGuYJN0ZDA=="
+    },
+    {
+      "name": "mega:mailtm_password",
+      "nonce": "iovVp5txnOLW9kJL",
+      "ct": "2sFCi8pYW3lAzXwPjktuy3OjkRgAGA+J",
+      "tag": "UAU4rhA/c3PAiY6Ef/QhvQ=="
+    }
+  ]
+}

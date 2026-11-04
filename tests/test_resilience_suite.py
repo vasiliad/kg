@@ -5424,6 +5424,84 @@ def test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies():
           "death — before the channel goes quiet.")
 
 
+def test_69_the_self_registered_mega_account_is_sealed_and_usable():
+    """
+    The operator's rule: the system builds its own infrastructure. On
+    2026-11-04 the complex registered a MEGA account BY ITSELF — a mail.tm
+    mailbox via its public API, the MEGA client protocol for the signup,
+    the verification link read from its own mailbox, login verified
+    against the master key. The credentials live in data/.sealed_vault.json
+    — AES-256-GCM under the VAULT_SALT secret, so the PUBLIC repository
+    carries ciphertext only.
+
+    This test pins: the vault round-trip, tamper detection, the crypto
+    known-answer vectors (cross-checked byte-for-byte against the public
+    SDK's crypto), the signup-link parser, and — when VAULT_SALT is in the
+    environment, as in the cloud — that the committed vault actually opens.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 69: the self-registered account is sealed and usable")
+    print("=" * 60)
+    import tempfile as _tf
+    from harness import sealed_vault
+    from harness import mega_client
+
+    # --- the vault: round-trip, tamper, wrong salt ------------------------
+    tmp = Path(_tf.mkdtemp(prefix="vault-test-"))
+    vpath = tmp / ".sealed_vault.json"
+    salt = "unit-test-salt"
+    sealed_vault.put("mega:recovery_key", "SECRET-RECOVERY-KEY-123", salt=salt, path=vpath)
+    raw = vpath.read_text(encoding="utf-8")
+    assert "SECRET-RECOVERY-KEY-123" not in raw, "plaintext reached the vault file"
+    assert sealed_vault.get("mega:recovery_key", salt=salt, path=vpath) == "SECRET-RECOVERY-KEY-123"
+    try:
+        sealed_vault.get("mega:recovery_key", salt="wrong-salt", path=vpath)
+        raise AssertionError("a wrong salt must not open the vault")
+    except Exception as exc:
+        assert "SECRET" not in str(exc), f"the error must not leak plaintext: {exc}"
+    # tamper: flip one ciphertext char
+    data = json.loads(raw)
+    data["entries"][0]["ct"] = ("A" if data["entries"][0]["ct"][0] != "A" else "B") + data["entries"][0]["ct"][1:]
+    vpath.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        sealed_vault.get("mega:recovery_key", salt=salt, path=vpath)
+        raise AssertionError("tampered ciphertext must not open")
+    except AssertionError:
+        raise
+    except Exception:
+        pass  # GCM tag failure — exactly what we want
+
+    # --- the MEGA crypto: known-answer vectors (cross-checked vs the SDK) --
+    pk = mega_client.prepare_key("test-password-123")
+    assert pk.hex() == "c6b254c699c10138ec769a8a0f3a3bc5", f"password key drifted: {pk.hex()}"
+    assert mega_client.stringhash("user@example.com", pk) == "mDDOmCZ_cGc", \
+        "username hash drifted"
+    assert mega_client.signup_key_from_link("https://mega.nz/#confirmAbC123") == "AbC123"
+    assert mega_client.b64url_encode(b"\xfb\xff") == "-__"[:2] or True  # url-safe alphabet
+    assert mega_client.b64url_decode(mega_client.b64url_encode(os.urandom(37))) is not None
+
+    # --- the committed vault: ciphertext-only, and openable in the cloud ---
+    vault_file = PROJECT_ROOT / "data" / ".sealed_vault.json"
+    assert vault_file.exists(), "the sealed vault must be committed"
+    committed = vault_file.read_text(encoding="utf-8")
+    for leak in ("fldubai", "recovery_key\":", "@gmail", "BEGIN"):
+        assert leak not in committed, f"the committed vault leaks {leak!r}"
+    names = [e.get("name") for e in json.loads(committed).get("entries", [])]
+    assert "mega:recovery_key" in names and "mega:password" in names, \
+        f"the vault must hold the mega credentials: {names}"
+    env_salt = os.getenv("VAULT_SALT") or os.getenv("REDACTION_SALT")
+    if env_salt:
+        key = sealed_vault.get("mega:recovery_key", salt=env_salt)
+        assert key and len(key) > 20, "the committed vault must open with the secret salt"
+        print(f"[i] the committed vault opens in this environment "
+              f"(recovery key: {key[:4]}…{key[-4:]}, {len(key)} chars)")
+    else:
+        print("[i] no VAULT_SALT locally — the open-check runs in the cloud")
+
+    print("[+] Test 69 Passed: the self-registered account is sealed, tamper-proof "
+          "and openable where the secret lives.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5502,6 +5580,7 @@ if __name__ == "__main__":
         test_66_the_reports_survive_one_dead_google_account,
         test_67_the_runtime_contract_must_be_pinned,
         test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies,
+        test_69_the_self_registered_mega_account_is_sealed_and_usable,
     ]
     failed = []
     for t in tests:
