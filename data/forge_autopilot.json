@@ -37,6 +37,7 @@
   },
   "patch_bytes": 0,
   "attempt_day": "2026-11-04",
-  "checked_at": "2026-11-04T04:20:45.884428+00:00",
-  "verdict_id": "20261104T042045Z"
+  "checked_at": "2026-11-04T12:02:59.839673+00:00",
+  "verdict_id": "20261104T042045Z",
+  "skipped_today": true
 }
