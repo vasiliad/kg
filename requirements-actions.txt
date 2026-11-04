@@ -13,3 +13,7 @@ pyyaml==6.0.3
 requests==2.34.2
 pydantic==2.14.2
 httpx==0.28.1
+# Crypto for the sealed vault (AES-GCM) and the MEGA client protocol.
+# Pinned to the version the self-provisioning run used (3.23.0); 4.x exists
+# but the vault blobs were sealed with 3.23 semantics — stay compatible.
+pycryptodome==3.23.0

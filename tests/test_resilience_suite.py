@@ -5329,6 +5329,8 @@ def test_67_the_runtime_contract_must_be_pinned():
         if "requirements-actions.txt" in wf.read_text(encoding="utf-8")
     )
     assert wired >= 9, f"the workflows must install from the contract ({wired} wired)"
+    assert "pycryptodome" in pins, \
+        "the vault + MEGA client need Crypto in the cloud — it must be in the contract"
 
     print(f"[+] Test 67 Passed: {len(pins)} dependencies pinned, {wired} workflows "
           f"install from the contract — the runtime changes only by commit.")
