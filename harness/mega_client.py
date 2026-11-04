@@ -42,19 +42,20 @@ MEGA_API = "https://g.api.mega.co.nz/cs"
 UA = {"User-Agent": "kg-autonomous-complex/1.0 (documented MEGA client protocol)"}
 
 
+class MegaCryptoError(RuntimeError):
+    """
+    A node could not be READ.
+
+    «I cannot read it» and «it is not there» are different facts. The
+    client used to speak them with the same word (None), and the archive
+    paid for it: a node whose name could not be decrypted looked exactly
+    like a node with a different name, so the complex created a SECOND
+    copy of the day's folder instead of reusing the first one
+    (measured 2026-11-04). Only one of those two answers may be silent.
+    """
+
+
 # --- MEGA crypto primitives (ported 1:1 from the public protocol) ----------
-
-def str_to_a32(b: bytes) -> Tuple[int, ...]:
-    if isinstance(b, str):
-        b = b.encode("latin-1")
-    if len(b) % 4:
-        b += b"\0" * (4 - len(b) % 4)
-    return struct.unpack(">%dI" % (len(b) // 4), b)
-
-
-def a32_to_str(a) -> bytes:
-    return struct.pack(">%dI" % len(a), *a)
-
 
 def aes_ecb_encrypt(data: bytes, key: bytes) -> bytes:
     return AES.new(key, AES.MODE_ECB).encrypt(data)
@@ -86,16 +87,19 @@ def prepare_key(password: str) -> bytes:
 
 
 def stringhash(text: str, key: bytes) -> str:
-    """The 16384-round username hash; result is 8 bytes, base64url."""
-    s32 = str_to_a32(text)
-    h = bytearray(16)
-    for i, v in enumerate(s32):
-        h[(i * 4) % 16] ^= (v >> 24) & 0xFF
-        h[(i * 4 + 1) % 16] ^= (v >> 16) & 0xFF
-        h[(i * 4 + 2) % 16] ^= (v >> 8) & 0xFF
-        h[(i * 4 + 3) % 16] ^= v & 0xFF
-    # The C code XORs byte-wise over the raw string; the a32 route above is
-    # equivalent for latin-1-safe strings. Keep the reference form simple:
+    """
+    The 16384-round username hash; result is 8 bytes, base64url.
+
+    ONE implementation, and it is the live one: the bytes of the string are
+    folded into a 16-byte block (byte i -> block[i % 16]) and the block is
+    AES-encrypted 16384 times with the password key. The protocol's a32
+    word-wise spelling folded into the SAME positions and then threw the
+    result away — the code carried two routes, one of them dead, and a
+    comment claiming they were «equivalent» that pointed at the dead one.
+    A reader could not tell which route the server had actually accepted,
+    and the known-answer vectors (tests) are what pinned it: the hash below
+    is unchanged, byte for byte, since the account was registered with it.
+    """
     hb = bytearray(16)
     raw = text.encode("latin-1")
     for i, ch in enumerate(raw):
@@ -113,12 +117,6 @@ def mpi(n: int) -> bytes:
 def mpi_to_int(data: bytes) -> int:
     """The inverse of mpi(): two header bytes (bit length) + big-endian body."""
     return int.from_bytes(data[2:], "big")
-
-
-def encrypt_key_a32(a, key: bytes) -> bytes:
-    """Encrypt a 4-int (16-byte) key block-wise with the master key (ECB)."""
-    data = a32_to_str(a)
-    return b"".join(aes_ecb_encrypt(data[i:i + 16], key) for i in range(0, len(data), 16))
 
 
 # --- the API ---------------------------------------------------------------
@@ -294,11 +292,21 @@ class MegaClient:
         raise RuntimeError("no root node (t=2) in the file list — not logged in?")
 
     def decrypt_attrs(self, node: Dict[str, Any]) -> Optional[str]:
-        """Decrypt a node's «MEGA{...}» attributes with its own node key."""
+        """
+        Decrypt a node's «MEGA{...}» attributes with its own node key.
+
+        None means «this node carries no attributes at all» — there is
+        nothing to read. Every FAILURE to read raises MegaCryptoError: it
+        used to answer None as well, and that was the root cause of the
+        duplicate folder (see MegaCryptoError). The caller must be able to
+        tell «there is no such folder» from «I could not look».
+        """
         k = node.get("k")
         a = node.get("a")
-        if not (k and a and self.master_key):
+        if not (k and a):
             return None
+        if not self.master_key:
+            raise MegaCryptoError("no master key — the node names cannot be read")
         try:
             # API v2 (measured 2026-11-04): the key arrives scoped to its
             # owner — «<user-handle>:<key>». The handle is not part of the
@@ -315,10 +323,16 @@ class MegaClient:
             plain = cipher.decrypt(b64url_decode(a))
             text = plain.decode("utf-8", "replace").rstrip("\x00")
             if not text.startswith("MEGA"):
-                return None
-            return json.loads(text[4:]).get("n")
-        except Exception:
-            return None
+                raise MegaCryptoError("the decrypted attributes are not a MEGA block")
+            payload = json.loads(text[4:])
+        except MegaCryptoError:
+            raise
+        except Exception as exc:
+            raise MegaCryptoError(f"could not decrypt a node's attributes: {exc}") from exc
+        name = payload.get("n")
+        if not name:
+            raise MegaCryptoError("the node carries attributes without a name")
+        return name
 
     def find_child(self, parent_handle: str, name: str) -> Optional[str]:
         """
@@ -326,13 +340,33 @@ class MegaClient:
         bear the name (measured 2026-11-04: a run that could not decrypt the
         names once created a second copy), the NEWEST wins — the older one is
         a leftover, and the archive must keep using one branch.
+
+        A child whose name cannot be read is NOT skipped. Skipping it means
+        answering «there is no child called <name>» while an unreadable
+        child may be hiding under exactly that name — and the caller
+        (mkdir) would then create a duplicate. So the answer becomes an
+        error: the complex refuses to write into a tree it cannot read.
         """
-        matches = []
+        matches: List[Dict[str, Any]] = []
+        unreadable: List[str] = []
         for node in self.list_files():
             if not (isinstance(node, dict) and node.get("p") == parent_handle):
                 continue
-            if self.decrypt_attrs(node) == name and node.get("h"):
+            try:
+                child_name = self.decrypt_attrs(node)
+            except MegaCryptoError as exc:
+                unreadable.append(f"{node.get('h')}: {exc}")
+                continue
+            if child_name is None:
+                unreadable.append(f"{node.get('h')}: the node carries no attributes")
+                continue
+            if child_name == name and node.get("h"):
                 matches.append(node)
+        if unreadable:
+            raise MegaCryptoError(
+                f"{len(unreadable)} child(ren) of {parent_handle} could not be read — "
+                f"refusing to guess whether «{name}» already exists: "
+                + "; ".join(unreadable[:3]))
         if not matches:
             return None
         matches.sort(key=lambda n: int(n.get("ts") or 0))
@@ -409,13 +443,34 @@ class MegaClient:
                 "chunks": len(macs), "parent": parent_handle}
 
     def find_children(self, parent_handle: str, name: str) -> List[str]:
-        """Every child called `name` (a day may hold an older and a newer copy)."""
+        """
+        Every child called `name` (a day may hold an older and a newer copy).
+
+        The same rule as find_child: a child that cannot be read makes the
+        whole answer unreliable, so it is an error — the caller cleans up
+        duplicates by name, and a cleanup that cannot see a name must not
+        delete the wrong node (nor claim it did).
+        """
         found: List[str] = []
+        unreadable: List[str] = []
         for node in self.list_files():
             if not (isinstance(node, dict) and node.get("p") == parent_handle):
                 continue
-            if node.get("h") and self.decrypt_attrs(node) == name:
+            try:
+                child_name = self.decrypt_attrs(node)
+            except MegaCryptoError as exc:
+                unreadable.append(f"{node.get('h')}: {exc}")
+                continue
+            if child_name is None:
+                unreadable.append(f"{node.get('h')}: the node carries no attributes")
+                continue
+            if node.get("h") and child_name == name:
                 found.append(node["h"])
+        if unreadable:
+            raise MegaCryptoError(
+                f"{len(unreadable)} child(ren) of {parent_handle} could not be read — "
+                f"refusing to guess which of them is called «{name}»: "
+                + "; ".join(unreadable[:3]))
         return found
 
     def delete_node(self, handle: str) -> bool:

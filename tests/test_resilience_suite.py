@@ -6248,6 +6248,137 @@ def test_74_the_cloud_reaches_every_tier_and_the_state_survives_the_runner():
           "credential heartbeat survives, and the setup document matches the code.")
 
 
+def test_75_the_cloud_client_never_guesses_what_it_cannot_read():
+    """
+    Measured 2026-11-04: the own-cloud archive once created a SECOND copy of
+    the day's folder. The cause was a client that could not decrypt a node's
+    name and answered «there is no folder with that name» — the same word it
+    used for a node that really had a different name. The archive trusted the
+    answer and wrote a duplicate.
+
+    Two contracts, both proved here:
+    (a) the username hash has ONE implementation — the dead a32 route and its
+        false «equivalent» comment are gone, and the known-answer vectors are
+        unchanged (the account was registered with exactly these bytes);
+    (b) a node that cannot be read is an ERROR, and mkdir refuses to create
+        anything while a sibling may be hiding under the name it wants.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 75: the cloud client never guesses what it cannot read")
+    print("=" * 60)
+    from harness import mega_client as mc
+
+    # --- (a) the hash: one route, the same bytes --------------------------
+    pk = mc.prepare_key("test-password-123")
+    assert pk.hex() == "c6b254c699c10138ec769a8a0f3a3bc5", f"password key drifted: {pk.hex()}"
+    assert mc.stringhash("user@example.com", pk) == "mDDOmCZ_cGc", "username hash drifted"
+    assert mc.stringhash("a@b.co", pk) == "c5b0VTRFkaU", "username hash drifted"
+    assert mc.stringhash("keeper-2026@autonomous-complex.invalid", pk) == "5QkeLaxwwg8", \
+        "username hash drifted"
+    # The dead route and its helpers are gone for good: two spellings of one
+    # hash is how the next reader «fixes» the wrong one.
+    for dead in ("str_to_a32", "a32_to_str", "encrypt_key_a32"):
+        assert not hasattr(mc, dead), f"the dead a32 route ({dead}) must not come back"
+
+    # --- (b) an unreadable node is an error, not an absence ----------------
+    master = os.urandom(16)
+    folder_key = os.urandom(16)
+    readable = {
+        "h": "GOODH", "p": "ROOTNODE", "t": 1, "ts": 10,
+        "k": "UHANDLE:" + mc.b64url_encode(mc.aes_ecb_encrypt(folder_key, master)),
+        "a": mc.b64url_encode(mc.aes128_cbc_encrypt_str(
+            mc.encode_node_attrs("kg-archive"), folder_key)),
+    }
+    # The key is encrypted under a DIFFERENT master key: the name cannot be read.
+    unreadable = dict(readable, h="BADH", ts=11,
+                      k="UHANDLE:" + mc.b64url_encode(
+                          mc.aes_ecb_encrypt(folder_key, os.urandom(16))))
+
+    class _TreeClient(mc.MegaClient):
+        def __init__(self, nodes):
+            super().__init__()
+            self.master_key = master
+            self.nodes = nodes
+            self.calls = []
+
+        def api(self, payload):
+            self.calls.append(payload)
+            if payload.get("a") == "f":
+                return {"f": self.nodes}
+            if payload.get("a") == "p":
+                return {"f": [{"h": "CREATED", "t": 1}]}
+            return {}
+
+    good = _TreeClient([readable])
+    assert good.decrypt_attrs(readable) == "kg-archive", "a readable node must still read"
+    assert good.find_child("ROOTNODE", "kg-archive") == "GOODH", "the existing folder is reused"
+    assert good.mkdir("ROOTNODE", "kg-archive") == "GOODH", "mkdir must reuse the folder"
+    assert not [c for c in good.calls if c.get("a") == "p"], \
+        "a folder that exists must not be created again"
+
+    # A node with NO attributes carries no name to compare — that is not an
+    # absence either.
+    empty = _TreeClient([dict(readable, h="EMPTYH", a="", k="")])
+    assert empty.decrypt_attrs(dict(readable, h="EMPTYH", a="", k="")) is None, \
+        "a node without attributes has no name — and that is a fact, not a failure"
+    try:
+        empty.find_child("ROOTNODE", "kg-archive")
+        raise AssertionError("a child without attributes must not be reported as «absent»")
+    except mc.MegaCryptoError:
+        pass
+
+    broken = _TreeClient([readable, unreadable])
+    try:
+        broken.decrypt_attrs(unreadable)
+        raise AssertionError("an undecryptable node must raise, not answer None")
+    except mc.MegaCryptoError:
+        pass
+    try:
+        broken.find_child("ROOTNODE", "kg-archive")
+        raise AssertionError("find_child must refuse to answer while a sibling is unreadable")
+    except mc.MegaCryptoError:
+        pass
+    try:
+        broken.mkdir("ROOTNODE", "kg-archive")
+        raise AssertionError("mkdir must not create a folder it cannot prove is absent")
+    except mc.MegaCryptoError:
+        pass
+    assert not [c for c in broken.calls if c.get("a") == "p"], \
+        f"no folder may be created while a sibling is unreadable: {broken.calls}"
+
+    # --- the cycle must turn that refusal into a RED run -------------------
+    from harness import mega_archive as ma
+
+    class _RefusingClient(_TreeClient):
+        def __init__(self):
+            super().__init__([readable, unreadable])
+
+        def login(self, email, password):
+            return {"sid": "FAKE", "master_key_ok": True}
+
+        def root_handle(self):
+            return "ROOTNODE"
+
+    saved_load = ma.load_credentials
+    saved_client = ma.MegaClient
+    ma.load_credentials = lambda salt=None, path=None: {
+        "email": "keeper@example.invalid", "password": "pw"}
+    ma.MegaClient = _RefusingClient
+    try:
+        report = ma.archive_once()
+    finally:
+        ma.load_credentials = saved_load
+        ma.MegaClient = saved_client
+    assert report["status"] == "failed", \
+        f"an unreadable cloud must not be a green cycle: {report.get('status')}"
+    assert any("MegaCryptoError" in err for err in report["errors"]), \
+        f"the refusal must be in the report: {report.get('errors')}"
+    assert not report.get("uploaded"), "nothing may be claimed as archived"
+
+    print("[+] Test 75 Passed: the cloud client reads or it fails loudly — "
+          "no duplicate folders, no silent guesses, no green run over a blind spot.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -6332,6 +6463,7 @@ if __name__ == "__main__":
         test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies,
         test_73_the_mail_wire_recovers_and_an_unkept_promise_ends_the_run_red,
         test_74_the_cloud_reaches_every_tier_and_the_state_survives_the_runner,
+        test_75_the_cloud_client_never_guesses_what_it_cannot_read,
     ]
     failed = []
     for t in tests:
