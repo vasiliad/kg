@@ -7,6 +7,15 @@
 # authorised chat, the conversation log and the memory vault survive the
 # runner filesystem being wiped between jobs.
 #
+# THE DAEMON REPORTS THE BOT'S DEATH (audited 2026-11-04):
+#   the bot's exit status used to be thrown away, so a bot that died on
+#   startup — a revoked token, a missing secret, an import error — left a
+#   GREEN run behind. Every window "succeeded" while the bot was dead, and
+#   the chain kept dispatching dead windows. The daemon now waits for the
+#   bot's real exit status and fails the window when the bot died on its own.
+#   A window that merely reached its time limit is a NORMAL end: the bot is
+#   still alive then, and the daemon stops it deliberately.
+#
 # Env:
 #   DURATION_MINUTES  how long the bot stays alive (default 25)
 #   COMMIT_INTERVAL   seconds between state syncs (default 180)
@@ -61,7 +70,13 @@ sync_state() {
   fi
 }
 
+# The bot's real exit status (bash keeps it until it is waited for).
+# NOTE: `wait` must NOT be called inside a command substitution — that would
+# run it in a subshell, where the bot is not a child and `wait` would answer
+# 127 instead of the bot's real status.
 BOT_PID=""
+BOT_EXIT=0
+BOT_DIED=0
 cleanup() {
   echo "[daemon] shutdown requested — stopping bot..."
   if [ -n "$BOT_PID" ] && kill -0 "$BOT_PID" 2>/dev/null; then
@@ -83,12 +98,45 @@ echo "[daemon] Starting Telegram bot for ${DURATION_MINUTES} minutes..."
 python -u harness/telegram_bot.py &
 BOT_PID=$!
 
-ELAPSED=0
-while kill -0 "$BOT_PID" 2>/dev/null && [ "$ELAPSED" -lt "$((DURATION_MINUTES * 60))" ]; do
-  sleep "$COMMIT_INTERVAL"
-  ELAPSED=$((ELAPSED + COMMIT_INTERVAL))
-  sync_state
-  echo "[daemon] heartbeat: ${ELAPSED}s / $((DURATION_MINUTES * 60))s"
-done
+# The first liveness probe is short: a bot that cannot even start (a revoked
+# token, a missing secret, an import error) must be reported in seconds, not
+# after the whole commit interval.
+sleep 5
+if ! kill -0 "$BOT_PID" 2>/dev/null; then
+  wait "$BOT_PID" 2>/dev/null
+  BOT_EXIT=$?
+  BOT_DIED=1
+  echo "[daemon] ERROR: the bot died immediately (exit status ${BOT_EXIT})."
+else
+  ELAPSED=0
+  while kill -0 "$BOT_PID" 2>/dev/null && [ "$ELAPSED" -lt "$((DURATION_MINUTES * 60))" ]; do
+    sleep "$COMMIT_INTERVAL"
+    ELAPSED=$((ELAPSED + COMMIT_INTERVAL))
+    sync_state
+    echo "[daemon] heartbeat: ${ELAPSED}s / $((DURATION_MINUTES * 60))s"
+  done
 
-echo "[daemon] Window elapsed — cycling bot."
+  if kill -0 "$BOT_PID" 2>/dev/null; then
+    # The window reached its limit with the bot still running: this is the
+    # NORMAL end. The bot is stopped deliberately by the cleanup trap.
+    echo "[daemon] Window elapsed — cycling bot."
+  else
+    # The bot is gone before the window ended: it died on its own.
+    wait "$BOT_PID" 2>/dev/null
+    BOT_EXIT=$?
+    BOT_DIED=1
+    echo "[daemon] ERROR: the bot exited on its own (status ${BOT_EXIT}) before the window ended."
+  fi
+fi
+
+if [ "$BOT_DIED" -eq 1 ]; then
+  # A clean exit code still means a dead bot — the window promised a living
+  # bot and did not deliver one. Never let it look green.
+  if [ "$BOT_EXIT" -eq 0 ]; then
+    BOT_EXIT=1
+  fi
+  echo "[daemon] the window is NOT healthy — failing the run."
+  exit "$BOT_EXIT"
+fi
+
+exit 0

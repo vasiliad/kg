@@ -5789,6 +5789,178 @@ def test_71_the_own_cloud_copy_is_wired_and_the_upload_is_correct():
           "wire format is correct and the credentials stay in the vault.")
 
 
+def test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies():
+    """
+    A dead bot that reports GREEN is the worst failure this complex can have:
+    everything looks fine and nothing is alive.
+
+    Audited 2026-11-04:
+      * scripts/revive_bot.sh printed "WARNING" and exited 0 after three
+        failed dispatches — the watchdog run went green with the bot dead;
+      * it also read an unanswered state query as "no live window" and
+        dispatched blindly, which can start a SECOND chain next to a live one;
+      * scripts/run_telegram_daemon.sh threw the bot's exit status away, so a
+        bot that died on startup left a green window behind;
+      * telegram_bot.yml's chain step exited 0 after three failed hand-overs.
+
+    This test EXECUTES the scripts against a fake `gh` and a dying bot and
+    checks what they ANSWER, not what they say.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 72: the watchdog and the daemon fail loudly when the bot dies")
+    print("=" * 60)
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    revive = PROJECT_ROOT / "scripts" / "revive_bot.sh"
+    daemon = PROJECT_ROOT / "scripts" / "run_telegram_daemon.sh"
+    bot_wf = PROJECT_ROOT / ".github" / "workflows" / "telegram_bot.yml"
+
+    def _exec(path: Path, text: str) -> Path:
+        path.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            os.chmod(path, 0o755)
+        except OSError:
+            pass
+        return path
+
+    bash = shutil.which("bash")
+    bash_ok = False
+    if bash:
+        try:
+            probe = subprocess.run([bash, "-c", "echo kg-ok"], capture_output=True,
+                                   text=True, timeout=30)
+            bash_ok = probe.returncode == 0 and "kg-ok" in probe.stdout
+        except Exception:
+            bash_ok = False
+
+    tmp = Path(tempfile.mkdtemp(prefix="fail-loud-test-"))
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- the fake GitHub CLI ------------------------------------------------
+    _exec(bin_dir / "gh", (
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"api\" ]; then\n"
+        "  if [ -n \"$FAKE_API_EXIT\" ] && [ \"$FAKE_API_EXIT\" != \"0\" ]; then\n"
+        "    exit \"$FAKE_API_EXIT\"\n"
+        "  fi\n"
+        "  case \"$2\" in\n"
+        "    *status=in_progress*) echo \"${FAKE_ACTIVE:-0}\" ;;\n"
+        "    *status=queued*) echo \"${FAKE_QUEUED:-0}\" ;;\n"
+        "    *) echo 0 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1\" = \"workflow\" ]; then\n"
+        "  echo \"workflow $*\" >> \"$FAKE_LOG\"\n"
+        "  exit \"${FAKE_DISPATCH_EXIT:-0}\"\n"
+        "fi\n"
+        "exit 0\n"
+    ))
+    # The retry sleeps are real seconds; the self-test must not wait them out.
+    _exec(bin_dir / "sleep", "#!/bin/sh\nexit 0\n")
+
+    base_env = dict(os.environ)
+    base_env["PATH"] = f"{bin_dir}{os.pathsep}{base_env.get('PATH', '')}"
+
+    def _run_revive(log_name, env_extra, args=None):
+        env = dict(base_env)
+        env["FAKE_LOG"] = str(tmp / log_name)
+        env.update(env_extra)
+        return subprocess.run(
+            [bash, str(revive)] + (args if args is not None
+                                   else ["owner/repo", "telegram_bot.yml", "50"]),
+            capture_output=True, text=True, timeout=180, env=env)
+
+    def _log_lines(name):
+        path = tmp / name
+        if not path.exists():
+            return []
+        return [ln for ln in path.read_text(encoding="utf-8").splitlines()
+                if ln.strip()]
+
+    if bash_ok:
+        # 1. the dispatch fails three times -> the run must be RED
+        result = _run_revive("gh1.log", {"FAKE_ACTIVE": "0", "FAKE_QUEUED": "0",
+                                         "FAKE_DISPATCH_EXIT": "1"})
+        assert result.returncode != 0, (
+            "a bot that could not be revived must NOT leave a green run: "
+            f"exit={result.returncode}\n{result.stdout}\n{result.stderr}")
+        attempts = _log_lines("gh1.log")
+        assert len(attempts) == 3, f"the reviver must try three times: {attempts}"
+
+        # 2. the state query fails -> NO blind dispatch
+        result = _run_revive("gh2.log", {"FAKE_API_EXIT": "1"})
+        assert result.returncode != 0, \
+            "a reviver that cannot see the chain must not act — and must say so"
+        assert _log_lines("gh2.log") == [], (
+            "a blind dispatch can start a SECOND chain next to a live one: "
+            f"{_log_lines('gh2.log')}")
+
+        # 3. the bot is alive -> green, and nothing is dispatched
+        result = _run_revive("gh3.log", {"FAKE_ACTIVE": "1"})
+        assert result.returncode == 0, \
+            f"a live bot must stay green: {result.stdout}\n{result.stderr}"
+        assert _log_lines("gh3.log") == [], "a live bot must not be revived twice"
+
+        # 4. no repository -> the reviver cannot work, so it must not be green
+        env = dict(base_env)
+        env.pop("GITHUB_REPOSITORY", None)
+        result = subprocess.run([bash, str(revive)], capture_output=True, text=True,
+                                timeout=120, env=env)
+        assert result.returncode != 0, "a reviver with no target must not report success"
+
+        # --- the daemon -----------------------------------------------------
+        # A bot that dies on startup must turn the window red.
+        work = tmp / "work"
+        (work / "harness").mkdir(parents=True, exist_ok=True)
+        (work / "harness" / "telegram_bot.py").write_text(
+            "import sys\nsys.exit(7)\n", encoding="utf-8", newline="\n")
+        home = tmp / "home"
+        home.mkdir(parents=True, exist_ok=True)
+        denv = dict(os.environ)
+        denv["HOME"] = str(home)
+        denv["GIT_CONFIG_GLOBAL"] = str(home / ".gitconfig")
+        denv["DURATION_MINUTES"] = "0"
+        denv["COMMIT_INTERVAL"] = "1"
+        denv.pop("GITHUB_WORKSPACE", None)
+        result = subprocess.run([bash, str(daemon)], cwd=str(work), capture_output=True,
+                                text=True, timeout=180, env=denv)
+        assert result.returncode != 0, (
+            "the bot died and the window still went green — the bot's exit "
+            f"status was thrown away\n{result.stdout}\n{result.stderr}")
+
+        # A bot that is still alive when the window ends is the NORMAL end.
+        (work / "harness" / "telegram_bot.py").write_text(
+            "import time\ntime.sleep(20)\n", encoding="utf-8", newline="\n")
+        result = subprocess.run([bash, str(daemon)], cwd=str(work), capture_output=True,
+                                text=True, timeout=180, env=denv)
+        assert result.returncode == 0, (
+            "a healthy window must stay green: "
+            f"exit={result.returncode}\n{result.stdout}\n{result.stderr}")
+    else:
+        print("[!] bash is not usable here — the behavioural part is skipped, "
+              "the shape below still holds.")
+
+    # --- the shape, wherever bash runs -------------------------------------
+    revive_text = revive.read_text(encoding="utf-8")
+    assert "the bot is DEAD and this run says so" in revive_text
+    assert "WARNING: could not dispatch a window" not in revive_text
+    daemon_text = daemon.read_text(encoding="utf-8")
+    assert "the window is NOT healthy" in daemon_text
+    assert 'wait "$BOT_PID"' in daemon_text, \
+        "the daemon must read the bot's real exit status"
+    wf_text = bot_wf.read_text(encoding="utf-8")
+    assert "the chain is BROKEN and this run says so" in wf_text
+    assert "WARNING: could not dispatch the next window" not in wf_text
+
+    print("[+] Test 72 Passed: a dead bot turns the run red — the watchdog, "
+          "the daemon and the chain all say it.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5870,6 +6042,7 @@ if __name__ == "__main__":
         test_69_the_self_registered_mega_account_is_sealed_and_usable,
         test_70_the_archive_copy_can_fan_out_to_several_mailboxes,
         test_71_the_own_cloud_copy_is_wired_and_the_upload_is_correct,
+        test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies,
     ]
     failed = []
     for t in tests:

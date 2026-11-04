@@ -129,4 +129,8 @@ jobs:
             echo "[chain] dispatch failed (attempt ${attempt}); retrying in 10s..."
             sleep 10
           done
-          echo "[chain] WARNING: could not dispatch the next window — the watchdog will revive the bot."
+          # The chain did NOT hand over. The watchdog tick will revive the bot,
+          # but a green run would say "all is well" while the chain is broken
+          # — the silent death this complex must not have. Say it out loud.
+          echo "[chain] ERROR: could not dispatch the next window — the chain is BROKEN and this run says so."
+          exit 1
