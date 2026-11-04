@@ -622,7 +622,15 @@ def test_17_bot_has_two_independent_recovery_paths():
     The bot now chains its own windows (no cron at all), and the chain is
     backed by TWO revive paths — a dense watchdog and the heartbeat whose
     cron demonstrably fires. Neither may start a second chain next to a live
-    one, and neither may fail its surrounding job.
+    one.
+
+    AND NEITHER MAY HIDE A DEAD BOT (audited 2026-11-04). The old rule was
+    «the reviver must never fail the job that hosts it», and it was wrong:
+    a reviver that dispatched three times, failed three times and then
+    exited 0 left the watchdog run GREEN while the bot was DEAD. A green
+    run says «all is well»; nothing said otherwise. The rule now is the
+    opposite one: the healthy path stays green, the failed revival turns
+    the run red — and the next tick still tries again.
     """
     print("=" * 60)
     print("Test 17: the bot has two independent recovery paths")
@@ -636,9 +644,14 @@ def test_17_bot_has_two_independent_recovery_paths():
     assert "the bot is alive" in script, "the reviver must stay silent while the bot lives"
     assert "gh workflow run" in script, "the reviver must be able to start a window"
     assert "attempt in 1 2 3" in script, "a failed dispatch must be retried"
-    assert script.rstrip().endswith("exit 0"), \
-        "the reviver must never fail the job that hosts it"
+    assert script.rstrip().endswith("exit 1"), \
+        "a bot that could not be revived must turn the run RED — the old «never fail " \
+        "the surrounding job» rule left a green watchdog run with a dead bot"
     assert "sleep 10" in script, "a retry must wait instead of hammering the API"
+    # ... and a reviver that cannot SEE the chain must not act at all: a
+    # blind dispatch can start a second chain next to a live one.
+    assert "refusing to dispatch blindly" in script, \
+        "a reviver that cannot see the chain must not touch it"
 
     watchdog = (PROJECT_ROOT / ".github" / "workflows" / "bot_watchdog.yml").read_text(encoding="utf-8")
     heartbeat = (PROJECT_ROOT / ".github" / "workflows" / "emergency_cron.yml").read_text(encoding="utf-8")
@@ -2929,13 +2942,17 @@ def test_48_failures_heal_instead_of_only_being_seen():
     import harness.daily_dispatcher as dd
 
     # --- ring 1: the in-run retry -------------------------------------
+    # The measured status of a broken wire is NETWORK_ERROR (a dropped
+    # connection) — the old test used «ERROR», a status the sender never
+    # returns for a broken connection. The ring therefore never fired when
+    # it was needed (audited 2026-11-04).
     attempts = []
 
     class _FlakySender:
         def send_email(self, **kwargs):
             attempts.append(1)
             if len(attempts) == 1:
-                return {"status": "ERROR", "error": "connection reset by peer"}
+                return {"status": "NETWORK_ERROR", "error": "connection reset by peer"}
             return {"status": "DELIVERED"}
 
     dd.MAIL_RETRY_SEC = 0  # the pause must not slow the test
@@ -2944,7 +2961,8 @@ def test_48_failures_heal_instead_of_only_being_seen():
         {"subject": "s", "html": "<p>ok</p>", "plain": "ok"},
         "someone@example.com", dry_run=False,
     )
-    assert len(attempts) == 2, f"an ERROR must be retried once ({len(attempts)})"
+    assert len(attempts) == 2, \
+        f"a broken wire must be retried once ({len(attempts)})"
     assert res["status"] == "DELIVERED", f"the retry must recover ({res})"
 
     # A deliberate skip is NOT a transient failure: it must not be retried.
@@ -2962,6 +2980,24 @@ def test_48_failures_heal_instead_of_only_being_seen():
     )
     assert len(attempts) == 1, "a deliberate skip must not be retried"
     assert res2["status"] == "SKIPPED_NOT_CONFIGURED"
+
+    # A refused password is not transient either: it does not become good in
+    # 45 seconds, and the backup account already had its turn inside the
+    # sender. Retrying it would only spend the operator's patience.
+    attempts.clear()
+
+    class _Refused:
+        def send_email(self, **kwargs):
+            attempts.append(1)
+            return {"status": "AUTH_ERROR", "error": "535 authentication failed"}
+
+    res3 = dd._dispatch_one(
+        _Refused(), "Проверка связи",
+        {"subject": "s", "html": "<p>ok</p>", "plain": "ok"},
+        "someone@example.com", dry_run=False,
+    )
+    assert len(attempts) == 1, "a refused password must not be retried on the same wire"
+    assert res3["status"] == "AUTH_ERROR"
 
     # --- ring 2: the red line rides in the control copy ---------------
     import harness.telegram_bot as tb
