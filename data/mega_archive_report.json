@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-04T13:54:49.007292+00:00",
+  "checked_at": "2026-11-04T14:09:17.260306+00:00",
   "status": "failed",
   "archive": "kg-archive",
   "folder": "",
@@ -7,6 +7,6 @@
   "uploaded": [],
   "missing": [],
   "errors": [
-    "login: JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+    "login: MegaNetworkError: HTTP 402 with a non-JSON body [no content-type]: ''"
   ]
 }
