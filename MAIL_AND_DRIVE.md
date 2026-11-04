@@ -101,18 +101,37 @@ vault дрожал бы при каждом запуске и засорял и�
 
 ## 5. Облачный диск (Proton Drive)
 
-Диск подключён к VPS **lama2** (`132.226.200.117`, `~/.config/rclone/rclone.conf`,
-remote `protondrive:`).
+Диск поднимает **сам комплекс** — своего раннера (GitHub Actions) или
+локально. Доступа к чужим VPS у комплекса нет: remote `protondrive:` создаётся
+из учётных данных, которые лежат в vault/secrets.
+
+Через переменные окружения — без файла конфига и без пароля в логе:
 
 ```bash
+export RCLONE_CONFIG_PROTONDRIVE_TYPE=protondrive
+export RCLONE_CONFIG_PROTONDRIVE_USERNAME="$PROTON_DRIVE_ADDRESS"
+export RCLONE_CONFIG_PROTONDRIVE_PASSWORD="$PROTON_DRIVE_PASSWORD"
 rclone lsd protondrive:                       # что на диске
 rclone lsf protondrive: -R                    # дерево
-rclone copy /opt/immortal protondrive:/immortal/   # залить
-rclone cat protondrive:/immortal/disk_readme.md    # прочитать
+rclone copy ./data protondrive:/immortal/     # залить
+rclone cat protondrive:/immortal/disk_readme.md   # прочитать
 ```
 
-Секреты rclone (`password`, `otp_secret_key`, `mailbox_password`) лежат в
-обфусцированном виде в конфиге на сервере и не выгружаются в репозиторий.
+В workflow эти переменные объявляются как `${{ secrets.PROTON_DRIVE_ADDRESS }}`
+и `${{ secrets.PROTON_DRIVE_PASSWORD }}` — тогда они маскируются в логах.
+
+Через файл конфига (если нужен постоянный remote):
+
+```bash
+rclone config create protondrive protondrive \
+  username "$PROTON_DRIVE_ADDRESS" password "$PROTON_DRIVE_PASSWORD" --non-interactive
+```
+
+Секреты rclone в конфиге лежат обфусцированными; сам конфиг в репозиторий не
+попадает.
+
+**Не монтировать на раннере:** mount эфемерный и умирает вместе с runner'ом.
+Рабочая схема — `rclone copy` / `rclone sync` отдельным шагом workflow.
 
 ### Две ошибки, на которых уходит время
 
@@ -125,8 +144,8 @@ rclone cat protondrive:/immortal/disk_readme.md    # прочитать
    открывали в браузере, список `shares` пуст и rclone падает с
    `the main share assumption has failed` — при полностью верном логине и
    пароле. Лечится один раз: зайти на `https://account.proton.me/drive` под
-   учёткой Proton и открыть «My files». После этого API отдаёт корневой шэр,
-   и rclone работает без веб-клиента.
+   учёткой Proton и открыть «My files». **Для этого аккаунта уже сделано**,
+   корневой шэр существует и проверен сквозной записью.
 
 > Из российских сетей `proton.me` не открывается напрямую (соединение
 > сбрасывается). Ходить через собственный xray: `--proxy-server=http://127.0.0.1:10809`.
