@@ -52,6 +52,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import requests  # noqa: E402
 
 from harness import atomic_io  # noqa: E402
+from harness import env_file  # noqa: E402
 from harness import redaction  # noqa: E402
 from harness import sealed_vault  # noqa: E402
 from harness.mega_client import MegaClient, random_password, signup_key_from_link  # noqa: E402
@@ -112,11 +113,14 @@ def load_accounts(salt: str, path: Optional[Path] = None) -> List[Dict[str, Any]
 
 def vault_salt(explicit: Optional[str] = None) -> str:
     """The salt that opens the vault: VAULT_SALT first, REDACTION_SALT after."""
+    env_file.load_dotenv()
     salt = (explicit if explicit is not None else
             os.getenv("VAULT_SALT") or os.getenv("REDACTION_SALT") or "").strip()
     if not salt:
         raise RuntimeError("neither VAULT_SALT nor REDACTION_SALT is set — "
-                           "the vault cannot be opened")
+                           "the vault cannot be opened. Put VAULT_SALT=... in .env "
+                           "(gitignored) or export it; the cloud reads the "
+                           "GitHub secret of the same name")
     return salt
 
 

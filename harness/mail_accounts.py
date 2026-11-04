@@ -37,23 +37,14 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from harness import env_file
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_dotenv() -> None:
-    """Loads .env into the environment (the project's own idiom, telegram_bot.py)."""
-    env_file = PROJECT_ROOT / ".env"
-    if not env_file.exists():
-        return
-    try:
-        with open(env_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    os.environ.setdefault(key.strip(), value.strip())
-    except Exception:
-        pass
+    """Loads .env into the environment — the project's ONE loader (env_file.py)."""
+    env_file.load_dotenv()
 
 
 _load_dotenv()

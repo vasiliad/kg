@@ -6905,6 +6905,87 @@ def test_78_the_green_archive_means_the_copy_is_kept():
           "operator sees both.")
 
 
+def test_79_the_local_run_finds_the_salt_where_the_letter_says_it_is():
+    """
+    Measured 2026-11-04: the operator's own first-15-minutes instruction —
+    «python scripts/seal_mail_accounts.py --check» — failed on the local
+    machine with «neither VAULT_SALT nor REDACTION_SALT is set», even though
+    the letter says the salt lives in `.env` for local runs. The cause was
+    two spellings of one idea: `mail_accounts` loaded `.env` through its own
+    private copy of the idiom, while every module that reads the SALT only
+    looked at the process environment.
+
+    Two contracts, proved here:
+    (a) ONE loader — harness/env_file.py — and every salt reader (the
+        archive, the provisioner, the seal script) sees `.env`;
+    (b) the PROCESS environment still wins: a GitHub Actions secret is never
+        overridden by a file that happens to lie on the runner.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 79: the local run finds the salt where the letter says it is")
+    print("=" * 60)
+    import importlib.util
+    import tempfile
+    from harness import env_file
+    from harness import mega_archive as ma
+    from harness import mega_provision as mp
+
+    tmp = Path(tempfile.mkdtemp(prefix="dotenv-test-"))
+    (tmp / ".env").write_text(
+        "# a comment, an empty value and three real ones\n"
+        "VAULT_SALT=salt-from-the-file\n"
+        "REDACTION_SALT=\n"
+        "PROTON_DRIVE_ADDRESS=drive@example.invalid\n",
+        encoding="utf-8")
+
+    keys = ("VAULT_SALT", "REDACTION_SALT", "PROTON_DRIVE_ADDRESS")
+    saved_root = env_file.PROJECT_ROOT
+    saved_env = {key: os.environ.get(key) for key in keys}
+    env_file.PROJECT_ROOT = tmp
+    for key in keys:
+        os.environ.pop(key, None)
+    try:
+        # --- (a) one loader, and the salt readers see it -------------------
+        assert env_file.load_dotenv() == 3, \
+            "every key of a readable .env must land in the environment"
+        assert os.environ.get("VAULT_SALT") == "salt-from-the-file"
+        assert os.environ.get("REDACTION_SALT") == "", \
+            "an empty value is still a value — it must not resurrect an old one"
+        assert ma.vault_salt() == "salt-from-the-file", \
+            "the archive must find the salt the letter says is in .env"
+        assert mp.vault_salt() == "salt-from-the-file", \
+            "the provisioner must find it too"
+
+        spec = importlib.util.spec_from_file_location(
+            "seal_script", PROJECT_ROOT / "scripts" / "seal_mail_accounts.py")
+        seal_script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(seal_script)
+        assert seal_script.vault_salt() == "salt-from-the-file", \
+            "the operator's own entry point must find the salt too"
+
+        # --- (b) the process environment wins -----------------------------
+        os.environ["VAULT_SALT"] = "salt-from-the-secret"
+        assert ma.vault_salt() == "salt-from-the-secret", \
+            "a cloud secret must never be overridden by a file on the runner"
+
+        # A broken .env is a convenience, not a contract: it must not crash.
+        os.environ.pop("VAULT_SALT", None)
+        (tmp / ".env").write_text("garbage without an equals sign\n", encoding="utf-8")
+        assert env_file.load_dotenv() == 0, "nothing to load is not a failure"
+        assert "salt-from-the-file" not in os.environ.get("VAULT_SALT", ""), \
+            "a second load must not resurrect a value the environment dropped"
+    finally:
+        env_file.PROJECT_ROOT = saved_root
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    print("[+] Test 79 Passed: one .env loader — the salt is where the letter "
+          "says it is, and the cloud secret still wins.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -6993,6 +7074,7 @@ if __name__ == "__main__":
         test_76_the_cloud_wire_retries_the_reads_and_never_the_changes,
         test_77_the_complex_can_build_its_own_account_again,
         test_78_the_green_archive_means_the_copy_is_kept,
+        test_79_the_local_run_finds_the_salt_where_the_letter_says_it_is,
     ]
     failed = []
     for t in tests:

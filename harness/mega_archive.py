@@ -40,6 +40,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness import redaction
+from harness import env_file
 from harness import sealed_vault
 from harness.mega_client import MegaClient
 from harness.mega_provision import load_accounts, maybe_provision
@@ -68,11 +69,14 @@ ARTEFACTS: Tuple[str, ...] = (
 
 def vault_salt(explicit: Optional[str] = None) -> str:
     """The salt that opens the vault: VAULT_SALT first, REDACTION_SALT after."""
+    env_file.load_dotenv()
     salt = (explicit if explicit is not None else
             os.getenv("VAULT_SALT") or os.getenv("REDACTION_SALT") or "").strip()
     if not salt:
         raise RuntimeError("neither VAULT_SALT nor REDACTION_SALT is set — "
-                           "the vault cannot be opened")
+                           "the vault cannot be opened. Put VAULT_SALT=... in .env "
+                           "(gitignored) or export it; the cloud reads the "
+                           "GitHub secret of the same name")
     return salt
 
 

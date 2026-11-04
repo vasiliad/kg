@@ -35,6 +35,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from harness import sealed_vault  # noqa: E402
+from harness import env_file  # noqa: E402
 from harness import mail_accounts  # noqa: E402
 
 # The entries that must already exist for the salt to be proven right.
@@ -43,10 +44,13 @@ PROOF_ENTRIES = ("mega:email", "mega:password", "mega:mailtm_token")
 
 def vault_salt() -> str:
     """The salt that opens the vault: VAULT_SALT first, REDACTION_SALT after."""
+    env_file.load_dotenv()
     salt = (os.getenv("VAULT_SALT") or os.getenv("REDACTION_SALT") or "").strip()
     if not salt:
         raise RuntimeError("neither VAULT_SALT nor REDACTION_SALT is set — "
-                           "the vault cannot be opened or sealed")
+                           "the vault cannot be opened or sealed. Put "
+                           "VAULT_SALT=... in .env (gitignored) or export it; "
+                           "the cloud reads the GitHub secret of the same name")
     return salt
 
 
