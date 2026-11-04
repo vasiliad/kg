@@ -696,15 +696,18 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         b_session = int(boxes.get("own_session") or 0)
         if b_measured:
             b_facts = [f"читаются без человека: {b_readable}",
-                       f"только человеком: {b_human}"]
+                       f"только человеком: {b_human}",
+                       # The sealed count is always shown, zero included: a
+                       # hidden zero reads like «nothing to report», and the
+                       # whole point of the tier is that «zero own
+                       # mailboxes survive a restart» IS the report.
+                       f"свои, запечатаны в vault: {b_sealed}"]
         else:
             # The reason belongs to the note below, not to the facts line:
             # the reason CHANGES with the cycle (no salt yet / the cycle has
             # not run yet), and a facts line that names one reason while the
             # note names another is a contradiction in a letter.
             b_facts = ["не измерено в этом цикле"]
-        if b_sealed or b_local or b_session:
-            b_facts.append(f"свои, запечатаны в vault: {b_sealed}")
         if b_local:
             b_facts.append(f"свои, не запечатаны (умрут с этой машиной): {b_local}")
         if b_session:
@@ -718,6 +721,17 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         elif b_local:
             b_notes.append("есть свои ящики, чьи учётные данные не запечатаны — "
                            "они не переживут эту машину")
+        # Measured, and not ONE of the complex's own mailboxes is here. The
+        # operator registered ten of them (ADL-031); a letter that stayed
+        # quiet about that would let the silence read as «nothing was lost».
+        elif not b_sealed and not b_local and not b_session:
+            if boxes.get("own_file_present"):
+                b_notes.append("своих ящиков нет: ни один не запечатан в vault, "
+                               "и в файле регистраций хранителя пусто")
+            else:
+                b_notes.append("своих ящиков не видно: ни один не запечатан в "
+                               "vault, а файл регистраций хранителя этому "
+                               "циклу недоступен")
         # An old measurement is still a measurement — but it is not NOW, and
         # the letter must not pass it off as now.
         if b_measured and boxes.get("stale"):

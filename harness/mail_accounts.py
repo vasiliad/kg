@@ -377,6 +377,15 @@ def mailbox_tiers(salt: Optional[str] = None) -> Dict[str, Any]:
     sealed = sum(1 for box in own if box.get("tier") == TIER_DURABLE_SEALED)
     local = sum(1 for box in own if box.get("tier") == TIER_DURABLE_LOCAL)
     session = sum(1 for box in own if box.get("tier") == TIER_SESSION)
+    # Is the keeper's working file of registrations reachable from HERE?
+    # It is not tracked (it holds plaintext passwords), so on the cloud
+    # runner it is absent by design — and «I see none of my own mailboxes»
+    # is a different fact from «I have none». The letter must be able to
+    # tell the two apart.
+    try:
+        file_present = Path(SELF_PROVISIONED_FILE).exists()
+    except Exception:
+        file_present = False
     return {
         "measured": measured,
         "api_readable": readable,
@@ -385,6 +394,7 @@ def mailbox_tiers(salt: Optional[str] = None) -> Dict[str, Any]:
         "own_durable_local": local,
         "own_session": session,
         "own_total": len(own),
+        "own_file_present": file_present,
         # The count of sealed entries is knowable without the salt — the
         # names are plaintext — so this number never hides behind «the
         # vault is closed».

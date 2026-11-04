@@ -7529,6 +7529,32 @@ def test_84_the_mailbox_inventory_travels_as_a_measured_artefact():
         "subject": "Проверка связи", "mailboxes": fresh_read})
     assert "устаревшими" not in plain, plain
 
+    # --- and the cloud's own view, as the live run measured it ------------
+    # Live 2026-11-05 (run 41921606762): the cloud measured the operator's
+    # three mailboxes (1 readable unattended, 2 human-only) and ZERO of the
+    # complex's own — the keeper's registration file is not tracked, so the
+    # runner cannot see it, and the ten registrations (ADL-031) were never
+    # sealed. A letter that stayed quiet about that would let the silence
+    # read as «nothing was lost».
+    cloud = {"measured": True, "api_readable": 1, "human_only": 2,
+             "own_durable_sealed": 0, "own_durable_local": 0,
+             "own_session": 0, "own_total": 0, "own_file_present": False,
+             "sealed_in_vault": 0}
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "mailboxes": cloud})
+    assert "читаются без человека: 1" in plain, plain
+    assert "свои, запечатаны в vault: 0" in plain, plain
+    assert "своих ящиков не видно" in plain, plain
+    assert "файл регистраций хранителя" in plain, plain
+
+    # The keeper's side of the same fact: the file IS there, so the letter
+    # says what it can see, not «не видно».
+    keeper = dict(cloud, own_file_present=True)
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "mailboxes": keeper})
+    assert "в файле регистраций хранителя пусто" in plain, plain
+    assert "не видно" not in plain, plain
+
     # --- (d) the cloud carries the salt and keeps the artefact ------------
     workflow = (PROJECT_ROOT / ".github" / "workflows" /
                 "diagnostics.yml").read_text(encoding="utf-8")
