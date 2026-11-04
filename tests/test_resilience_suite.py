@@ -6361,14 +6361,23 @@ def test_75_the_cloud_client_never_guesses_what_it_cannot_read():
 
     saved_load = ma.load_credentials
     saved_client = ma.MegaClient
+    saved_accounts = ma.load_accounts
+    saved_salt = ma.vault_salt
     ma.load_credentials = lambda salt=None, path=None: {
         "email": "keeper@example.invalid", "password": "pw"}
+    # The archive reads its accounts from the vault (every sealed account
+    # gets a turn); the fake must cover that path too.
+    ma.load_accounts = lambda salt=None, path=None: [
+        {"slot": 1, "email": "keeper@example.invalid", "password": "pw"}]
+    ma.vault_salt = lambda explicit=None: "salt-for-the-test"
     ma.MegaClient = _RefusingClient
     try:
         report = ma.archive_once()
     finally:
         ma.load_credentials = saved_load
         ma.MegaClient = saved_client
+        ma.load_accounts = saved_accounts
+        ma.vault_salt = saved_salt
     assert report["status"] == "failed", \
         f"an unreadable cloud must not be a green cycle: {report.get('status')}"
     assert any("MegaCryptoError" in err for err in report["errors"]), \
