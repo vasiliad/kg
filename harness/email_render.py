@@ -508,6 +508,36 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
     recipient_tag = str(report.get("recipient_tag") or "")
     sender_name = str(report.get("sender_name") or "")
 
+    # The third copy of the record — the cloud the complex owns. It is a
+    # measured fact like the rest: the state, the age of the proof, and the
+    # degradation notes, if there are any. «No report» is never «all good».
+    own_cloud = report.get("own_cloud") or {}
+    own_headline = ""
+    own_color, own_bg = GOOD, "#f0fdf4"
+    own_facts: List[str] = []
+    if own_cloud:
+        state = str(own_cloud.get("state") or "unknown")
+        if state == "ok":
+            own_headline = "копия на месте"
+        elif state == "degraded":
+            own_headline = "копия на месте, но есть замечания"
+            own_color, own_bg = "#b45309", "#fffbeb"
+        elif state == "unknown":
+            own_headline = "состояние неизвестно"
+            own_color, own_bg = "#b45309", "#fffbeb"
+        else:
+            own_headline = "копия неполная" if state == "partial" else "копии нет"
+            own_color, own_bg = BAD, "#fef2f2"
+        if own_cloud.get("folder"):
+            own_facts.append(f"папка {own_cloud['folder']}")
+        if state != "unknown":
+            own_facts.append(f"файлов {own_cloud.get('uploaded') or 0}, "
+                             f"сверено {own_cloud.get('verified') or 0}")
+        if own_cloud.get("account"):
+            own_facts.append(f"аккаунт {own_cloud['account']}")
+        if own_cloud.get("checked_at"):
+            own_facts.append(f"проверено {own_cloud['checked_at']}")
+
     api_state = str(api.get("state") or "неизвестно")
     api_ok = bool(api.get("ok"))
     api_color = GOOD if api_ok else BAD
@@ -588,6 +618,34 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
             "Срок жизни ключей (последний успех / первая смерть)</div>"
             + "".join(rows) +
             "</td></tr></table>"
+        )
+
+    # --- the third copy: the cloud the complex owns -------------------------
+    if own_cloud:
+        notes_html = ""
+        for note in own_cloud.get("notes") or []:
+            notes_html += (
+                f'<div style="font-size:13px; color:{own_color}; padding-top:4px;">'
+                f"! {escape(note)}</div>"
+            )
+        why = str(own_cloud.get("why") or "")
+        if why:
+            notes_html += (
+                f'<div style="font-size:13px; color:{own_color}; padding-top:4px;">'
+                f"{escape(why)}</div>"
+            )
+        facts_html = escape(" · ".join(own_facts))
+        body.append(
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
+            f'<tr><td style="padding:12px 14px;">'
+            f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">'
+            "Своё облако — третья копия записи</div>"
+            f'<div style="font-size:15px; font-weight:700; color:{own_color}; padding-top:3px;">'
+            f"{escape(own_headline)}</div>"
+            f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">{facts_html}</div>'
+            f"{notes_html}"
+            f"</td></tr></table>"
         )
 
     # --- the arbiter -------------------------------------------------------
@@ -716,6 +774,17 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
                 if entry.get("reason"):
                     state += f" ({entry['reason']})"
                 plain.append(f"- {name}: {state}")
+    if own_cloud:
+        plain.append("")
+        plain.append("Своё облако — третья копия записи:")
+        plain.append(f"- {own_headline}")
+        if own_facts:
+            plain.append(f"    {' · '.join(own_facts)}")
+        for note in own_cloud.get("notes") or []:
+            plain.append(f"    ! {note}")
+        why = str(own_cloud.get("why") or "")
+        if why:
+            plain.append(f"    {why}")
     plain.append("")
     plain.append("Действующий флот:")
     if fleet:

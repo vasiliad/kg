@@ -6735,12 +6735,174 @@ def test_77_the_complex_can_build_its_own_account_again():
     assert archive_client.tried == ["one@example.invalid", "two@example.invalid"], \
         f"every sealed account must get a turn: {archive_client.tried}"
     assert report.get("slot") == 2, f"the working account must be named: {report}"
-    assert any("account 1" in err for err in report["errors"]), report["errors"]
+    # The closed account is a NAMED degradation, not a broken promise: the
+    # second account carried the copy, so the first one being dead is a fact
+    # about redundancy — it is reported, but it is not an error.
+    assert any("account 1" in note for note in report["notes"]), report.get("notes")
+    assert not any("account 1" in err for err in report["errors"]), \
+        f"a superseded account must not break a kept promise: {report['errors']}"
     assert "example.invalid" not in json.dumps(report), \
         f"the report must not carry an address: {report}"
 
     print("[+] Test 77 Passed: the complex can build its own account again — "
           "through the documented doors, bounded, sealed, and proved.")
+
+
+def test_78_the_green_archive_means_the_copy_is_kept():
+    """
+    Measured 2026-11-04: the archive uploaded and verified 12 artefacts on
+    account 2 while account 1 was closed — and it called the run «partial»
+    with one error, because the dead account's failure was counted as a
+    failure OF THE ARCHIVE. The copy WAS kept. So the run said «partial»
+    (a word that means «half the promise») and, worse, a HALF-archived day
+    exited 0 and called itself green.
+
+    Three contracts, proved here (no network at all):
+    (a) a superseded dead account is a NAMED degradation (notes), never an
+        error, and never a reason to call a kept promise «partial»;
+    (b) an artefact that did not read back identical breaks the promise —
+        the cycle ends RED, because a green run must mean «the promise was
+        kept»;
+    (c) the operator SEES the third copy's state and its notes in the health
+        letter, and «no report» is never rendered as «all good».
+    """
+    print("\n" + "=" * 60)
+    print("TEST 78: the green archive means the copy is kept")
+    print("=" * 60)
+    import tempfile
+    from harness import mega_archive as ma
+    from harness import daily_dispatcher as dd
+    from harness import email_render
+
+    tmp = Path(tempfile.mkdtemp(prefix="mega-archive-test-"))
+    (tmp / "nim_history.log").write_text("the day's record\n", encoding="utf-8")
+    (tmp / "data").mkdir()
+    (tmp / "data" / "daily_digest.json").write_text('{"items": []}', encoding="utf-8")
+
+    class _Cloud:
+        """A cloud that keeps what it is given — except where the test says."""
+
+        def __init__(self, closed=(), break_verify=()):
+            self.closed = set(closed)
+            self.break_verify = set(break_verify)
+            self.stored: Dict[str, bytes] = {}
+
+        def login(self, email, password):
+            if email in self.closed:
+                raise RuntimeError("HTTP 402 with a non-JSON body")
+            return {"sid": "SID", "master_key_ok": True}
+
+        def root_handle(self):
+            return "ROOTNODE"
+
+        def mkdir(self, parent, name):
+            return f"H:{name}"
+
+        def find_children(self, parent, name):
+            return []
+
+        def upload_file(self, parent, name, data):
+            self.stored[name] = data
+            return {"handle": f"H:{name}", "chunks": 1}
+
+        def download_file(self, handle):
+            name = handle.split(":", 1)[-1]
+            data = self.stored.get(name, b"")
+            if name in self.break_verify:
+                return data + b"tampered"
+            return data
+
+    def _run(accounts, cloud):
+        saved_accounts, saved_client = ma.load_accounts, ma.MegaClient
+        saved_salt = ma.vault_salt
+        ma.load_accounts = lambda salt=None, path=None: accounts
+        ma.vault_salt = lambda explicit=None: "salt-for-the-test"
+        ma.MegaClient = lambda *a, **k: cloud
+        try:
+            return ma.archive_once(root=tmp, salt="salt-for-the-test")
+        finally:
+            ma.load_accounts, ma.MegaClient = saved_accounts, saved_client
+            ma.vault_salt = saved_salt
+
+    accounts = [
+        {"slot": 1, "email": "one@example.invalid", "password": "pw"},
+        {"slot": 2, "email": "two@example.invalid", "password": "pw"},
+    ]
+
+    # --- (a) the dead account is named, the promise is not broken -----------
+    report = _run(accounts, _Cloud(closed={"one@example.invalid"}))
+    assert report["status"] == "ok", \
+        f"a kept promise must read «ok», not «partial»: {report}"
+    assert report["errors"] == [], \
+        f"a superseded account is not a failure of the archive: {report['errors']}"
+    assert any("account 1" in note for note in report["notes"]), report["notes"]
+    assert report["degraded"] is True, \
+        "the reduced redundancy must be visible in the report itself"
+    assert report["slot"] == 2, f"the serving account must be named: {report}"
+    assert ma.exit_code(report) == 0, \
+        "a kept promise is the only green verdict"
+    assert "example.invalid" not in json.dumps(report), \
+        f"the report must carry a fingerprint, not an address: {report}"
+
+    # --- (b) an artefact that did not read back breaks the promise ---------
+    broken = _run(accounts, _Cloud(closed={"one@example.invalid"},
+                                   break_verify={"nim_history.log"}))
+    assert broken["status"] == "partial", \
+        f"a half-archived day must not call itself «ok»: {broken}"
+    assert any("verify nim_history.log" in err for err in broken["errors"]), \
+        broken["errors"]
+    assert ma.exit_code(broken) == 1, \
+        "a broken promise ends RED — a green run must mean «the promise was kept»"
+
+    # --- (b) and when NO account serves the copy, it is a failure ----------
+    dead = _run(accounts[:1], _Cloud(closed={"one@example.invalid"}))
+    assert dead["status"] == "failed", f"nothing archived is a failure: {dead}"
+    assert any("account 1" in err for err in dead["errors"]), dead["errors"]
+    assert not dead["notes"], \
+        f"a dead copy is not a degradation, it is the failure: {dead['notes']}"
+    assert ma.exit_code(dead) == 1, "no copy, no green"
+
+    # --- (c) the operator SEES the third copy's state ----------------------
+    rpath = tmp / "mega_archive_report.json"
+    rpath.write_text(json.dumps(report), encoding="utf-8")
+    own = dd._read_archive_report(path=rpath)
+    assert own["state"] == "degraded", \
+        f"a kept copy with a dead account is a degradation: {own}"
+    assert any("account 1" in note for note in own["notes"]), own
+    assert own["account"], "the letter must name the account that served the copy"
+
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи",
+        "own_cloud": own,
+    })
+    assert "Своё облако" in html, "the letter must show the third copy's state"
+    assert "account 1" in plain, \
+        f"the degraded account must reach the operator in words: {plain}"
+    assert "example.invalid" not in html and "example.invalid" not in plain, \
+        "the letter must not carry an address"
+
+    # A report that does not exist is UNKNOWN, never «all good».
+    missing = dd._read_archive_report(path=tmp / "nothing-here.json")
+    assert missing["state"] == "unknown", missing
+    unknown_html, unknown_plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": missing})
+    assert "состояние неизвестно" in unknown_html.lower(), \
+        "«no report» must read as unknown, not as a healthy copy"
+    assert "копия на месте" not in unknown_plain, \
+        "«no report» must never be rendered as «the copy is there»"
+
+    # A broken copy is red in the letter too.
+    rpath.write_text(json.dumps({"status": "failed", "checked_at": "2026-11-04T05:20:00Z"}),
+                     encoding="utf-8")
+    failed = dd._read_archive_report(path=rpath)
+    assert failed["state"] == "failed", failed
+    failed_html, failed_plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": failed})
+    assert "копии нет" in failed_plain, failed_plain
+
+    print("[+] Test 78 Passed: a green archive means the copy is kept — "
+          "a dead account is named, a half-archived day is red, and the "
+          "operator sees both.")
 
 
 if __name__ == "__main__":
@@ -6830,6 +6992,7 @@ if __name__ == "__main__":
         test_75_the_cloud_client_never_guesses_what_it_cannot_read,
         test_76_the_cloud_wire_retries_the_reads_and_never_the_changes,
         test_77_the_complex_can_build_its_own_account_again,
+        test_78_the_green_archive_means_the_copy_is_kept,
     ]
     failed = []
     for t in tests:

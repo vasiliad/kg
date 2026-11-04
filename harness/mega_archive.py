@@ -148,6 +148,14 @@ def archive_once(root: Optional[Path] = None,
         "uploaded": [],
         "missing": [],
         "errors": [],
+        # The degradations that did NOT break this run's promise: an account
+        # that is closed while another one served the copy. They are NAMED,
+        # never hidden — and they never turn a kept promise red. Measured
+        # 2026-11-04: MEGA closed the door for account 1 while account 2
+        # (built by the complex itself) archived and verified all 12 artefacts.
+        # The copy was kept; the redundancy was reduced. Two different facts.
+        "notes": [],
+        "degraded": False,
         # The door's state — «open»/«closed» — and what it means. Filled in
         # only when the cloud refuses us; that is the moment it matters.
         "door": {},
@@ -166,25 +174,32 @@ def archive_once(root: Optional[Path] = None,
     if not usable:
         report["errors"].append("vault: no usable MEGA account is sealed")
         return report
+    vault_note = ""
     if len(usable) < len(accounts):
-        report["errors"].append(
-            f"vault: {len(accounts) - len(usable)} sealed account(s) are half-written "
-            "and cannot be used")
+        vault_note = (f"vault: {len(accounts) - len(usable)} sealed account(s) are "
+                      "half-written and cannot be used")
 
+    # The account-level failures are held back until the verdict is known:
+    # an account that could not serve the copy is a NOTE when another
+    # account served it, and an ERROR when nothing did. Deciding early
+    # would call a kept promise broken — the very confusion this report
+    # exists to prevent.
+    account_failures: List[str] = []
     client = MegaClient()
     working: Optional[Dict[str, Any]] = None
     for account in usable:
         try:
             login = client.login(account["email"], account["password"])
             if not login.get("master_key_ok"):
-                report["errors"].append(f"account {account['slot']}: "
+                account_failures.append(f"account {account['slot']}: "
                                         "the master key did not verify")
                 continue
             working = account
             break
         except Exception as exc:
-            report["errors"].append(f"account {account['slot']}: "
+            account_failures.append(f"account {account['slot']}: "
                                     f"{type(exc).__name__}: {exc}")
+    provision_note = ""
     if working is None:
         # The door's state travels with the failure: the operator must be
         # able to tell «MEGA closed the door to this host» from «our
@@ -208,8 +223,26 @@ def archive_once(root: Optional[Path] = None,
                             break
                     except Exception:
                         continue
-        if working is None:
-            return report
+            else:
+                provision_note = ("the complex tried to build a new account and could not: "
+                                  + (outcome.get("why") or outcome.get("status") or "unknown"))
+    if working is None:
+        # Nothing served the copy: every account-level failure IS the failure.
+        report["errors"].extend(account_failures)
+        if vault_note:
+            report["errors"].append(vault_note)
+        if provision_note:
+            report["errors"].append(provision_note)
+        return report
+    # The copy has a home. What could not serve it is NAMED, not hidden: the
+    # operator must see the reduced redundancy before it becomes a dead end.
+    if account_failures:
+        report["notes"].extend(account_failures)
+    if vault_note:
+        report["notes"].append(vault_note)
+    if provision_note:
+        report["notes"].append(provision_note)
+    report["degraded"] = bool(report["notes"])
     report["account"] = redaction.fingerprint(working["email"])
     report["slot"] = working.get("slot")
     try:
@@ -268,6 +301,14 @@ def archive_once(root: Optional[Path] = None,
                 back = client.download_file(handle)
                 verified = (back == data)
                 sha = hashlib.sha256(data).hexdigest()
+                if not verified:
+                    # A copy that reads back DIFFERENT is not a copy. It used
+                    # to be only a «verified: false» flag in the per-artefact
+                    # list — invisible in the errors, and easy to miss while
+                    # reading the report. Now it is named out loud.
+                    report["errors"].append(
+                        f"verify {rel}: the copy reads back DIFFERENT "
+                        f"({len(back)} bytes instead of {len(data)})")
             except Exception as exc:
                 report["errors"].append(f"verify {rel}: {type(exc).__name__}: {exc}")
             report["uploaded"].append({
@@ -290,6 +331,14 @@ def archive_once(root: Optional[Path] = None,
     uploaded = report["uploaded"]
     verified_count = sum(1 for item in uploaded if item.get("verified"))
     report["verified"] = verified_count
+    # The verdict, in the complex's own words:
+    #   ok      — every artefact we HAD is in the cloud and reads back
+    #            identical. The promise is kept, so the cycle is green.
+    #   partial — some artefacts are there, but at least one did not make it
+    #            or did not read back. The promise was broken FOR THAT
+    #            ARTEFACT, so the cycle is RED. (Measured 2026-11-04: a
+    #            half-archived day used to exit 0 and call itself green.)
+    #   failed  — nothing was archived. RED.
     report["status"] = (
         "ok" if uploaded and verified_count == len(uploaded) and not report["errors"]
         else ("partial" if uploaded else "failed"))
@@ -306,6 +355,17 @@ def write_report(report: Dict[str, Any], path: Optional[Path] = None) -> Optiona
     return target
 
 
+def exit_code(report: Dict[str, Any]) -> int:
+    """
+    The verdict as an exit code: only a kept promise is green.
+
+    A separate function so the rule is TESTABLE without writing the report
+    to the repository: the cycle's exit code is part of its contract, not
+    a side effect of the print.
+    """
+    return 0 if report.get("status") == "ok" else 1
+
+
 def main() -> int:
     report = archive_once()
     written = write_report(report)
@@ -313,14 +373,20 @@ def main() -> int:
           f"folder={report.get('folder') or '—'} "
           f"uploaded={report.get('count', 0)} "
           f"verified={report.get('verified', 0)} "
-          f"errors={len(report.get('errors', []))}")
+          f"errors={len(report.get('errors', []))} "
+          f"degraded={1 if report.get('degraded') else 0}")
     if written:
         print(f"[mega-archive] report: {written}")
     for err in report.get("errors", []):
         print(f"[mega-archive] error: {err}")
-    # A failed archive is a visible failure: the supervisor must see the cycle
-    # as owed, and the operator must see the run as red.
-    return 0 if report.get("status") in ("ok", "partial") else 1
+    # The degradations are printed too: the reduced redundancy must be as
+    # visible as the failure, even though it did not break the promise.
+    for note in report.get("notes", []):
+        print(f"[mega-archive] note: {note}")
+    # A broken promise is a visible failure: the operator must see the run
+    # as red, and the promise as unkept. Only «ok» is green — a cycle that
+    # archived part of the day used to exit 0 and call itself a success.
+    return exit_code(report)
 
 
 if __name__ == "__main__":

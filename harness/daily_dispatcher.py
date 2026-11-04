@@ -204,6 +204,43 @@ def _read_heartbeat() -> List[Dict[str, Any]]:
     return []
 
 
+def _read_archive_report(path: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    The third copy of the record — the one in the cloud the complex owns.
+
+    The health letter must show its state AND the age of the proof: a copy
+    verified three days ago is not the same fact as one verified an hour
+    ago, and «no report at all» is not «all good». The letter is written at
+    05:00 and the archive tick runs at 05:20, so the letter carries the LAST
+    measured state — with its timestamp, so the operator can judge it.
+    """
+    path = path or (PROJECT_ROOT / "data" / "mega_archive_report.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"state": "unknown", "why": "the archive cycle has written no report"}
+    if not isinstance(data, dict):
+        return {"state": "unknown", "why": "the archive report is not a report"}
+    status = str(data.get("status") or "unknown")
+    notes = [str(n) for n in (data.get("notes") or []) if str(n)]
+    if status in ("failed", "partial"):
+        state = status
+    elif notes:
+        state = "degraded"
+    else:
+        state = "ok"
+    return {
+        "state": state,
+        "status": status,
+        "folder": str(data.get("folder") or ""),
+        "uploaded": data.get("count") or 0,
+        "verified": data.get("verified") or 0,
+        "account": str(data.get("account") or ""),
+        "checked_at": str(data.get("checked_at") or ""),
+        "notes": notes,
+    }
+
+
 def build_health_report_email() -> Dict[str, str]:
     """
     Builds Email 1: system health, disk metrics, incidents, and the fleet.
@@ -284,6 +321,11 @@ def build_health_report_email() -> Dict[str, str]:
         # the letter shows the decay BEFORE the channel dies (written by the
         # diagnostics cycle into data/.credential_heartbeat.json).
         "heartbeat": _read_heartbeat(),
+        # The third copy of the record — the one that belongs to nobody but
+        # the complex. Its state belongs in the health letter for the same
+        # reason the key heartbeat does: the decay must be visible BEFORE
+        # the copy is gone.
+        "own_cloud": _read_archive_report(),
         "recipient_tag": redaction.recipient_tag(resolve_recipient()),
         "sender_name": SENDER_NAME,
     }
