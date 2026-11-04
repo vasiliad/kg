@@ -1,0 +1,10 @@
+{
+  "checked_at": "2026-11-04T15:17:57.508935+00:00",
+  "status": "failed",
+  "steps": [],
+  "errors": [
+    "RuntimeError: mail.tm offered no domain"
+  ],
+  "account": "",
+  "slot": 0
+}
