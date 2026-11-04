@@ -32,6 +32,36 @@
       "nonce": "iovVp5txnOLW9kJL",
       "ct": "2sFCi8pYW3lAzXwPjktuy3OjkRgAGA+J",
       "tag": "UAU4rhA/c3PAiY6Ef/QhvQ=="
+    },
+    {
+      "name": "mega:email_2",
+      "nonce": "2YEdSyVA8TcS1Pm7",
+      "ct": "QtN2IUWXEhN4p53TaHbilksgo/cPOJvg",
+      "tag": "kIZoo0otp++kLkTb8F/VWg=="
+    },
+    {
+      "name": "mega:password_2",
+      "nonce": "a+4vLYS0GS96cKkp",
+      "ct": "188qMWi0TY6M1sW4iKqvNN/XGZHHpzG5",
+      "tag": "98iBWQeCC0TqnHQcwXeluw=="
+    },
+    {
+      "name": "mega:recovery_key_2",
+      "nonce": "DHx6wdwb9Um8232C",
+      "ct": "gs+FTWImW6Et6LJS041TlCW6QvkGYA==",
+      "tag": "eiosGTeS15AyXF6lamndXg=="
+    },
+    {
+      "name": "mega:mailtm_token_2",
+      "nonce": "LR47y1UrGPiFa/Kp",
+      "ct": "py5y6xFlVJ5etsoly5T+NrhnL25pzeb2fSPxuwDljEQjp07GOJeugRDkMnpcapz8vEm9XLK+XcCaTmOC3Hnu7BPYcGj/t3K6wQZ39hQbcsEXQRxKoVcxnl7/by+1AiYyIdsFb65efDPzHKPBf+55KaH4aNk0qru8RkLgZiFW5JWdoD8nX5vK/GZjhIb7xeEByubfEYIBht4+gcCn2dLVOF9GkVVIXGAJD3s/Zb2T3tMhg5hOkVC0kMStoa5c18vqogJ3z0SmDmk0SDnhUc9OUbyP8wezFjRUp51eKSN1YQaQEj0Jn+2JnP/Wbm/was+19rnrVNWHq3Lr9cHDpmew2EwF7zEIZMGCyKt1+ZwvzrZWo+6ln7Gduxb5iMTZ7BerAMyxudVtmrgOru/Bfx/bT+3llBsMKB2Rh3ZcqSyLpZ0YyghC3j8xIfZeXiXPc5f7h1KiFqmvPLF98dOyMrX0eRhz",
+      "tag": "kt8XmZU1q7HQn910YEBFPg=="
+    },
+    {
+      "name": "mega:mailtm_password_2",
+      "nonce": "fEAngZXn6vKpwix0",
+      "ct": "Q1mnS8X6cNKIEbmC7jHIHa74J9M=",
+      "tag": "CJiMj0wgYVLxSVDb5Tm/1A=="
     }
   ]
 }

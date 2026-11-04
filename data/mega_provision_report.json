@@ -1,10 +1,15 @@
 {
-  "checked_at": "2026-11-04T15:17:57.508935+00:00",
-  "status": "failed",
-  "steps": [],
-  "errors": [
-    "RuntimeError: mail.tm offered no domain"
+  "checked_at": "2026-11-04T15:29:24.635527+00:00",
+  "status": "ok",
+  "steps": [
+    "mailbox",
+    "handshake",
+    "letter",
+    "verified",
+    "sealed",
+    "proven"
   ],
-  "account": "",
-  "slot": 0
+  "errors": [],
+  "account": "sha256:8962eb89",
+  "slot": 2
 }
