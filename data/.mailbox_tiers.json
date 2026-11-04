@@ -1,0 +1,11 @@
+{
+  "measured": true,
+  "api_readable": 1,
+  "human_only": 2,
+  "own_durable_sealed": 0,
+  "own_durable_local": 0,
+  "own_session": 0,
+  "own_total": 0,
+  "sealed_in_vault": 0,
+  "checked_at": "2026-11-04T22:02:47.792561+00:00"
+}
