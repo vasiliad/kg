@@ -482,6 +482,83 @@ def render_digest(
 # The health letter
 # --------------------------------------------------------------------------
 
+def _copy_verdict(copy: Dict[str, Any]) -> Tuple[str, str, List[str]]:
+    """
+    The verdict of ONE copy of the record: the headline, its colour and the
+    facts that back it.
+
+    The complex has more than one cloud copy now — the MEGA archive and the
+    Proton Drive — and they must be judged by the SAME rule, otherwise the
+    letter would praise one and hide the other. «No report» is never «all
+    good»: it reads as unknown.
+    """
+    state = str(copy.get("state") or "unknown")
+    if state == "ok":
+        headline, color = "копия на месте", GOOD
+    elif state == "degraded":
+        headline, color = "копия на месте, но есть замечания", "#b45309"
+    elif state == "unknown":
+        headline, color = "состояние неизвестно", "#b45309"
+    else:
+        headline = "копия неполная" if state == "partial" else "копии нет"
+        color = BAD
+    facts: List[str] = []
+    if copy.get("folder"):
+        facts.append(f"папка {copy['folder']}")
+    if state != "unknown":
+        facts.append(f"файлов {copy.get('uploaded') or 0}, "
+                     f"сверено {copy.get('verified') or 0}")
+    if copy.get("account"):
+        facts.append(f"аккаунт {copy['account']}")
+    if copy.get("checked_at"):
+        facts.append(f"проверено {copy['checked_at']}")
+    return headline, color, facts
+
+
+def _copy_block_html(label: str, copy: Dict[str, Any]) -> str:
+    """One copy's block in the letter: the verdict, the facts, the notes."""
+    headline, color, facts = _copy_verdict(copy)
+    notes_html = ""
+    for note in copy.get("notes") or []:
+        notes_html += (
+            f'<div style="font-size:13px; color:{color}; padding-top:4px;">'
+            f"! {escape(note)}</div>"
+        )
+    why = str(copy.get("why") or "")
+    if why:
+        notes_html += (
+            f'<div style="font-size:13px; color:{color}; padding-top:4px;">'
+            f"{escape(why)}</div>"
+        )
+    facts_html = escape(" · ".join(facts))
+    return (
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
+        f'<tr><td style="padding:12px 14px;">'
+        f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">'
+        f"{escape(label)}</div>"
+        f'<div style="font-size:15px; font-weight:700; color:{color}; padding-top:3px;">'
+        f"{escape(headline)}</div>"
+        f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">{facts_html}</div>'
+        f"{notes_html}"
+        f"</td></tr></table>"
+    )
+
+
+def _copy_block_plain(label: str, copy: Dict[str, Any]) -> List[str]:
+    """The same block in the plain-text version of the letter."""
+    headline, _color, facts = _copy_verdict(copy)
+    lines = [f"{label}:", f"- {headline}"]
+    if facts:
+        lines.append(f"    {' · '.join(facts)}")
+    for note in copy.get("notes") or []:
+        lines.append(f"    ! {note}")
+    why = str(copy.get("why") or "")
+    if why:
+        lines.append(f"    {why}")
+    return lines
+
+
 def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
     """
     The «Проверка связи» letter as (html, plain).
@@ -508,35 +585,11 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
     recipient_tag = str(report.get("recipient_tag") or "")
     sender_name = str(report.get("sender_name") or "")
 
-    # The third copy of the record — the cloud the complex owns. It is a
-    # measured fact like the rest: the state, the age of the proof, and the
+    # The copies of the record in the clouds the complex owns. They are
+    # measured facts like the rest: the state, the age of the proof, and the
     # degradation notes, if there are any. «No report» is never «all good».
     own_cloud = report.get("own_cloud") or {}
-    own_headline = ""
-    own_color, own_bg = GOOD, "#f0fdf4"
-    own_facts: List[str] = []
-    if own_cloud:
-        state = str(own_cloud.get("state") or "unknown")
-        if state == "ok":
-            own_headline = "копия на месте"
-        elif state == "degraded":
-            own_headline = "копия на месте, но есть замечания"
-            own_color, own_bg = "#b45309", "#fffbeb"
-        elif state == "unknown":
-            own_headline = "состояние неизвестно"
-            own_color, own_bg = "#b45309", "#fffbeb"
-        else:
-            own_headline = "копия неполная" if state == "partial" else "копии нет"
-            own_color, own_bg = BAD, "#fef2f2"
-        if own_cloud.get("folder"):
-            own_facts.append(f"папка {own_cloud['folder']}")
-        if state != "unknown":
-            own_facts.append(f"файлов {own_cloud.get('uploaded') or 0}, "
-                             f"сверено {own_cloud.get('verified') or 0}")
-        if own_cloud.get("account"):
-            own_facts.append(f"аккаунт {own_cloud['account']}")
-        if own_cloud.get("checked_at"):
-            own_facts.append(f"проверено {own_cloud['checked_at']}")
+    drive_cloud = report.get("drive_cloud") or {}
 
     api_state = str(api.get("state") or "неизвестно")
     api_ok = bool(api.get("ok"))
@@ -620,33 +673,11 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
             "</td></tr></table>"
         )
 
-    # --- the third copy: the cloud the complex owns -------------------------
+    # --- the copies in the clouds the complex owns -------------------------
     if own_cloud:
-        notes_html = ""
-        for note in own_cloud.get("notes") or []:
-            notes_html += (
-                f'<div style="font-size:13px; color:{own_color}; padding-top:4px;">'
-                f"! {escape(note)}</div>"
-            )
-        why = str(own_cloud.get("why") or "")
-        if why:
-            notes_html += (
-                f'<div style="font-size:13px; color:{own_color}; padding-top:4px;">'
-                f"{escape(why)}</div>"
-            )
-        facts_html = escape(" · ".join(own_facts))
-        body.append(
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-            f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
-            f'<tr><td style="padding:12px 14px;">'
-            f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">'
-            "Своё облако — третья копия записи</div>"
-            f'<div style="font-size:15px; font-weight:700; color:{own_color}; padding-top:3px;">'
-            f"{escape(own_headline)}</div>"
-            f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">{facts_html}</div>'
-            f"{notes_html}"
-            f"</td></tr></table>"
-        )
+        body.append(_copy_block_html("Своё облако — третья копия записи", own_cloud))
+    if drive_cloud:
+        body.append(_copy_block_html("Proton Drive — копия на диске", drive_cloud))
 
     # --- the arbiter -------------------------------------------------------
     body.append(
@@ -776,15 +807,10 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
                 plain.append(f"- {name}: {state}")
     if own_cloud:
         plain.append("")
-        plain.append("Своё облако — третья копия записи:")
-        plain.append(f"- {own_headline}")
-        if own_facts:
-            plain.append(f"    {' · '.join(own_facts)}")
-        for note in own_cloud.get("notes") or []:
-            plain.append(f"    ! {note}")
-        why = str(own_cloud.get("why") or "")
-        if why:
-            plain.append(f"    {why}")
+        plain.extend(_copy_block_plain("Своё облако — третья копия записи", own_cloud))
+    if drive_cloud:
+        plain.append("")
+        plain.extend(_copy_block_plain("Proton Drive — копия на диске", drive_cloud))
     plain.append("")
     plain.append("Действующий флот:")
     if fleet:

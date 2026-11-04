@@ -156,6 +156,26 @@ CYCLES: Tuple[Dict[str, Any], ...] = (
         "daily": True,
         "not_before_utc": 5,
     },
+    {
+        # The copy of the state that must survive THIS computer. The remote
+        # is built by the complex itself — the credentials from the
+        # environment or from the vault, no config file, no password in an
+        # argument, and no mount (a mount dies with the runner). Measured
+        # 2026-11-05: rclone refuses a plaintext password in the
+        # environment, so the complex obscures it itself — rclone's own
+        # AES-CTR format — and proves the copy by reading every file back.
+        "name": "proton_drive",
+        "workflow": "proton_drive_sync.yml",
+        "artefact": "data/proton_drive_report.json",
+        "field": "checked_at",
+        "max_age_h": 26.0,
+        "retry_h": 6.0,
+        "daily": True,
+        # From 06:00 UTC — AFTER the cycle's own 05:40 slot, so the daily
+        # copy happens once and the supervisor only takes over when the
+        # scheduler dropped the slot.
+        "not_before_utc": 6,
+    },
 )
 
 REPORT_PATH = PROJECT_ROOT / "data" / ".cycle_supervisor.json"

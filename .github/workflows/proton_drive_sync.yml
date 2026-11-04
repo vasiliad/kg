@@ -1,0 +1,98 @@
+name: Proton Drive Sync (own cloud space)
+
+# The copy of the complex's state that must survive THIS computer, the
+# operator's laptop and the repository. Proton Drive belongs to the operator
+# (a mailbox the complex cannot read), but the REMOTE is built by the complex
+# itself — from the credentials in the environment, with no config file, no
+# password in an argument and no mount: a mount dies with the runner, a copy
+# does not.
+#
+# Measured 2026-11-05: handing rclone the plaintext password produced
+# «couldn't decrypt password ... is it obscured?» — so the complex obscures
+# it itself (rclone's own AES-CTR format), which keeps the password out of
+# the process list and out of the log.
+#
+# The scheduler is a suggestion, not a promise (measured: slots skipped). The
+# cycle supervisor re-dispatches this workflow when the artefact
+# `data/proton_drive_report.json` is too old — the artefact is the proof that
+# the copy actually happened and read back identical.
+
+on:
+  schedule:
+    # 05:40 UTC — after the daily digest (05:00) and after the MEGA archive
+    # (05:20), so the day's record goes to all three copies in one morning.
+    - cron: '40 5 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # One copy at a time: two runs would push the same day twice.
+    concurrency:
+      group: proton-drive-sync
+      cancel-in-progress: false
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          # Pinned contract: the runtime changes only when a commit changes it.
+          pip install -r requirements-actions.txt
+
+      - name: Ensure rclone (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          WANTED="1.74.3"
+          SHA256="dbee7ccd7a5d617e4ed4cd4555c16669b511abfe8d31164f61be35ac9e999bd2"
+          if command -v rclone >/dev/null 2>&1; then
+            echo "rclone is already on the runner: $(rclone version | head -1)"
+            exit 0
+          fi
+          # The runner image carries no rclone (measured 2026-11-05), so the
+          # complex brings its own — at a version THIS commit pins, with the
+          # official checksum checked before anything is installed.
+          curl -fsSL -o /tmp/rclone.zip \
+            "https://downloads.rclone.org/v${WANTED}/rclone-v${WANTED}-linux-amd64.zip"
+          echo "${SHA256}  /tmp/rclone.zip" | sha256sum -c -
+          unzip -q /tmp/rclone.zip -d /tmp/rclone
+          sudo install -m 0755 \
+            "/tmp/rclone/rclone-v${WANTED}-linux-amd64/rclone" /usr/local/bin/rclone
+          rclone version | head -1
+
+      - name: Copy the complex's state to its own disk
+        env:
+          # The remote is built from these — the environment wins over the
+          # vault, and the password is obscured before rclone ever sees it.
+          PROTON_DRIVE_ADDRESS: ${{ secrets.PROTON_DRIVE_ADDRESS }}
+          PROTON_DRIVE_PASSWORD: ${{ secrets.PROTON_DRIVE_PASSWORD }}
+          PROTON_DRIVE_2FA_SECRET: ${{ secrets.PROTON_DRIVE_2FA_SECRET }}
+          # The vault's fallback: if a secret is missing, the sealed copy is
+          # opened with the salt instead.
+          VAULT_SALT: ${{ secrets.VAULT_SALT }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+        run: python harness/proton_drive.py
+
+      - name: Persist the copy report
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add data/proton_drive_report.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(drive): the own-cloud space's proof [skip ci]"
+          else
+            echo "No drive report changes."
+          fi
+          bash scripts/sync_state.sh

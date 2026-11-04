@@ -6986,6 +6986,233 @@ def test_79_the_local_run_finds_the_salt_where_the_letter_says_it_is():
           "says it is, and the cloud secret still wins.")
 
 
+def test_80_the_complex_mounts_its_own_disk_without_leaking_the_password():
+    """
+    Measured 2026-11-05: the operator handed over a Proton Drive disk and the
+    letter told the complex to mount it itself — from the credentials in the
+    vault or the secrets, through environment variables, with no config file
+    and no mount (a mount dies with the runner). The FIRST live run of the new
+    module refused the password outright: rclone reads a config password in
+    its OBFUSCATED form, and `rclone obscure` takes the password as an
+    ARGUMENT — which would put it in the process list and in the log.
+
+    Four contracts, proved here (no network at all):
+    (a) the remote is built through the ENVIRONMENT: no config file, no
+        password in any argument, `app_version` never set, `mount` never
+        called;
+    (b) the password the complex hands to rclone is rclone's OWN obscured
+        format — and it is the only copy of the secret in the process;
+    (c) the copy is PROVED by reading every file back: a file that reads
+        back different ends the cycle RED;
+    (d) the report carries a fingerprint, never an address, never a password.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 80: the complex mounts its own disk without leaking the password")
+    print("=" * 60)
+    import base64
+    import tempfile
+    from Crypto.Cipher import AES
+    from harness import proton_drive as pd
+
+    tmp = Path(tempfile.mkdtemp(prefix="drive-test-"))
+    (tmp / "nim_history.log").write_text("the day's record\n", encoding="utf-8")
+    (tmp / "data").mkdir()
+    (tmp / "data" / "daily_digest.json").write_text('{"items": []}', encoding="utf-8")
+
+    PASSWORD = "the-never-logged-password"
+
+    def _reveal(value: str) -> str:
+        """The inverse of rclone's obscure — so the test can prove the format."""
+        blob = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        iv, ciphertext = blob[:16], blob[16:]
+        cipher = AES.new(pd._RCLONE_CRYPT_KEY, AES.MODE_CTR, nonce=b"",
+                         initial_value=int.from_bytes(iv, "big"))
+        return cipher.decrypt(ciphertext).decode("utf-8")
+
+    # --- (b) the obscuring is rclone's own format --------------------------
+    assert _reveal(pd.obscure_password(PASSWORD)) == PASSWORD, \
+        "our obscuring must be the inverse of rclone's"
+
+    # --- (a) the remote is built in the environment -------------------------
+    env = pd.remote_env("drive@example.invalid", PASSWORD)
+    assert env["RCLONE_CONFIG_PROTONDRIVE_TYPE"] == "protondrive"
+    assert env["RCLONE_CONFIG_PROTONDRIVE_USERNAME"] == "drive@example.invalid"
+    assert env["RCLONE_CONFIG_PROTONDRIVE_PASSWORD"] != PASSWORD, \
+        "rclone must not receive the plaintext"
+    assert _reveal(env["RCLONE_CONFIG_PROTONDRIVE_PASSWORD"]) == PASSWORD, \
+        "rclone must receive the password in its own obscured form"
+    assert not any("app_version" in key for key in env), (
+        "app_version must never be set — rclone sends its own (measured: a "
+        "hand-written one is refused by Proton — Code=2064)")
+
+    # --- (c) the copy and its proof, through the real rclone plumbing ------
+    calls: List[List[str]] = []
+    stored: Dict[str, bytes] = {}
+    tampered: set = set()
+
+    class _Done:
+        def __init__(self, returncode=0, stdout=b"", stderr=b""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def _fake_run(cmd, env=None, capture_output=None, timeout=None):
+        argv = list(cmd)
+        calls.append(argv)
+        args = argv[1:]
+        assert PASSWORD not in " ".join(argv), \
+            f"the password must never be an argument: {argv}"
+        if args[0] == "copy":
+            src = Path(args[1])
+            for path in src.rglob("*"):
+                if path.is_file():
+                    stored[path.relative_to(src).as_posix()] = path.read_bytes()
+            return _Done()
+        if args[0] == "cat":
+            rel = args[1].split(":/immortal/", 1)[-1]
+            if rel not in stored:
+                return _Done(returncode=1, stderr=b"not found")
+            data = stored[rel]
+            if rel in tampered:
+                data = data + b"tampered"
+            return _Done(stdout=data)
+        raise AssertionError(f"unexpected rclone call: {args}")
+
+    saved_run = pd.subprocess.run
+    saved_creds = pd.drive_credentials
+    pd.subprocess.run = _fake_run
+    pd.drive_credentials = lambda salt=None: {
+        "address": "drive@example.invalid", "password": PASSWORD,
+        "tfa": "", "source": "environment"}
+    try:
+        report = pd.sync_once(root=tmp)
+        assert report["status"] == "ok", f"a proved copy must be «ok»: {report}"
+        assert report["verified"] == report["count"] > 0, report
+        assert pd.exit_code(report) == 0, "a proved copy is the only green verdict"
+        assert any(call[1] == "copy" for call in calls), calls
+        assert any(call[1] == "cat" for call in calls), \
+            f"every file must be read back: {calls}"
+        assert not any("mount" in call for call in calls), \
+            f"a mount dies with the runner — it must never be called: {calls}"
+
+        # --- (c) a file that reads back different breaks the promise -------
+        tampered.add("nim_history.log")
+        broken = pd.sync_once(root=tmp)
+        assert broken["status"] == "partial", \
+            f"a copy that reads back different must not be «ok»: {broken}"
+        assert any("nim_history.log" in err for err in broken["errors"]), broken["errors"]
+        assert pd.exit_code(broken) == 1, "a broken promise ends RED"
+    finally:
+        pd.subprocess.run = saved_run
+        pd.drive_credentials = saved_creds
+
+    # --- (d) the report carries no address and no password -----------------
+    body = json.dumps(report)
+    assert "example.invalid" not in body, f"no address in the report: {body}"
+    assert PASSWORD not in body, f"no password in the report: {body}"
+    assert report["account"].startswith("sha256:"), report["account"]
+
+    # --- and no credentials at all is a loud failure -----------------------
+    pd.drive_credentials = lambda salt=None: {
+        "address": "", "password": "", "tfa": "", "source": "environment"}
+    try:
+        empty = pd.sync_once(root=tmp)
+    finally:
+        pd.drive_credentials = saved_creds
+    assert empty["status"] == "failed", empty
+    assert any("credentials" in err for err in empty["errors"]), empty["errors"]
+    assert pd.exit_code(empty) == 1, "no credentials, no green"
+
+    print("[+] Test 80 Passed: the complex mounts its own disk — env vars, no "
+          "config file, no mount, no password in sight, and a copy is only "
+          "green when it reads back identical.")
+
+
+def test_81_the_letter_judges_both_cloud_copies_by_one_rule():
+    """
+    Measured 2026-11-05: the complex gained a SECOND copy of the record —
+    the Proton Drive — and the health letter knew about only the first one
+    (the MEGA archive). A copy nobody looks at is a copy nobody can trust:
+    the letter is where the operator sees the state of the record's copies.
+
+    Four contracts, proved here (no network at all):
+    (a) BOTH copies reach the letter, each with its own block and its own
+        verdict — one healthy copy never hides an unhealthy one;
+    (b) they are judged by ONE rule: a kept copy is green, a kept copy with
+        a named degradation is «degraded», a broken copy is red;
+    (c) «no report» is UNKNOWN for both — never «копия на месте»;
+    (d) a state file that is missing on this machine is NAMED («it is not
+        there»), not silently skipped.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 81: the letter judges both cloud copies by one rule")
+    print("=" * 60)
+    import tempfile
+    from harness import daily_dispatcher as dd
+    from harness import email_render
+
+    tmp = Path(tempfile.mkdtemp(prefix="copies-test-"))
+
+    # --- (a) both copies reach the letter --------------------------------
+    archive = {"state": "ok", "status": "ok", "folder": "immortal/2026-11-05",
+               "uploaded": 12, "verified": 12, "account": "sha256:aaa",
+               "checked_at": "2026-11-05T05:20:00Z", "notes": []}
+    drive = {"state": "ok", "status": "ok", "folder": "protondrive:/immortal/",
+             "uploaded": 12, "verified": 12, "account": "sha256:bbb",
+             "checked_at": "2026-11-05T05:40:00Z", "notes": []}
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": archive, "drive_cloud": drive})
+    assert "Своё облако" in html, "the archive copy must be in the letter"
+    assert "Proton Drive" in html, "the drive copy must be in the letter"
+    assert "protondrive:/immortal/" in plain, plain
+    assert "sha256:bbb" in plain, "the drive's account must be named: " + plain
+
+    # --- (b) one rule: a healthy copy never hides a broken one ------------
+    broken_drive = dict(drive, state="partial", status="partial", verified=9)
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": archive, "drive_cloud": broken_drive})
+    assert "копия неполная" in plain, \
+        f"a broken drive copy must be red even when the archive is fine: {plain}"
+    assert "копия на месте" in plain, \
+        f"the archive copy is still fine and must say so: {plain}"
+
+    degraded = dict(drive, state="degraded", notes=["these state files are not "
+                                                    "on this machine: data/x.json"])
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": archive, "drive_cloud": degraded})
+    assert "копия на месте, но есть замечания" in plain, plain
+    assert "data/x.json" in plain, \
+        f"a missing file must be NAMED, not hidden: {plain}"
+
+    # --- (c) no report is UNKNOWN, never «all good» -----------------------
+    missing_archive = dd._read_archive_report(path=tmp / "nothing.json")
+    missing_drive = dd._read_drive_report(path=tmp / "nothing.json")
+    assert missing_archive["state"] == "unknown", missing_archive
+    assert missing_drive["state"] == "unknown", missing_drive
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи",
+        "own_cloud": missing_archive, "drive_cloud": missing_drive})
+    assert "состояние неизвестно" in html.lower(), html
+    assert "копия на месте" not in plain, \
+        "«no report» must never be rendered as «the copy is there»"
+
+    # --- and a real drive report is read as the copy it is ----------------
+    report_path = tmp / "proton_drive_report.json"
+    report_path.write_text(json.dumps({
+        "status": "ok", "remote": "protondrive:/immortal/", "count": 12,
+        "verified": 12, "account": "sha256:bbb",
+        "checked_at": "2026-11-05T05:40:00Z", "notes": [],
+    }), encoding="utf-8")
+    read = dd._read_drive_report(path=report_path)
+    assert read["state"] == "ok", read
+    assert read["folder"] == "protondrive:/immortal/", read
+    assert read["uploaded"] == 12 and read["verified"] == 12, read
+
+    print("[+] Test 81 Passed: both cloud copies reach the operator, judged by "
+          "one rule — a missing report is unknown, a broken copy is red, and "
+          "a missing file is named.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -7075,6 +7302,8 @@ if __name__ == "__main__":
         test_77_the_complex_can_build_its_own_account_again,
         test_78_the_green_archive_means_the_copy_is_kept,
         test_79_the_local_run_finds_the_salt_where_the_letter_says_it_is,
+        test_80_the_complex_mounts_its_own_disk_without_leaking_the_password,
+        test_81_the_letter_judges_both_cloud_copies_by_one_rule,
     ]
     failed = []
     for t in tests:

@@ -204,23 +204,22 @@ def _read_heartbeat() -> List[Dict[str, Any]]:
     return []
 
 
-def _read_archive_report(path: Optional[Path] = None) -> Dict[str, Any]:
+def _read_copy_report(path: Path, folder_key: str, missing_label: str) -> Dict[str, Any]:
     """
-    The third copy of the record — the one in the cloud the complex owns.
+    Reads ONE copy's report into the shape the health letter renders.
 
-    The health letter must show its state AND the age of the proof: a copy
-    verified three days ago is not the same fact as one verified an hour
-    ago, and «no report at all» is not «all good». The letter is written at
-    05:00 and the archive tick runs at 05:20, so the letter carries the LAST
-    measured state — with its timestamp, so the operator can judge it.
+    The complex keeps more than one copy of the record in the clouds it owns
+    — the MEGA archive and the Proton Drive — and they must be judged by the
+    same rule: a kept promise with a named degradation is «degraded», a
+    broken promise is «partial»/«failed», and «no report at all» is
+    «unknown» — never «all good».
     """
-    path = path or (PROJECT_ROOT / "data" / "mega_archive_report.json")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return {"state": "unknown", "why": "the archive cycle has written no report"}
+        return {"state": "unknown", "why": f"{missing_label} has written no report"}
     if not isinstance(data, dict):
-        return {"state": "unknown", "why": "the archive report is not a report"}
+        return {"state": "unknown", "why": f"the {missing_label} report is not a report"}
     status = str(data.get("status") or "unknown")
     notes = [str(n) for n in (data.get("notes") or []) if str(n)]
     if status in ("failed", "partial"):
@@ -232,13 +231,39 @@ def _read_archive_report(path: Optional[Path] = None) -> Dict[str, Any]:
     return {
         "state": state,
         "status": status,
-        "folder": str(data.get("folder") or ""),
+        "folder": str(data.get(folder_key) or ""),
         "uploaded": data.get("count") or 0,
         "verified": data.get("verified") or 0,
         "account": str(data.get("account") or ""),
         "checked_at": str(data.get("checked_at") or ""),
         "notes": notes,
     }
+
+
+def _read_archive_report(path: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    The third copy of the record — the one in the cloud the complex owns.
+
+    The health letter must show its state AND the age of the proof: a copy
+    verified three days ago is not the same fact as one verified an hour
+    ago, and «no report at all» is not «all good». The letter is written at
+    05:00 and the archive tick runs at 05:20, so the letter carries the LAST
+    measured state — with its timestamp, so the operator can judge it.
+    """
+    path = path or (PROJECT_ROOT / "data" / "mega_archive_report.json")
+    return _read_copy_report(path, "folder", "the archive cycle")
+
+
+def _read_drive_report(path: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    The copy on the Proton Drive — the disk the operator handed over and the
+    complex now keeps by itself.
+
+    Same contract as the archive: a proved copy is green, a copy that read
+    back different is red, and a report that does not exist is unknown.
+    """
+    path = path or (PROJECT_ROOT / "data" / "proton_drive_report.json")
+    return _read_copy_report(path, "remote", "the drive cycle")
 
 
 def build_health_report_email() -> Dict[str, str]:
@@ -326,6 +351,10 @@ def build_health_report_email() -> Dict[str, str]:
         # reason the key heartbeat does: the decay must be visible BEFORE
         # the copy is gone.
         "own_cloud": _read_archive_report(),
+        # The Proton Drive copy — the disk the complex keeps by itself now.
+        # It gets the same verdict rules as the archive: a stale or missing
+        # report must never be rendered as a healthy copy.
+        "drive_cloud": _read_drive_report(),
         "recipient_tag": redaction.recipient_tag(resolve_recipient()),
         "sender_name": SENDER_NAME,
     }
