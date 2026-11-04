@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-04T01:44:49.766359+00:00",
+  "checked_at": "2026-11-04T02:36:36.144447+00:00",
   "repo": "vasiliad/kg",
   "dry_run": false,
   "cycles": [
@@ -7,16 +7,20 @@
       "name": "fleet",
       "workflow": "fleet_tuner.yml",
       "artefact": "data/fleet_report.json",
-      "age_h": 6.14,
+      "age_h": 7.0,
       "max_age_h": 7.0,
-      "stale": false,
-      "action": "fresh"
+      "stale": true,
+      "action": "dispatched",
+      "busy": false,
+      "last_run_age_h": 7.01,
+      "local_dispatch_age_h": 12.38,
+      "effective_age_h": 7.01
     },
     {
       "name": "diagnostics",
       "workflow": "diagnostics.yml",
       "artefact": "diagnostics_report.json",
-      "age_h": 2.5,
+      "age_h": 3.36,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -25,7 +29,7 @@
       "name": "selftest",
       "workflow": "bot_selftest.yml",
       "artefact": "data/bot_selftest_report.json",
-      "age_h": 14.3,
+      "age_h": 15.17,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh"
@@ -34,7 +38,7 @@
       "name": "daily_dispatch",
       "workflow": "daily_dispatch_novt.yml",
       "artefact": "nim_history.log",
-      "age_h": 12.96,
+      "age_h": 13.82,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -44,7 +48,7 @@
       "name": "cloud_tests",
       "workflow": "cloud_tests.yml",
       "artefact": "data/cloud_tests_report.json",
-      "age_h": 4.69,
+      "age_h": 5.56,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -53,7 +57,7 @@
       "name": "forge_autopilot",
       "workflow": "forge_autopilot.yml",
       "artefact": "data/forge_autopilot.json",
-      "age_h": 13.86,
+      "age_h": 14.72,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -63,16 +67,18 @@
       "name": "survival_protocol",
       "workflow": "survival_protocol.yml",
       "artefact": "data/survival_report.json",
-      "age_h": 9.78,
+      "age_h": 10.65,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
       "due_today": false
     }
   ],
-  "dispatched": [],
+  "dispatched": [
+    "fleet_tuner.yml"
+  ],
   "dispatch_log": {
-    "fleet": "2026-11-03T14:13:42.079204+00:00",
+    "fleet": "2026-11-04T02:36:36.144447+00:00",
     "survival_protocol": "2026-11-03T15:57:31.776162+00:00",
     "diagnostics": "2026-11-03T21:25:31.246427+00:00"
   }
