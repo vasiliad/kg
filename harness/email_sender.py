@@ -85,8 +85,14 @@ class EmailSender:
         # The backup account: the same kind of secret, a different identity.
         self.backup_sender_email = os.getenv("GMAIL_SENDER_2", "").strip()
         self.backup_app_password = os.getenv("GMAIL_APP_PASSWORD_2", "").strip()
-        # The archive mailbox: every letter's silent second recipient.
-        self.archive_recipient = os.getenv("ARCHIVE_RECIPIENT_EMAIL", "").strip()
+        # The archive mailboxes: every letter's silent extra recipients.
+        # A comma/semicolon/space-separated list is allowed — the operator may
+        # archive to several addresses at once (e.g. a Proton address created
+        # by hand plus a Gmail one).
+        self.archive_recipients = [
+            a.strip() for a in re.split(r"[,;\s]+", os.getenv("ARCHIVE_RECIPIENT_EMAIL", ""))
+            if a.strip()
+        ]
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
 
@@ -151,13 +157,13 @@ class EmailSender:
             msg.attach(part_html)
 
             recipients = [recipient_email]
-            archive_copy = "not configured"
-            archive_valid, _ = validate_recipient(self.archive_recipient)
-            if self.archive_recipient and archive_valid:
-                recipients.append(self.archive_recipient)
-                archive_copy = "sent"
-            elif self.archive_recipient:
-                archive_copy = "invalid address"
+            valid_archives = [a for a in self.archive_recipients
+                              if validate_recipient(a)[0]]
+            if valid_archives:
+                recipients.extend(valid_archives)
+            archive_copy = (f"sent ({len(valid_archives)})" if valid_archives
+                            else ("invalid address" if self.archive_recipients
+                                  else "not configured"))
 
             with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=20) as server:
                 server.ehlo()

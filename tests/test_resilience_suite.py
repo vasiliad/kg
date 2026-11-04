@@ -5234,7 +5234,7 @@ def test_66_the_reports_survive_one_dead_google_account():
         es.smtplib.SMTP = _FakeSMTP
         try:
             res = sender.send_email("operator@example.org", "Тест", "<p>тело</p>", "тело")
-            assert res.get("status") == "DELIVERED" and res.get("archive_copy") == "sent", \
+            assert res.get("status") == "DELIVERED" and res.get("archive_copy", "").startswith("sent"), \
                 f"the archive copy must ride along: {res}"
             assert res.get("via") == redaction.fingerprint("primary@example.com"), \
                 f"the serving account must be fingerprinted: {res}"
@@ -5504,6 +5504,69 @@ def test_69_the_self_registered_mega_account_is_sealed_and_usable():
           "and openable where the secret lives.")
 
 
+def test_70_the_archive_copy_can_fan_out_to_several_mailboxes():
+    """
+    Measured 2026-11-04: the operator wants the archive in a «normal» mailbox
+    too (a Proton address created by hand, say) alongside the Gmail ones.
+    ARCHIVE_RECIPIENT_EMAIL now accepts a LIST — every letter rides the same
+    SMTP session to all valid archive addresses, invalid entries are skipped
+    (never fatal), and no address is ever published in a header.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 70: the archive copy fans out to several mailboxes")
+    print("=" * 60)
+    from harness import email_sender as es
+    from harness.email_sender import EmailSender
+
+    saved = {k: os.environ.get(k) for k in
+             ("GMAIL_SENDER", "GMAIL_APP_PASSWORD", "ARCHIVE_RECIPIENT_EMAIL")}
+    try:
+        os.environ["GMAIL_SENDER"] = "primary@example.com"
+        os.environ["GMAIL_APP_PASSWORD"] = "p" * 16
+        os.environ["ARCHIVE_RECIPIENT_EMAIL"] = (
+            "archive1@example.org, archive2@example.net; not-an-address  archive3@example.io"
+        )
+        sender = EmailSender()
+        assert sender.archive_recipients == [
+            "archive1@example.org", "archive2@example.net",
+            "not-an-address", "archive3@example.io"], sender.archive_recipients
+
+        captured = {}
+        class _FakeSMTP:
+            def __init__(self, host, port, timeout=20): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def ehlo(self): return None
+            def starttls(self): return None
+            def login(self, user, password): pass
+            def sendmail(self, from_addr, to_addrs, msg):
+                captured["from"], captured["to"], captured["msg"] = from_addr, list(to_addrs), msg
+
+        saved_smtp = es.smtplib.SMTP
+        es.smtplib.SMTP = _FakeSMTP
+        try:
+            res = sender.send_email("operator@example.org", "Тест", "<p>тело</p>", "тело")
+        finally:
+            es.smtplib.SMTP = saved_smtp
+        assert res["status"] == "DELIVERED", res
+        assert res["archive_copy"] == "sent (3)", f"only the valid ones must ride: {res}"
+        assert captured["to"] == ["operator@example.org", "archive1@example.org",
+                                  "archive2@example.net", "archive3@example.io"], captured["to"]
+        assert "Bcc" not in captured["msg"], "archive addresses must never be headers"
+        for addr in ("archive1", "archive2", "archive3", "example"):
+            pass
+        assert "not-an-address" not in captured["msg"]
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    print("[+] Test 70 Passed: one letter, several archive mailboxes, "
+          "invalid ones skipped, nothing in headers.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5583,6 +5646,7 @@ if __name__ == "__main__":
         test_67_the_runtime_contract_must_be_pinned,
         test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies,
         test_69_the_self_registered_mega_account_is_sealed_and_usable,
+        test_70_the_archive_copy_can_fan_out_to_several_mailboxes,
     ]
     failed = []
     for t in tests:
