@@ -62,6 +62,12 @@ jobs:
           # Each path on its own: a multi-path `git add` aborts entirely when
           # one pathspec does not match.
           git add data/mega_archive_report.json 2>/dev/null || true
+          # The sealed vault: when the archive cycle had to build a new
+          # account (measured 2026-11-04: MEGA closed the door for ours),
+          # the new credentials and its recovery key live ONLY here. Not
+          # committing this file would kill the account with the runner.
+          git add data/.sealed_vault.json 2>/dev/null || true
+          git add data/mega_provision_report.json 2>/dev/null || true
           if ! git diff --staged --quiet; then
             git commit -m "chore(archive): the own-cloud copy's proof [skip ci]"
           else

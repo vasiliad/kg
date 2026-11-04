@@ -6538,6 +6538,195 @@ def test_76_the_cloud_wire_retries_the_reads_and_never_the_changes():
           "the reads are asked again, and the changes are never replayed.")
 
 
+def test_77_the_complex_can_build_its_own_account_again():
+    """
+    Measured 2026-11-04: MEGA closed the door for the account the complex
+    had registered for itself, and the registration driver was NOT in the
+    repository — it had been a one-off script on the operator's machine. So
+    the chain could not repeat itself in the cloud, and the third copy of
+    the record had nowhere to go.
+
+    Four contracts, proved here (without a single request to the network):
+    (a) every sealed account is found, and a half-written slot is named
+        instead of silently skipped;
+    (b) the chain runs on the providers' DOCUMENTED APIs — mail.tm's public
+        API and MEGA's own protocol — and the signup link is read from the
+        complex's OWN mailbox;
+    (c) the new credentials are sealed, and the report carries a fingerprint
+        instead of an address;
+    (d) the chain is BOUNDED: the cap stops it, one attempt a day stops it,
+        and the archive tries every sealed account before it gives up.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 77: the complex can build its own account again")
+    print("=" * 60)
+    import tempfile
+    from datetime import datetime, timezone
+    from harness import mega_provision as mp
+    from harness import sealed_vault
+
+    tmp = Path(tempfile.mkdtemp(prefix="mega-provision-test-"))
+    vpath = tmp / ".sealed_vault.json"
+    salt = "salt-for-the-test"
+
+    # --- (a) the slots -----------------------------------------------------
+    sealed_vault.put("mega:email", "one@example.invalid", salt=salt, path=vpath)
+    sealed_vault.put("mega:password", "pw-one", salt=salt, path=vpath)
+    sealed_vault.put("mega:email_2", "two@example.invalid", salt=salt, path=vpath)
+    sealed_vault.put("mega:password_2", "pw-two", salt=salt, path=vpath)
+    accounts = mp.load_accounts(salt, vpath)
+    assert [a["slot"] for a in accounts if not a.get("broken")] == [1, 2], \
+        f"every sealed account must be found: {accounts}"
+    sealed_vault.put("mega:email_3", "three@example.invalid", salt=salt, path=vpath)
+    accounts = mp.load_accounts(salt, vpath)
+    assert [a["slot"] for a in accounts if a.get("broken")] == [3], \
+        f"a half-written slot must be named, not hidden: {accounts}"
+
+    # --- (b) the two documented doors, faked -------------------------------
+    class _Resp:
+        def __init__(self, status, payload=None):
+            self.status_code = status
+            self._payload = payload if payload is not None else []
+            self.text = str(payload)
+
+        def json(self):
+            return self._payload
+
+    seen: List[str] = []
+
+    def _post(url, json=None, timeout=None, **kw):
+        seen.append(f"POST {url}")
+        if url.endswith("/accounts"):
+            return _Resp(201, {"address": json["address"]})
+        if url.endswith("/token"):
+            return _Resp(200, {"token": "TOKEN-123"})
+        raise AssertionError(f"unexpected POST {url}")
+
+    def _get(url, headers=None, timeout=None, **kw):
+        seen.append(f"GET {url}")
+        if url.endswith("/domains"):
+            return _Resp(200, [{"domain": "fldubai.com"}])
+        if url.endswith("/messages"):
+            return _Resp(200, [{"id": "M1"}])
+        if "/messages/M1" in url:
+            return _Resp(200, {
+                "text": "Welcome. Please confirm: https://mega.nz/#confirmAbC123",
+                "subject": "MEGA account confirmation",
+            })
+        raise AssertionError(f"unexpected GET {url}")
+
+    class _FakeMega:
+        def __init__(self):
+            self.master_key = b"k" * 16
+
+        def register_request(self, email, password, name):
+            self.registered = (email, password, name)
+            return {"user_handle": "H", "password_key": b"p" * 16,
+                    "challenge": b"c" * 16, "master_key": b"m" * 16,
+                    "recovery_key": "RECOVERY"}
+
+        def register_verify(self, state, signup_key):
+            assert signup_key == "AbC123", f"the wrong link was taken: {signup_key}"
+            return {"email": "new@example.invalid", "sid": "SID",
+                    "recovery_key": "RECOVERY-KEY"}
+
+        def login(self, email, password):
+            return {"sid": "SID", "master_key_ok": True}
+
+        def root_handle(self):
+            return "ROOTNODE"
+
+    saved_get, saved_post = mp.requests.get, mp.requests.post
+    saved_client = mp.MegaClient
+    mp.requests.get, mp.requests.post = _get, _post
+    mp.MegaClient = _FakeMega
+    try:
+        report = mp.provision(salt=salt, path=vpath)
+        assert report["status"] == "ok", f"the chain must complete: {report}"
+        assert report["slot"] == 4, f"the new account must take a fresh slot: {report}"
+        assert report["steps"] == ["mailbox", "handshake", "letter", "verified",
+                                   "sealed", "proven"], report["steps"]
+        assert any("/accounts" in call for call in seen), seen
+        assert any("/messages" in call for call in seen), \
+            f"the signup link must come from our own mailbox: {seen}"
+        assert sealed_vault.get("mega:email_4", salt=salt, path=vpath), \
+            "the new address must be sealed"
+        assert sealed_vault.get("mega:recovery_key_4", salt=salt, path=vpath), \
+            "the new recovery key must be sealed — it is the only way back in"
+        body = json.dumps(report)
+        assert "example.invalid" not in body, \
+            f"the report must carry a fingerprint, not an address: {body}"
+        assert report["account"], "the account must be reported as a fingerprint"
+
+        # --- (d) the cap ----------------------------------------------------
+        accounts = mp.load_accounts(salt, vpath)
+        usable_now = [a for a in accounts if not a.get("broken")]
+        assert len(usable_now) >= mp.MAX_ACCOUNTS, \
+            f"the cap must be reachable in the test: {len(usable_now)}"
+        capped = mp.provision(salt=salt, path=vpath)
+        assert capped["status"] == "skipped", capped
+        assert "cap" in capped["errors"][0].lower(), capped["errors"]
+
+        # --- (d) one attempt a day ------------------------------------------
+        rpath = tmp / "mega_provision_report.json"
+        rpath.write_text(json.dumps({
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "status": "ok"}), encoding="utf-8")
+        outcome = mp.maybe_provision(salt=salt, path=vpath, report_path=rpath)
+        assert outcome["attempted"] is False, \
+            f"the complex must not hammer a closed provider: {outcome}"
+        assert "wait" in outcome["why"], outcome
+    finally:
+        mp.requests.get, mp.requests.post = saved_get, saved_post
+        mp.MegaClient = saved_client
+
+    # --- (d) the archive tries every sealed account ------------------------
+    from harness import mega_archive as ma
+
+    class _ArchiveClient:
+        def __init__(self):
+            self.master_key = b"k" * 16
+            self.tried: List[str] = []
+
+        def login(self, email, password):
+            self.tried.append(email)
+            if email == "one@example.invalid":
+                raise RuntimeError("HTTP 402 with a non-JSON body")
+            return {"sid": "SID", "master_key_ok": True}
+
+        def root_handle(self):
+            return "ROOTNODE"
+
+        def mkdir(self, parent, name):
+            raise RuntimeError("the test stops after the login phase")
+
+    archive_client = _ArchiveClient()
+    saved_accounts = ma.load_accounts
+    saved_archive_client = ma.MegaClient
+    saved_salt = ma.vault_salt
+    ma.load_accounts = lambda salt=None, path=None: [
+        {"slot": 1, "email": "one@example.invalid", "password": "pw"},
+        {"slot": 2, "email": "two@example.invalid", "password": "pw"},
+    ]
+    ma.vault_salt = lambda explicit=None: "salt-for-the-test"
+    ma.MegaClient = lambda *a, **k: archive_client
+    try:
+        report = ma.archive_once()
+    finally:
+        ma.load_accounts = saved_accounts
+        ma.MegaClient = saved_archive_client
+        ma.vault_salt = saved_salt
+    assert archive_client.tried == ["one@example.invalid", "two@example.invalid"], \
+        f"every sealed account must get a turn: {archive_client.tried}"
+    assert report.get("slot") == 2, f"the working account must be named: {report}"
+    assert any("account 1" in err for err in report["errors"]), report["errors"]
+    assert "example.invalid" not in json.dumps(report), \
+        f"the report must not carry an address: {report}"
+
+    print("[+] Test 77 Passed: the complex can build its own account again — "
+          "through the documented doors, bounded, sealed, and proved.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -6624,6 +6813,7 @@ if __name__ == "__main__":
         test_74_the_cloud_reaches_every_tier_and_the_state_survives_the_runner,
         test_75_the_cloud_client_never_guesses_what_it_cannot_read,
         test_76_the_cloud_wire_retries_the_reads_and_never_the_changes,
+        test_77_the_complex_can_build_its_own_account_again,
     ]
     failed = []
     for t in tests:

@@ -1,0 +1,72 @@
+name: MEGA Provision (own cloud account)
+
+# The complex builds its own infrastructure. Measured 2026-11-04: MEGA closed
+# the door for the account the complex had registered for itself, and the
+# registration driver was NOT in the repository — it lived as a one-off
+# script on the operator's machine, so the chain could not repeat itself in
+# the cloud. Now the chain is here: a mailbox (mail.tm's PUBLIC API) ->
+# MEGA's own client protocol -> the signup link read from our own mailbox ->
+# the credentials sealed into the vault -> the login proved.
+#
+# Dispatch-only: the archive cycle may call the same chain on its own when
+# the door is closed for our account (bounded: the cap and one attempt a
+# day). This workflow is the operator's manual way to try it, and to see
+# the answer without waiting for the next archive tick.
+#
+# Every boundary holds: the mail.tm API is documented for automation, MEGA's
+# protocol is the documented client API, and if either provider asks for a
+# human, the chain stops and says so.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          # Pinned contract (requirements-actions.txt): the runtime changes
+          # only when a commit changes it.
+          pip install -r requirements-actions.txt
+
+      - name: Build the account
+        env:
+          # The salt that opens the vault. The new account's credentials are
+          # sealed under it; the repository carries ciphertext only.
+          VAULT_SALT: ${{ secrets.VAULT_SALT }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+        run: python harness/mega_provision.py
+
+      - name: Persist the vault and the report
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          # Each path on its own: a multi-path `git add` aborts entirely when
+          # one pathspec does not match.
+          # The sealed vault carries the NEW account's credentials and its
+          # recovery key — if this file is not committed, the account dies
+          # with the runner, and the recovery key with it.
+          git add data/.sealed_vault.json 2>/dev/null || true
+          git add data/mega_provision_report.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(cloud): the complex built its own account [skip ci]"
+          else
+            echo "No vault or report changes."
+          fi
+          bash scripts/sync_state.sh

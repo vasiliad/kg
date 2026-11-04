@@ -42,6 +42,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from harness import redaction
 from harness import sealed_vault
 from harness.mega_client import MegaClient
+from harness.mega_provision import load_accounts, maybe_provision
 
 REPORT_PATH = PROJECT_ROOT / "data" / "mega_archive_report.json"
 ARCHIVE_ROOT = "kg-archive"
@@ -152,28 +153,69 @@ def archive_once(root: Optional[Path] = None,
         "door": {},
     }
 
+    # EVERY sealed account gets a turn. Measured 2026-11-04: MEGA closed the
+    # door for the account the complex had made for itself, and the archive
+    # had nowhere else to go — while a second account, if there were one,
+    # would have carried the record all along.
     try:
-        creds = load_credentials(salt=salt)
+        accounts = load_accounts(vault_salt(salt))
     except Exception as exc:
         report["errors"].append(f"vault: {type(exc).__name__}: {exc}")
         return report
-    # The address is a credential-bearing fact: it is reported as a
-    # fingerprint, never in full.
-    report["account"] = redaction.fingerprint(creds["email"])
+    usable = [a for a in accounts if not a.get("broken")]
+    if not usable:
+        report["errors"].append("vault: no usable MEGA account is sealed")
+        return report
+    if len(usable) < len(accounts):
+        report["errors"].append(
+            f"vault: {len(accounts) - len(usable)} sealed account(s) are half-written "
+            "and cannot be used")
 
     client = MegaClient()
-    try:
-        login = client.login(creds["email"], creds["password"])
-        if not login.get("master_key_ok"):
-            report["errors"].append("login: the master key did not verify")
-            return report
-        root_handle = client.root_handle()
-    except Exception as exc:
-        report["errors"].append(f"login: {type(exc).__name__}: {exc}")
+    working: Optional[Dict[str, Any]] = None
+    for account in usable:
+        try:
+            login = client.login(account["email"], account["password"])
+            if not login.get("master_key_ok"):
+                report["errors"].append(f"account {account['slot']}: "
+                                        "the master key did not verify")
+                continue
+            working = account
+            break
+        except Exception as exc:
+            report["errors"].append(f"account {account['slot']}: "
+                                    f"{type(exc).__name__}: {exc}")
+    if working is None:
         # The door's state travels with the failure: the operator must be
         # able to tell «MEGA closed the door to this host» from «our
         # account needs attention» without reading the client code.
         report["door"] = probe_door()
+        # The complex builds its own infrastructure: if the door is open for
+        # everyone but closed for us, make a new account — bounded by the
+        # cap and by one attempt a day.
+        if report["door"].get("state") == "open":
+            outcome = maybe_provision(salt=salt)
+            report["provision"] = outcome
+            if outcome.get("status") == "ok":
+                accounts = load_accounts(vault_salt(salt))
+                for account in accounts:
+                    if account.get("broken"):
+                        continue
+                    try:
+                        login = client.login(account["email"], account["password"])
+                        if login.get("master_key_ok"):
+                            working = account
+                            break
+                    except Exception:
+                        continue
+        if working is None:
+            return report
+    report["account"] = redaction.fingerprint(working["email"])
+    report["slot"] = working.get("slot")
+    try:
+        root_handle = client.root_handle()
+    except Exception as exc:
+        report["errors"].append(f"root: {type(exc).__name__}: {exc}")
         return report
 
     folder = ""
