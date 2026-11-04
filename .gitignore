@@ -65,6 +65,13 @@ data/.event_vault.json
 # personal address to the public repository.
 data/.bot_settings.json
 
+# The mailboxes the complex registered ITSELF (ADL-031). The file holds
+# their passwords in the clear — it is the keeper's working copy, and the
+# seal script (`scripts/seal_mail_accounts.py`) is what moves those
+# credentials into the vault. Committing it would put real passwords into
+# the public repository.
+self_provisioned_mailboxes.json
+
 # Temporary MTProto session for the real-user bot test client
 # (scripts/tg_user_test.py). The session grants access to the test Telegram
 # account, so it must NEVER be committed; it is deleted by `logout`.

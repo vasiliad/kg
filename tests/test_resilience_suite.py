@@ -7213,6 +7213,204 @@ def test_81_the_letter_judges_both_cloud_copies_by_one_rule():
           "a missing file is named.")
 
 
+def test_82_the_mailbox_record_says_which_mailboxes_survive_a_restart():
+    """
+    Measured 2026-11-04 (ADL-031): the complex registered 10 mailboxes of its
+    own in one drill — 5 real registrations with credentials (mail.tm) and 5
+    session-assigned ones (guerrillamail, NO credentials at all). The record
+    then said «10 created» and stopped there.
+
+    That sentence hides two different things. Five of those mailboxes can
+    never be recovered — the provider issued no password. The other five had
+    their credentials in ONE untracked local file: not in the repository, not
+    in the sealed vault (measured 2026-11-05: the vault's 22 entries are 10
+    MEGA + 12 operator mailbox/drive — not one of the complex's own). So a
+    restart of that machine took all five away, and the complex counted them
+    as if they were still there.
+
+    Four contracts, proved here (no network at all):
+    (a) every mailbox carries a TIER — a registration it cannot log into
+        again is never counted as an asset;
+    (b) sealing the local file turns a registration into a durable one, and
+        the vault round trip proves it;
+    (c) the NUMBER of sealed mailboxes is knowable WITHOUT the salt (the
+        entry names are plaintext) — «the vault is closed» must never become
+        «there are none»;
+    (d) the health letter shows the tiers and names the unsealed ones.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 82: the mailbox record says which mailboxes survive a restart")
+    print("=" * 60)
+    import tempfile
+    from harness import mail_accounts as ma
+    from harness import sealed_vault
+    from harness import email_render
+
+    tmp = Path(tempfile.mkdtemp(prefix="mailbox-tiers-"))
+    local = tmp / "self_provisioned_mailboxes.json"
+    rows = []
+    for index in range(5):
+        rows.append({"provider": "mailtm", "address": f"kg{index}@fldubai.com",
+                     "password": f"pw-{index}", "token": f"tok-{index}"})
+    for index in range(5):
+        rows.append({"provider": "guerrillamail",
+                     "address": f"session{index}@sharklasers.com",
+                     "password": "", "tier": "session"})
+    local.write_text(json.dumps(rows), encoding="utf-8")
+
+    saved_file = ma.SELF_PROVISIONED_FILE
+    saved_vault_path = sealed_vault.VAULT_PATH
+    saved_salt = os.environ.get("VAULT_SALT")
+    os.environ["VAULT_SALT"] = "salt-for-the-mailbox-test"
+    ma.SELF_PROVISIONED_FILE = local
+    sealed_vault.VAULT_PATH = tmp / "vault.json"
+    try:
+        # --- (a) the tiers, before anything is sealed ----------------------
+        own = ma.self_provisioned()
+        assert len(own) == 10, f"both tiers must be visible: {own}"
+        durable = [r for r in own if r["tier"] == ma.TIER_DURABLE_LOCAL]
+        session = [r for r in own if r["tier"] == ma.TIER_SESSION]
+        assert len(durable) == 5, f"5 durable registrations: {own}"
+        assert len(session) == 5, f"5 session-only mailboxes: {own}"
+        assert all(not r["password"] for r in session), \
+            "a session-only mailbox has no credentials to recover"
+
+        # --- (b) sealing turns a registration into an asset -----------------
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "seal_script", PROJECT_ROOT / "scripts" / "seal_mail_accounts.py")
+        seal_script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(seal_script)
+        values = seal_script.collect_self_provisioned()
+        assert len(values) == 15, \
+            f"5 mailboxes × address+password+token: {values}"
+        for name, value in values.items():
+            sealed_vault.put(name, value, salt=os.environ["VAULT_SALT"])
+
+        after = ma.self_provisioned()
+        sealed_rows = [r for r in after if r["tier"] == ma.TIER_DURABLE_SEALED]
+        assert len(sealed_rows) == 5, \
+            f"the sealed ones must be durable: {[r['tier'] for r in after]}"
+        assert sum(1 for r in after if r["tier"] == ma.TIER_SESSION) == 5, after
+        assert all(r["password"] for r in sealed_rows), \
+            "a sealed mailbox keeps its password"
+
+        tiers = ma.mailbox_tiers()
+        assert tiers["own_durable_sealed"] == 5, tiers
+        assert tiers["own_session"] == 5, tiers
+        assert tiers["own_durable_local"] == 0, tiers
+
+        # --- (c) the count is knowable without the salt --------------------
+        saved_vault_salt = ma.vault_salt
+        ma.vault_salt = lambda explicit=None: (_ for _ in ()).throw(
+            RuntimeError("no salt in this half of the test"))
+        try:
+            assert ma.sealed_self_provisioned_count() == 5, \
+                "the count must not hide behind a closed vault"
+            blind = ma.self_provisioned()
+            # The vault's entry NAMES are derived from the addresses, so the
+            # FACT of sealing is knowable without the salt: a closed vault
+            # must not turn a sealed mailbox into «not sealed».
+            assert len(blind) == 10, blind
+            assert sum(1 for r in blind
+                       if r["tier"] == ma.TIER_DURABLE_SEALED) == 5, blind
+            assert sum(1 for r in blind
+                       if r["tier"] == ma.TIER_SESSION) == 5, blind
+        finally:
+            ma.vault_salt = saved_vault_salt
+
+        # --- (d) the letter shows the tiers --------------------------------
+        html, plain = email_render.render_health({
+            "subject": "Проверка связи", "mailboxes": tiers})
+        assert "Почтовые ящики" in plain, plain
+        assert "запечатаны в vault: 5" in plain, plain
+        assert "сессионные (без пароля): 5" in plain, plain
+
+        # And an UNSEALED registration is named, not counted as an asset.
+        unsealed = dict(tiers, own_durable_local=5, own_durable_sealed=0)
+        html, plain = email_render.render_health({
+            "subject": "Проверка связи", "mailboxes": unsealed})
+        assert "не запечатаны" in plain, plain
+        assert "умрут с этой машиной" in plain, plain
+
+        # --- and the record itself says 5 + 5, not «10 created» ------------
+        # The ADL files are the operator's LOCAL notes (they are excluded
+        # from the repository on purpose), so this check runs where the
+        # record is — and is skipped where it is not.
+        adl_path = PROJECT_ROOT / "ADL-031.md"
+        if adl_path.exists():
+            adl = adl_path.read_text(encoding="utf-8")
+            assert "5 прочных" in adl and "5 сессионных" in adl, \
+                "the record must name the two tiers"
+    finally:
+        ma.SELF_PROVISIONED_FILE = saved_file
+        sealed_vault.VAULT_PATH = saved_vault_path
+        if saved_salt is None:
+            os.environ.pop("VAULT_SALT", None)
+        else:
+            os.environ["VAULT_SALT"] = saved_salt
+
+    print("[+] Test 82 Passed: the mailboxes carry tiers — a session-only "
+          "mailbox is never an asset, sealing makes a registration durable, "
+          "and the letter names what is not sealed.")
+
+
+def test_83_the_operator_mailbox_addresses_never_reach_the_public_repository():
+    """
+    Measured 2026-11-05: the operator's own handoff letter — the one that
+    carries the three mailboxes and the Drive credentials — was deliberately
+    left UNCOMMITTED, because the repository is public. But the SAME three
+    mailbox addresses sat in plaintext in two TRACKED files: the inventory
+    table in MAIL_AND_DRIVE.md and the module docstring of
+    harness/mail_accounts.py. The rule that says «the operator's addresses
+    live in the secret and in the untracked file, nowhere else» (test 32)
+    was about the report recipient — but the principle is the same, and the
+    letter's own handling is the proof of the intent: these addresses were
+    not meant to be published.
+
+    One contract, proved here:
+      NO tracked file may contain any of the operator's mailbox addresses.
+    The addresses are read from the environment (the .env locally, the
+    secrets in the cloud) — never written into this test, which would be
+    the very leak it is looking for.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 83: the operator's mailbox addresses never reach the public repo")
+    print("=" * 60)
+    import subprocess
+    from harness import env_file
+
+    env_file.load_dotenv()
+    names = ("PROTON_MAIL_ADDRESS", "TUTA_ADDRESS", "MAILTM_ADDRESS",
+             "PROTON_DRIVE_ADDRESS", "PROTON_MAIL_USERNAME")
+    addresses = [(name, (os.getenv(name) or "").strip()) for name in names]
+    addresses = [(name, value) for name, value in addresses if value]
+    if not addresses:
+        print("[~] Skipped: no mailbox address in the environment — nothing to "
+              "scan for (the check runs where the addresses are configured)")
+        return
+
+    tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                             cwd=str(PROJECT_ROOT)).stdout.splitlines()
+    assert tracked, "git ls-files returned nothing — the scan would be empty"
+    leaked: List[str] = []
+    for rel in tracked:
+        path = PROJECT_ROOT / rel
+        try:
+            body = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for name, value in addresses:
+            if value and value in body:
+                leaked.append(f"{rel} holds the {name}")
+    assert not leaked, (
+        "the operator's mailbox addresses must not be in the public "
+        f"repository: {leaked}")
+
+    print(f"[+] Test 83 Passed: {len(addresses)} operator addresses checked "
+          f"against {len(tracked)} tracked files — none of them holds one.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -7304,6 +7502,8 @@ if __name__ == "__main__":
         test_79_the_local_run_finds_the_salt_where_the_letter_says_it_is,
         test_80_the_complex_mounts_its_own_disk_without_leaking_the_password,
         test_81_the_letter_judges_both_cloud_copies_by_one_rule,
+        test_82_the_mailbox_record_says_which_mailboxes_survive_a_restart,
+        test_83_the_operator_mailbox_addresses_never_reach_the_public_repository,
     ]
     failed = []
     for t in tests:

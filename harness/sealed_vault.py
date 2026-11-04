@@ -19,7 +19,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from Crypto.Cipher import AES
 
@@ -98,3 +98,41 @@ def get(name: str, salt: Optional[str] = None, path: Optional[Path] = None) -> O
         if isinstance(entry, dict) and entry.get("name") == name:
             return open_entry(entry, salt)
     return None
+
+
+def entry_names(path: Optional[Path] = None) -> List[str]:
+    """
+    The names of the sealed entries — without opening any of them.
+
+    The names are plaintext in the ciphertext file, so the INVENTORY of the
+    vault is knowable even when the salt is not at hand. «I cannot open the
+    vault» must never become «there is nothing in it».
+    """
+    return [str(entry.get("name") or "")
+            for entry in load_vault(path).get("entries", [])
+            if isinstance(entry, dict)]
+
+
+def open_many(names: List[str], salt: Optional[str] = None,
+              path: Optional[Path] = None) -> Dict[str, str]:
+    """
+    Open several entries with ONE key derivation.
+
+    The KDF is the cost of this vault (200 000 PBKDF2 rounds), and reading
+    one mailbox means three entries. Deriving the key once per entry made
+    the inventory slower than the thing it measures — so the key is derived
+    once here, and the entries are opened with it.
+    """
+    key = _vault_key(salt)
+    wanted = set(names)
+    out: Dict[str, str] = {}
+    for entry in load_vault(path).get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "")
+        if name not in wanted:
+            continue
+        cipher = AES.new(key, AES.MODE_GCM, nonce=_b64d(entry["nonce"]))
+        out[name] = cipher.decrypt_and_verify(
+            _b64d(entry["ct"]), _b64d(entry["tag"])).decode("utf-8")
+    return out

@@ -17,6 +17,11 @@ WHAT IS SEALED
   tuta:address / :password / :recovery_code         the Tuta mailbox
   mailtm:address / :password / :token               the readable mailbox
   drive:address / :password / :tfa                 the Proton Drive disk
+  selfprov:<n>:address / :password / :token          the mailboxes the
+                                                     complex registered itself
+                                                     (from the local
+                                                     self_provisioned_
+                                                     mailboxes.json)
 
 USAGE
   python scripts/seal_mail_accounts.py               # seal from .env
@@ -70,7 +75,7 @@ def collect() -> dict:
     """The plaintexts to seal, taken from .env / the environment."""
     boxes = {b["provider"]: b for b in mail_accounts.mailboxes()}
     drive = mail_accounts.drive()
-    return {
+    values = {
         "proton:address": boxes["proton"].get("address", ""),
         "proton:username": boxes["proton"].get("username", ""),
         "proton:password": boxes["proton"].get("password", ""),
@@ -85,6 +90,34 @@ def collect() -> dict:
         "drive:password": drive.get("password", ""),
         "drive:tfa": drive.get("tfa_secret", ""),
     }
+    values.update(collect_self_provisioned())
+    return values
+
+
+def collect_self_provisioned() -> dict:
+    """
+    The mailboxes the complex registered ITSELF, from the keeper's local
+    file (ADL-031).
+
+    A registration that is never sealed is a registration that dies with
+    the file that held it — so sealing them is what turns «10 created»
+    into «10 the complex can still use». Rows without a password are
+    session-only mailboxes: there is nothing to seal, and pretending
+    otherwise would be a lie in the inventory.
+    """
+    values: dict = {}
+    for box in mail_accounts.read_self_provisioned_file():
+        address = box.get("address") or ""
+        password = box.get("password") or ""
+        token = box.get("token") or ""
+        if not address or not password:
+            continue
+        base = mail_accounts.self_provisioned_key(address)
+        values[f"{base}address"] = address
+        values[f"{base}password"] = password
+        if token:
+            values[f"{base}token"] = token
+    return values
 
 
 def main() -> int:
@@ -101,6 +134,16 @@ def main() -> int:
         return 2
     proven = prove_salt(salt)
     print(f"salt present: yes | opens the existing vault: {'yes' if proven else 'NO'}")
+    # Which salt is this? The cloud's jobs split between two names — the
+    # archive and seal cycles carry VAULT_SALT, while the dispatch and the
+    # diagnostics carry REDACTION_SALT. If only one of them opens the vault,
+    # the other job cannot read a single mailbox, and the health letter
+    # would have to say «не измерено» forever. The answer is a YES/NO —
+    # never the salts themselves.
+    red = (os.getenv("REDACTION_SALT") or "").strip()
+    if red and red != salt:
+        print(f"the other salt (REDACTION_SALT) opens the same vault: "
+              f"{'yes' if prove_salt(red) else 'NO'}")
     if not proven and not args.force:
         print("refusing to seal: the salt does not open the existing vault entries, "
               "so the cloud would not be able to read what is written. "

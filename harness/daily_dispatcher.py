@@ -63,6 +63,7 @@ from harness import atomic_io
 from harness import redaction
 from harness import state_vault
 from harness import email_render
+from harness import mail_accounts
 from harness import runtime_settings
 from harness import tool_call
 from harness.disk_guard import DiskGuard
@@ -355,6 +356,10 @@ def build_health_report_email() -> Dict[str, str]:
         # It gets the same verdict rules as the archive: a stale or missing
         # report must never be rendered as a healthy copy.
         "drive_cloud": _read_drive_report(),
+        # What the complex can actually USE: how many mailboxes it reads
+        # unattended, how many only a person can open, and how many of the
+        # mailboxes it registered itself survive a restart of this machine.
+        "mailboxes": mail_accounts.mailbox_tiers(),
         "recipient_tag": redaction.recipient_tag(resolve_recipient()),
         "sender_name": SENDER_NAME,
     }

@@ -679,6 +679,54 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
     if drive_cloud:
         body.append(_copy_block_html("Proton Drive — копия на диске", drive_cloud))
 
+    # --- the mailboxes: what the complex can actually USE ------------------
+    # Measured 2026-11-04 (ADL-031): the complex registered 10 mailboxes of
+    # its own and the record said «10 created». Five of them were
+    # session-only (no credentials, ever) and the other five lived in one
+    # untracked local file. A mailbox it cannot log into again is not a
+    # mailbox it may count on — so the letter shows the TIERS, and a
+    # registration that is not sealed is named as such.
+    boxes = report.get("mailboxes") or {}
+    if boxes:
+        b_measured = boxes.get("measured", True)
+        b_readable = int(boxes.get("api_readable") or 0)
+        b_human = int(boxes.get("human_only") or 0)
+        b_sealed = int(boxes.get("own_durable_sealed") or 0)
+        b_local = int(boxes.get("own_durable_local") or 0)
+        b_session = int(boxes.get("own_session") or 0)
+        if b_measured:
+            b_facts = [f"читаются без человека: {b_readable}",
+                       f"только человеком: {b_human}"]
+        else:
+            b_facts = ["не измерено в этом цикле: нет ни адресов в окружении, "
+                       "ни соли vault"]
+        if b_sealed or b_local or b_session:
+            b_facts.append(f"свои, запечатаны в vault: {b_sealed}")
+        if b_local:
+            b_facts.append(f"свои, не запечатаны (умрут с этой машиной): {b_local}")
+        if b_session:
+            b_facts.append(f"сессионные (без пароля): {b_session}")
+        b_color = "#b45309" if (b_local or not b_measured) else GOOD
+        b_note = ""
+        if not b_measured:
+            b_note = ("инвентарь ящиков не измерен: этому циклу нужна соль "
+                      "vault или адреса в окружении")
+        elif b_local:
+            b_note = ("есть свои ящики, чьи учётные данные не запечатаны — "
+                      "они не переживут эту машину")
+        body.append(
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
+            f'<tr><td style="padding:12px 14px;">'
+            f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">'
+            "Почтовые ящики — что комплекс может читать сам</div>"
+            f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">'
+            f"{escape(' · '.join(b_facts))}</div>"
+            + (f'<div style="font-size:13px; color:{b_color}; padding-top:4px;">'
+               f"! {escape(b_note)}</div>" if b_note else "")
+            + "</td></tr></table>"
+        )
+
     # --- the arbiter -------------------------------------------------------
     body.append(
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
@@ -811,6 +859,12 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
     if drive_cloud:
         plain.append("")
         plain.extend(_copy_block_plain("Proton Drive — копия на диске", drive_cloud))
+    if boxes:
+        plain.append("")
+        plain.append("Почтовые ящики — что комплекс может читать сам:")
+        plain.append(f"- {' · '.join(b_facts)}")
+        if b_note:
+            plain.append(f"    ! {b_note}")
     plain.append("")
     plain.append("Действующий флот:")
     if fleet:

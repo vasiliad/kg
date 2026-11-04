@@ -4,15 +4,17 @@ The complex's own mailboxes and its cloud disk — one place that knows how to
 reach them.
 
 Three independent providers, because one dead provider must never silence the
-complex:
+complex. The addresses are NOT written here: this repository is public, and
+the operator's addresses live in `.env`, in the sealed vault and in the
+operator's own letter — nowhere else (test 83 holds that line).
 
-  proton  vanvasiliadi@protonmail.com  Free. Carries the Proton Drive cloud
-          disk as well: the login is shared, the surfaces are separate.
-  tuta    ivan.vasiliadi@tutamail.com  Free. The non-Proton verification
-          inbox; its recovery code is the only way back in.
-  mailtm  xray1793739979@fldubai.com   The only one with a plain REST API,
-          so it is the only mailbox the complex can READ unattended — the
-          other two are write/receive-only for a human.
+  proton  Free. Carries the Proton Drive cloud disk as well: the login is
+          shared, the surfaces are separate.
+  tuta    Free. The non-Proton verification inbox; its recovery code is the
+          only way back in.
+  mailtm  The only one with a plain REST API, so it is the only mailbox the
+          complex can READ unattended — the other two are receive-only for
+          a human.
 
 WHERE THE CREDENTIALS LIVE (this repository is PUBLIC):
   - .env            — local runs; gitignored, never committed.
@@ -50,6 +52,45 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 MAILTM_API = "https://api.mail.tm"
+
+# --------------------------------------------------------------------------
+# The tiers of a mailbox — and the difference between them is the whole
+# point of the inventory.
+#
+# Measured 2026-11-04 (ADL-031): the complex registered 10 mailboxes of its
+# own in one drill — 5 with credentials (mail.tm) and 5 session-assigned
+# (guerrillamail, no credentials at all). The record then said «10 created»
+# and stopped there. That is the kind of sentence the complex is not allowed
+# to write: a mailbox it can never log into again is not a mailbox it may
+# count on, and a mailbox whose credentials sit in one untracked file dies
+# with that file.
+#
+# So every mailbox carries a TIER, and the inventory says it out loud:
+#   api-readable      the complex reads it unattended, over an API
+#   human-only        a person must open it; the complex only sends to it
+#   durable (sealed)  the complex registered it AND sealed the credentials
+#                     in the vault — it survives this machine
+#   durable, NOT sealed
+#                     registered, credentials only in the local untracked
+#                     file — it dies with that file, and the inventory says
+#                     so instead of counting it as an asset
+#   session-only      no credentials were ever issued; it dies with the
+#                     session and can never be recovered
+# --------------------------------------------------------------------------
+
+TIER_API = "api-readable (unattended)"
+TIER_HUMAN = "human-only (a person must read it)"
+TIER_DURABLE_SEALED = "durable (sealed in the vault)"
+TIER_DURABLE_LOCAL = "durable but NOT sealed (dies with this machine)"
+TIER_SESSION = "session-only (no credentials, dies with the session)"
+
+# The keeper's untracked working copy of the mailboxes the complex
+# registered itself. It is in .gitignore: it holds passwords in the clear.
+# Sealing it into the vault is what turns a registration into an asset.
+SELF_PROVISIONED_FILE = PROJECT_ROOT / "self_provisioned_mailboxes.json"
+
+# The vault's own naming for the complex's own mailboxes.
+SELF_PROVISIONED_PREFIX = "selfprov:"
 
 
 def _env(name: str, default: str = "") -> str:
@@ -130,6 +171,7 @@ def describe() -> List[Dict[str, Any]]:
             "address_masked": _mask(box.get("address", "")),
             "password": _mask(box.get("password", "")),
             "readable": box.get("readable", False),
+            "tier": TIER_API if box.get("readable") else TIER_HUMAN,
         })
     d = drive()
     rows.append({
@@ -138,8 +180,216 @@ def describe() -> List[Dict[str, Any]]:
         "address_masked": _mask(d.get("address", "")),
         "password": _mask(d.get("password", "")),
         "tfa": "on" if d.get("tfa_secret") else "off",
+        "tier": "cloud disk (the complex keeps it by itself)",
     })
+    for box in self_provisioned():
+        rows.append({
+            "provider": f"self:{box.get('provider') or 'mailtm'}",
+            "address_fp": _fingerprint(box.get("address", "")),
+            "address_masked": _mask(box.get("address", "")),
+            "password": _mask(box.get("password", "")),
+            "readable": bool(box.get("token")),
+            "tier": box.get("tier") or TIER_DURABLE_LOCAL,
+        })
     return rows
+
+
+# --------------------------------------------------------------------------
+# The complex's own mailboxes (ADL-031)
+# --------------------------------------------------------------------------
+
+def vault_salt(explicit: Optional[str] = None) -> str:
+    """The salt that opens the vault: VAULT_SALT first, REDACTION_SALT after."""
+    env_file.load_dotenv()
+    salt = (explicit if explicit is not None else
+            os.getenv("VAULT_SALT") or os.getenv("REDACTION_SALT") or "").strip()
+    if not salt:
+        raise RuntimeError("neither VAULT_SALT nor REDACTION_SALT is set — "
+                           "the vault cannot be opened")
+    return salt
+
+
+def read_self_provisioned_file(path: Optional[Path] = None) -> List[Dict[str, str]]:
+    """
+    The keeper's untracked working copy of the mailboxes it registered.
+
+    The format is a list of rows (a dict with a «mailboxes» key is also
+    accepted):
+      {"provider": "mailtm", "address": "...", "password": "...",
+       "token": "...", "tier": "durable" | "session"}
+    A row without a password is a session-only mailbox — the provider never
+    issued one, and no amount of effort will make it recoverable.
+    """
+    target = Path(path) if path else SELF_PROVISIONED_FILE
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if isinstance(data, dict):
+        data = data.get("mailboxes") or data.get("accounts") or []
+    rows: List[Dict[str, str]] = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        address = str(item.get("address") or "").strip()
+        if not address:
+            continue
+        rows.append({
+            "provider": str(item.get("provider") or "mailtm").strip().lower(),
+            "address": address,
+            "password": str(item.get("password") or "").strip(),
+            "token": str(item.get("token") or "").strip(),
+            "tier": str(item.get("tier") or "").strip().lower(),
+        })
+    return rows
+
+
+def self_provisioned_key(address: str) -> str:
+    """
+    The vault's name for one of the complex's own mailboxes.
+
+    Derived from the ADDRESS, not from a row number: a row number changes
+    when the file is reordered or a session-only row is added, and the
+    sealed credentials must not silently swap places.
+    """
+    return f"{SELF_PROVISIONED_PREFIX}{_fingerprint(address).replace('sha256:', '')}:"
+
+
+def _sealed_self_provisioned_names() -> List[str]:
+    """The vault names of the complex's own mailboxes (no salt needed)."""
+    from harness import sealed_vault
+    try:
+        names = sealed_vault.entry_names()
+    except Exception:
+        return []
+    return [n for n in names
+            if n.startswith(SELF_PROVISIONED_PREFIX) and n.endswith(":address")]
+
+
+def sealed_self_provisioned_count() -> int:
+    """
+    How many of the complex's own mailboxes are sealed in the vault.
+
+    The COUNT comes from the entry NAMES — which are plaintext in the
+    ciphertext file — so the number is known even when the salt is not at
+    hand. «I cannot open the vault» must never become «there are none».
+    """
+    return len(_sealed_self_provisioned_names())
+
+
+def self_provisioned(salt: Optional[str] = None,
+                     path: Optional[Path] = None) -> List[Dict[str, str]]:
+    """
+    The complex's own mailboxes, each with the tier it really has.
+
+    Two sources, and the vault wins: a sealed mailbox survives this
+    machine; a mailbox that only lives in the local file dies with it — and
+    the inventory says exactly that instead of counting it as an asset.
+    """
+    from harness import sealed_vault
+    rows: List[Dict[str, str]] = []
+    names = _sealed_self_provisioned_names()
+    sealed_names = set(names)
+    try:
+        the_salt = vault_salt(salt)
+    except Exception:
+        the_salt = ""
+    if the_salt and names:
+        wanted: List[str] = []
+        for name in names:
+            base = name[:-len(":address")]
+            wanted.extend([name, base + ":password", base + ":token"])
+        opened = sealed_vault.open_many(wanted, salt=the_salt)
+        for name in names:
+            base = name[:-len(":address")]
+            address = (opened.get(name) or "").strip()
+            if not address:
+                continue
+            rows.append({
+                "provider": "mailtm",
+                "address": address,
+                "password": (opened.get(base + ":password") or "").strip(),
+                "token": (opened.get(base + ":token") or "").strip(),
+                "tier": TIER_DURABLE_SEALED,
+            })
+
+    seen = {row["address"] for row in rows}
+    for item in read_self_provisioned_file(path):
+        if item["address"] in seen:
+            continue
+        if item.get("tier") == "session" or not item.get("password"):
+            item["tier"] = TIER_SESSION
+        elif self_provisioned_key(item["address"]) + "address" in sealed_names:
+            # The vault's entry NAME is derived from the address, so the
+            # FACT that this mailbox is sealed is knowable even without the
+            # salt. «I cannot open the vault» must not become «this mailbox
+            # is not sealed» — that is exactly the lie the tiers exist to
+            # prevent.
+            item["tier"] = TIER_DURABLE_SEALED
+        else:
+            item["tier"] = TIER_DURABLE_LOCAL
+        rows.append(item)
+        seen.add(item["address"])
+    return rows
+
+
+def mailbox_tiers(salt: Optional[str] = None) -> Dict[str, Any]:
+    """
+    The inventory in numbers — what the complex can actually use.
+
+    This is what the health letter shows: how many mailboxes are readable
+    unattended, how many only a person can open, how many the complex
+    registered itself and kept, and how many were session-only all along.
+
+    The addresses come from the environment first and from the sealed vault
+    after — the cloud's inventory IS the vault. And when neither can be
+    read, the answer is «not measured», never «zero»: a cycle that could
+    not look must not report an empty shelf.
+    """
+    from harness import sealed_vault
+    env_names = {"proton": "PROTON_MAIL_ADDRESS",
+                 "tuta": "TUTA_ADDRESS",
+                 "mailtm": "MAILTM_ADDRESS"}
+    vault_names = {"proton": "proton:address",
+                   "tuta": "tuta:address",
+                   "mailtm": "mailtm:address"}
+    addresses = {key: (os.getenv(name) or "").strip()
+                 for key, name in env_names.items()}
+    if not all(addresses.values()):
+        try:
+            the_salt = vault_salt(salt)
+        except Exception:
+            the_salt = ""
+        if the_salt:
+            try:
+                opened = sealed_vault.open_many(list(vault_names.values()),
+                                                salt=the_salt)
+            except Exception:
+                opened = {}
+            for key, vault_name in vault_names.items():
+                if not addresses.get(key):
+                    addresses[key] = (opened.get(vault_name) or "").strip()
+
+    measured = any(addresses.values())
+    readable = 1 if addresses.get("mailtm") else 0
+    human = sum(1 for key in ("proton", "tuta") if addresses.get(key))
+    own = self_provisioned(salt)
+    sealed = sum(1 for box in own if box.get("tier") == TIER_DURABLE_SEALED)
+    local = sum(1 for box in own if box.get("tier") == TIER_DURABLE_LOCAL)
+    session = sum(1 for box in own if box.get("tier") == TIER_SESSION)
+    return {
+        "measured": measured,
+        "api_readable": readable,
+        "human_only": human,
+        "own_durable_sealed": sealed,
+        "own_durable_local": local,
+        "own_session": session,
+        "own_total": len(own),
+        # The count of sealed entries is knowable without the salt — the
+        # names are plaintext — so this number never hides behind «the
+        # vault is closed».
+        "sealed_in_vault": sealed_self_provisioned_count(),
+    }
 
 
 def _api(path: str, token: str, timeout: int = 30) -> Any:
@@ -238,6 +488,7 @@ def _cli() -> int:
             print(f"{row['provider']:<14} {row['address_masked']:<28} "
                   f"pw={row['password']:<14} readable={row.get('readable', False)} "
                   f"tfa={row.get('tfa', '-')}")
+            print(f"{'':<14} tier: {row.get('tier', '-')}")
     if args.inbox:
         try:
             messages = inbox(limit=args.limit, wait_seconds=args.wait)
