@@ -6492,6 +6492,48 @@ def test_76_the_cloud_wire_retries_the_reads_and_never_the_changes():
         mc.requests.post = saved_post
         mc.time = saved_time
 
+    # --- the door: closed for everyone, or closed for OUR account? ---------
+    from harness import mega_archive as ma
+
+    class _DoorClient(mc.MegaClient):
+        def __init__(self, answer_ok):
+            super().__init__()
+            self.answer_ok = answer_ok
+            self.RETRIES = 1
+            self.asked: List[str] = []
+
+        def api(self, payload, params=None):
+            self.asked.append(payload.get("a"))
+            if self.answer_ok:
+                return [{"v": 1}]
+            raise mc.MegaNetworkError("HTTP 402 with a non-JSON body")
+
+    class _FakeArchiveClient:
+        answer_ok = True
+        instances: List[Any] = []
+
+        def __init__(self):
+            self.inner = _DoorClient(type(self).answer_ok)
+            type(self).instances.append(self.inner)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+    saved_mc = ma.MegaClient
+    try:
+        ma.MegaClient = _FakeArchiveClient
+        _FakeArchiveClient.answer_ok = True
+        state = ma.probe_door()
+        assert state["state"] == "open", state
+        assert "us0" in _FakeArchiveClient.instances[-1].asked, \
+            "the probe must ask the documented door"
+        _FakeArchiveClient.answer_ok = False
+        state = ma.probe_door()
+        assert state["state"] == "closed", state
+        assert "402" in state["note"], f"the note must carry the facts: {state}"
+    finally:
+        ma.MegaClient = saved_mc
+
     print("[+] Test 76 Passed: the wire's failures are quoted with their facts, "
           "the reads are asked again, and the changes are never replayed.")
 

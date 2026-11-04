@@ -92,6 +92,32 @@ def remote_name(relative: str) -> str:
     return relative.replace("/", "__")
 
 
+def probe_door() -> Dict[str, Any]:
+    """
+    Is the door closed to EVERYONE from here — or only to OUR account?
+
+    Measured 2026-11-04: the cloud runner's requests to MEGA came back
+    «HTTP 402, empty body» while the same API answered normally from a
+    home connection. Two very different situations hide behind one code:
+    the provider closed its door to this kind of host (nothing the complex
+    can do from here — the keeper on the operator's machine must carry the
+    copy), or OUR account needs something (an upgrade, a verification).
+    Only the operator can act on the second one, so the report must say
+    which one it is instead of leaving «HTTP 402» for the operator to
+    guess.
+
+    The probe asks MEGA about a throwaway address that does not exist: the
+    documented API, one call, no account, no secret.
+    """
+    client = MegaClient()
+    client.RETRIES = 1          # a diagnosis must not take a minute
+    try:
+        client.api({"a": "us0", "user": "door-probe@invalid.example"})
+        return {"state": "open", "note": "MEGA answered a throwaway address"}
+    except Exception as exc:
+        return {"state": "closed", "note": f"{type(exc).__name__}: {exc}"}
+
+
 def collect_artefacts(root: Optional[Path] = None) -> List[Tuple[str, Path]]:
     """The artefacts that actually exist right now."""
     base = Path(root) if root else PROJECT_ROOT
@@ -121,6 +147,9 @@ def archive_once(root: Optional[Path] = None,
         "uploaded": [],
         "missing": [],
         "errors": [],
+        # The door's state — «open»/«closed» — and what it means. Filled in
+        # only when the cloud refuses us; that is the moment it matters.
+        "door": {},
     }
 
     try:
@@ -141,6 +170,10 @@ def archive_once(root: Optional[Path] = None,
         root_handle = client.root_handle()
     except Exception as exc:
         report["errors"].append(f"login: {type(exc).__name__}: {exc}")
+        # The door's state travels with the failure: the operator must be
+        # able to tell «MEGA closed the door to this host» from «our
+        # account needs attention» without reading the client code.
+        report["door"] = probe_door()
         return report
 
     folder = ""
