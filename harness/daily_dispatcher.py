@@ -1000,6 +1000,20 @@ def _log_dispatch(label: str, recipient: str, result: Dict[str, Any]) -> None:
 # so the tests can shrink it to zero.
 MAIL_RETRY_SEC = float(os.getenv("MAIL_RETRY_SEC", "45"))
 
+# Which failures are worth a second attempt. Measured 2026-11-04: the ring
+# only fired on «ERROR», but the sender never returns that for a broken
+# wire — a dropped connection comes back as NETWORK_ERROR and a refused
+# password as AUTH_ERROR, so the documented recovery never ran exactly when
+# it was needed. A transient connection failure retries; a refused
+# password does not (the second account already had its turn, and a wrong
+# password does not become a right one in 45 seconds).
+RETRYABLE_STATUSES = ("NETWORK_ERROR",)
+
+# The statuses that mean «the promise was kept». Everything else — no
+# recipient, no password, a refused wire — is a promise NOT kept, and the
+# daily cycle must end red so the supervisor re-dispatches it.
+KEPT_STATUSES = ("DELIVERED", "SKIPPED_ALREADY_SENT", "DRY_RUN_OK")
+
 # --------------------------------------------------------------------------
 # The daily promise: one report per day, and the dispatcher itself keeps it.
 #
@@ -1143,7 +1157,15 @@ def _dispatch_one(
         plain_text_content=mail["plain"],
     )
 
-    if result.get("status") == "ERROR" and MAIL_RETRY_SEC >= 0:
+    if result.get("status") in RETRYABLE_STATUSES and MAIL_RETRY_SEC >= 0:
+        # Measured 2026-11-04: the ring only fired on «ERROR», but the sender
+        # never returns that for a broken wire — a refused password comes
+        # back as AUTH_ERROR and a dropped connection as NETWORK_ERROR. So
+        # the documented recovery («a transient failure must not cost the
+        # operator a day») never ran exactly when it was needed. Now the
+        # transient status retries. AUTH_ERROR does NOT: the second account
+        # already had its turn inside the sender, and a refused password does
+        # not become a good one in 60 seconds.
         print(f"[!] {label}: the first attempt failed "
               f"({str(result.get('error'))[:120]}); retrying in {MAIL_RETRY_SEC:.0f}s...")
         time.sleep(MAIL_RETRY_SEC)
@@ -1273,7 +1295,24 @@ def run_daily_dispatch(
     return results
 
 
-if __name__ == "__main__":
+def unkept_promises(dispatch_results: Optional[Dict[str, Any]]) -> List[str]:
+    """
+    The labels whose promise was NOT kept.
+
+    Measured 2026-11-04: the dispatch results were DISCARDED and the module
+    had no exit code — so a total mail outage (both letters refused) left the
+    workflow GREEN, and a green daily run says «the report went out». The
+    promise is either kept or the cycle ends red: the supervisor re-dispatches
+    a red daily cycle, and the operator sees the truth in the run history.
+    """
+    return [
+        label for label, result in (dispatch_results or {}).items()
+        if str((result or {}).get("status")) not in KEPT_STATUSES
+    ]
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """The daily cycle as a program. Returns the exit code, so the truth is testable."""
     parser = argparse.ArgumentParser(description="Daily 12:00 NOVT Email Dispatcher")
     parser.add_argument("--dry-run", action="store_true", help="Generate emails without sending via SMTP")
     parser.add_argument("--health-only", action="store_true", help="Dispatch only 'Проверка связи'")
@@ -1281,7 +1320,7 @@ if __name__ == "__main__":
     parser.add_argument("--force", action="store_true",
                         help="Send again even if today's letter was already delivered (the operator's own request)")
     parser.add_argument("--preview", metavar="PATH", help="Write both letters to PATH (HTML) and exit")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.preview:
         preview_path = Path(args.preview)
@@ -1289,10 +1328,25 @@ if __name__ == "__main__":
         preview_path.write_text(health["html"], encoding="utf-8")
         print(f"[*] Health letter preview: {preview_path}")
         print("[*] validate_html:", email_render.validate_html(health["html"]) or "OK")
-    else:
-        run_daily_dispatch(
-            dry_run=args.dry_run,
-            health_only=args.health_only,
-            news_only=args.news_only,
-            force=args.force,
-        )
+        return 0
+
+    dispatch_results = run_daily_dispatch(
+        dry_run=args.dry_run,
+        health_only=args.health_only,
+        news_only=args.news_only,
+        force=args.force,
+    )
+    unkept = unkept_promises(dispatch_results)
+    if unkept:
+        print(f"[!] The daily promise was NOT kept for: {', '.join(unkept)}")
+        for label in unkept:
+            result = dispatch_results.get(label) or {}
+            print(f"    - {label}: {result.get('status')} "
+                  f"{str(result.get('error') or result.get('message') or '')[:160]}")
+        return 1
+    print("[+] Every promised letter was delivered (or was already sent today).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

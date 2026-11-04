@@ -5961,6 +5961,125 @@ def test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies():
           "the daemon and the chain all say it.")
 
 
+def test_73_the_mail_wire_recovers_and_an_unkept_promise_ends_the_run_red():
+    """
+    The letter is the primary alarm channel. Audited 2026-11-04, three
+    separate ways in which the pipe said «fine» while it was not:
+
+      * harness/email_sender.py crashed with AttributeError when it was run
+        as a program (it read «archive_recipient», a name that never existed)
+        — the module that IS the mail wire could not even be inspected;
+      * the in-run recovery ring only fired on the status «ERROR», but the
+        sender never returns «ERROR» for a broken wire — a dropped connection
+        comes back as NETWORK_ERROR and a refused password as AUTH_ERROR —
+        so the documented recovery never ran exactly when it was needed;
+      * the dispatch results were discarded and the module had no exit code,
+        so a total mail outage left the workflow GREEN. A green daily run
+        says «the report went out».
+
+    This test checks the BEHAVIOUR: the ring fires on the transient status,
+    does NOT burn a second attempt on a refused password, and an unkept
+    promise ends the cycle red while a kept one stays green.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 73: the mail wire recovers, and an unkept promise ends red")
+    print("=" * 60)
+    import os
+    import subprocess
+    import tempfile
+
+    import harness.daily_dispatcher as dd
+
+    # --- 1. the sender module must survive being run as a program ---------
+    # (`python -m harness.email_sender` — the module is part of a package,
+    # so this is the invocation that resolves its imports; running the file
+    # by path cannot import the package it belongs to.)
+    env = dict(os.environ)
+    env.pop("GMAIL_SENDER", None)
+    env.pop("GMAIL_APP_PASSWORD", None)
+    proc = subprocess.run([sys.executable, "-m", "harness.email_sender"],
+                          capture_output=True, text=True, timeout=120, env=env,
+                          cwd=str(PROJECT_ROOT))
+    assert proc.returncode == 0, (
+        "the mail wire must not crash when it is run as a program: "
+        f"exit={proc.returncode}\n{proc.stdout}\n{proc.stderr}")
+    assert "AttributeError" not in proc.stderr, proc.stderr
+
+    # --- 2. the recovery ring fires on a TRANSIENT failure ----------------
+    class _FakeSender:
+        def __init__(self, statuses):
+            self.statuses = list(statuses)
+            self.calls = 0
+
+        def send_email(self, **kwargs):
+            self.calls += 1
+            status = self.statuses.pop(0) if self.statuses else "DELIVERED"
+            return {"status": status, "error": "connection reset"}
+
+    saved_retry = dd.MAIL_RETRY_SEC
+    saved_alert = dd.alert_channel.raise_delivery_alert
+    saved_log = dd._log_dispatch
+    logged = []
+    try:
+        dd.MAIL_RETRY_SEC = 0
+        dd.alert_channel.raise_delivery_alert = lambda *a, **k: None
+        dd._log_dispatch = lambda *a, **k: logged.append(a)
+
+        # a dropped connection must be retried INSIDE the run
+        sender = _FakeSender(["NETWORK_ERROR", "DELIVERED"])
+        result = dd._dispatch_one(sender, "Проверка связи",
+                                  {"html": "<html><body>ok</body></html>",
+                                   "plain": "ok", "subject": "s"},
+                                  "operator@example.invalid", dry_run=False)
+        assert sender.calls == 2, \
+            f"a transient failure must be retried inside the run: {sender.calls} calls"
+        assert result.get("status") == "DELIVERED", result
+
+        # a refused password must NOT be retried: it does not become good
+        # in 45 seconds, and the backup account already had its turn
+        sender = _FakeSender(["AUTH_ERROR", "DELIVERED"])
+        result = dd._dispatch_one(sender, "Проверка связи",
+                                  {"html": "<html><body>ok</body></html>",
+                                   "plain": "ok", "subject": "s"},
+                                  "operator@example.invalid", dry_run=False)
+        assert sender.calls == 1, \
+            f"a refused password must not be retried on the same wire: {sender.calls} calls"
+        assert result.get("status") == "AUTH_ERROR", result
+    finally:
+        dd.MAIL_RETRY_SEC = saved_retry
+        dd.alert_channel.raise_delivery_alert = saved_alert
+        dd._log_dispatch = saved_log
+
+    # --- 3. the promise: kept or red, never green-and-silent --------------
+    assert dd.unkept_promises({"health_report": {"status": "DELIVERED"}}) == []
+    assert dd.unkept_promises({"health_report": {"status": "SKIPPED_ALREADY_SENT"}}) == []
+    assert dd.unkept_promises({"health_report": {"status": "DRY_RUN_OK"}}) == []
+    for bad in ("NETWORK_ERROR", "AUTH_ERROR", "SKIPPED_NO_RECIPIENT",
+                "SKIPPED_NOT_CONFIGURED", "ERROR"):
+        assert dd.unkept_promises({"health_report": {"status": bad}}) == ["health_report"], \
+            f"«{bad}» is a promise NOT kept — the cycle must end red"
+
+    # the module itself must answer with the exit code
+    saved_dispatch = dd.run_daily_dispatch
+    try:
+        dd.run_daily_dispatch = lambda **kw: {
+            "health_report": {"status": "NETWORK_ERROR", "error": "the wire is down"},
+        }
+        assert dd.main(["--health-only"]) == 1, \
+            "a letter that did not go out must end the daily cycle red"
+
+        dd.run_daily_dispatch = lambda **kw: {
+            "health_report": {"status": "DELIVERED"},
+            "news_digest": {"status": "SKIPPED_ALREADY_SENT"},
+        }
+        assert dd.main([]) == 0, "a kept promise must stay green"
+    finally:
+        dd.run_daily_dispatch = saved_dispatch
+
+    print("[+] Test 73 Passed: a transient wire failure heals inside the run, "
+          "a refused password does not, and an unkept promise ends the day red.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -6043,6 +6162,7 @@ if __name__ == "__main__":
         test_70_the_archive_copy_can_fan_out_to_several_mailboxes,
         test_71_the_own_cloud_copy_is_wired_and_the_upload_is_correct,
         test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies,
+        test_73_the_mail_wire_recovers_and_an_unkept_promise_ends_the_run_red,
     ]
     failed = []
     for t in tests:

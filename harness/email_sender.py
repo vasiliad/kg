@@ -249,4 +249,4 @@ if __name__ == "__main__":
     sender = EmailSender()
     print("EmailSender configuration status: configured =", sender.is_configured(),
           "| backup =", sender.backup_configured(),
-          "| archive =", bool(sender.archive_recipient))
+          "| archive =", bool(sender.archive_recipients))
