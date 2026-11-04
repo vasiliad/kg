@@ -56,6 +56,7 @@ import sys
 import json
 import time
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 # The names used in annotations MUST be imported: Python 3.11 (the cloud)
 # evaluates annotations when the def executes, while Python 3.14 (the local
@@ -7411,6 +7412,138 @@ def test_83_the_operator_mailbox_addresses_never_reach_the_public_repository():
           f"against {len(tracked)} tracked files — none of them holds one.")
 
 
+def test_84_the_mailbox_inventory_travels_as_a_measured_artefact():
+    """
+    Measured 2026-11-05: the dispatch job — the one that renders the health
+    letter — carries only REDACTION_SALT, and REDACTION_SALT does NOT open
+    the vault (only VAULT_SALT does). So the job that draws the mailbox
+    inventory could not measure it: the letter would have had to say
+    «0 ящиков» or «не измерено» forever, and the first of those is a lie.
+
+    The project already owns the answer to this shape of problem: a cycle
+    that HOLDS the secret measures once and writes the facts into an
+    artefact; the reader reads the artefact. So four contracts, proved here
+    (no network at all):
+    (a) the diagnostics cycle writes data/.mailbox_tiers.json — counts and
+        tiers only, never an address, never a password;
+    (b) the dispatch job reads that artefact, and a MISSING artefact means
+        «unknown», never «zero»;
+    (c) the letter renders the measured numbers and, when it cannot measure,
+        says so in words instead of showing an empty shelf;
+    (d) the cloud workflow carries VAULT_SALT and commits the artefact —
+        without (d) the whole chain would be a local fiction.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 84: the mailbox inventory travels as a measured artefact")
+    print("=" * 60)
+    import tempfile
+    from harness import daily_dispatcher as dd
+    from harness import diagnostics
+    from harness import email_render
+    from harness import mail_accounts as ma
+
+    tmp = Path(tempfile.mkdtemp(prefix="mailbox-artefact-"))
+    artefact = tmp / ".mailbox_tiers.json"
+
+    # --- (b) a missing artefact is UNKNOWN, not zero ----------------------
+    unknown = dd._read_mailbox_tiers(path=artefact)
+    assert unknown["measured"] is False, unknown
+    assert unknown.get("why"), "an unmeasured inventory must say WHY"
+    for key in ("api_readable", "human_only", "own_total"):
+        assert key not in unknown, (
+            f"{key} must not be present when nothing was measured — a zero "
+            f"is a fact, and this is not one: {unknown}")
+
+    # And the letter says «не измерено», not «0».
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "mailboxes": unknown})
+    assert "не измерено" in plain, plain
+    assert unknown["why"] in plain, (
+        f"the letter must carry the reason it could not look: {plain}")
+    assert ": 0" not in plain.split("Почтовые ящики")[1].split("\n\n")[0], (
+        f"an unmeasured inventory must not show a zero: {plain}")
+
+    # --- (a) the measuring cycle writes the artefact ----------------------
+    saved_path = diagnostics.MAILBOX_TIERS_PATH
+    saved_measure = ma.mailbox_tiers
+    diagnostics.MAILBOX_TIERS_PATH = artefact
+    measured = {
+        "measured": True, "api_readable": 1, "human_only": 2,
+        "own_durable_sealed": 5, "own_durable_local": 0, "own_session": 5,
+        "own_total": 10, "sealed_in_vault": 22,
+    }
+    ma.mailbox_tiers = lambda *a, **k: dict(measured)
+    try:
+        written = diagnostics.record_mailbox_tiers()
+        assert written["measured"] is True, written
+        assert artefact.exists(), "the artefact must be on disk"
+        text = artefact.read_text(encoding="utf-8")
+        assert "5" in text and "measured" in text, text
+        # The artefact carries COUNTS — an address or a password in this
+        # file would put the operator's mail in the public repository.
+        assert "@" not in text, f"the artefact must hold no address: {text}"
+        assert "password" not in text.lower(), text
+    finally:
+        diagnostics.MAILBOX_TIERS_PATH = saved_path
+        ma.mailbox_tiers = saved_measure
+
+    # --- (b) the reader takes the measurement as it is -------------------
+    read_back = dd._read_mailbox_tiers(path=artefact)
+    assert read_back["measured"] is True, read_back
+    assert read_back["own_durable_sealed"] == 5, read_back
+    assert read_back["own_session"] == 5, read_back
+
+    # --- (c) the letter renders the measured numbers ---------------------
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "mailboxes": read_back})
+    assert "читаются без человека: 1" in plain, plain
+    assert "только человеком: 2" in plain, plain
+    assert "запечатаны в vault: 5" in plain, plain
+    assert "сессионные (без пароля): 5" in plain, plain
+    assert "не измерено" not in plain, plain
+
+    # --- and an OLD measurement says so ----------------------------------
+    # Right numbers, wrong moment: a measurement from three days ago,
+    # printed as if it were measured now, is the same lie the credential
+    # heartbeat exists to prevent.
+    old = dict(read_back)
+    old["checked_at"] = (datetime.now(timezone.utc)
+                         - timedelta(hours=50)).isoformat()
+    artefact.write_text(json.dumps(old), encoding="utf-8")
+    stale = dd._read_mailbox_tiers(path=artefact)
+    assert stale["measured"] is True, stale
+    assert stale.get("stale") is True, (
+        f"a 50-hour-old measurement must be marked stale: {stale}")
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "mailboxes": stale})
+    assert "устаревшими" in plain, plain
+    assert "ч назад" in plain, plain
+
+    # A FRESH measurement carries no such warning.
+    fresh = dict(read_back)
+    fresh["checked_at"] = datetime.now(timezone.utc).isoformat()
+    artefact.write_text(json.dumps(fresh), encoding="utf-8")
+    fresh_read = dd._read_mailbox_tiers(path=artefact)
+    assert not fresh_read.get("stale"), fresh_read
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "mailboxes": fresh_read})
+    assert "устаревшими" not in plain, plain
+
+    # --- (d) the cloud carries the salt and keeps the artefact ------------
+    workflow = (PROJECT_ROOT / ".github" / "workflows" /
+                "diagnostics.yml").read_text(encoding="utf-8")
+    assert "VAULT_SALT: ${{ secrets.VAULT_SALT }}" in workflow, (
+        "the measuring cycle must hold the vault's salt — measured: "
+        "REDACTION_SALT does not open the vault")
+    assert "git add data/.mailbox_tiers.json" in workflow, (
+        "the artefact must reach the repository, or the letter reads an "
+        "artefact that does not exist")
+
+    print("[+] Test 84 Passed: the inventory is measured by the cycle that "
+          "holds the salt, travels as an artefact, and a missing artefact "
+          "says «unknown» instead of «zero».")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -7504,6 +7637,7 @@ if __name__ == "__main__":
         test_81_the_letter_judges_both_cloud_copies_by_one_rule,
         test_82_the_mailbox_record_says_which_mailboxes_survive_a_restart,
         test_83_the_operator_mailbox_addresses_never_reach_the_public_repository,
+        test_84_the_mailbox_inventory_travels_as_a_measured_artefact,
     ]
     failed = []
     for t in tests:
