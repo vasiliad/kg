@@ -49,6 +49,20 @@ TELEGRAM_OPERATOR_CHAT_ID=...  # реальный chat id оператора; в
 - `data/.memory_vault.json` — записи с 4096-мерными векторами Nemotron (пишется атомарно, потокобезопасно).
 - Тесты используют временные копии и никогда не трогают боевую память.
 
+## Свои ящики и облачный диск
+
+У комплекса есть собственные почтовые ящики (Proton, Tuta, mail.tm) и облачный
+диск Proton Drive, смонтированный на VPS через rclone. Пароли лежат только в
+`.env` (не коммитится), в GitHub secrets и в запечатанном vault
+(`data/.sealed_vault.json` — шифротекст) — в публичный репозиторий они не
+попадают никогда.
+
+- `python -m harness.mail_accounts --list` — инвентарь без паролей.
+- `python -m harness.mail_accounts --inbox` — прочитать почту mail.tm (единственный ящик с открытым API).
+- `python scripts/seal_mail_accounts.py` — запечатать ящики и диск в vault.
+
+Подробности — в [`MAIL_AND_DRIVE.md`](MAIL_AND_DRIVE.md).
+
 ## История
 
 Изначально комплекс работал на Kaggle TPU (DeepSeek-R1-32B) — архивная архитектура описана в git-истории; сейчас всё исполняется на CPU + облачном NIM.

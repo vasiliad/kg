@@ -74,3 +74,7 @@ data/.tg_code_hash
 # Local previews of the rendered letters. They are built on the machine for
 # a visual check and never belong in the public repository.
 data/email_preview_*.html
+
+# ZCode local workspace artifacts (plans, OCR previews) — machine-local only.
+.zcode/
+.zcode_tmp/

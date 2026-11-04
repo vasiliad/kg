@@ -1,0 +1,73 @@
+name: Seal mail accounts (own mailboxes + cloud disk)
+
+# The complex owns three mailboxes and one cloud disk. Their credentials live
+# in the Actions environment (they are secrets of this PUBLIC repository) and
+# are ALSO sealed into data/.sealed_vault.json — ciphertext only, opened by
+# the same salt the cloud uses.
+#
+# Why both places: the secrets serve the workflows, the vault serves
+# everything that is NOT a workflow (a local cycle, a VPS, an operator's
+# script). If the runner is gone, the vault still carries the way back into
+# the mailboxes — that is the difference between a backup and a hope.
+#
+# The run is manual on purpose: sealing rewrites ciphertext, and a schedule
+# would turn the repository into a churn machine. The script is idempotent —
+# an unchanged value is not re-sealed.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  seal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-actions.txt
+
+      - name: Seal the mailboxes and the cloud disk
+        env:
+          VAULT_SALT: ${{ secrets.VAULT_SALT }}
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
+          PROTON_MAIL_ADDRESS: ${{ secrets.PROTON_MAIL_ADDRESS }}
+          PROTON_MAIL_USERNAME: ${{ secrets.PROTON_MAIL_USERNAME }}
+          PROTON_MAIL_PASSWORD: ${{ secrets.PROTON_MAIL_PASSWORD }}
+          PROTON_MAIL_PLAN: ${{ secrets.PROTON_MAIL_PLAN }}
+          PROTON_DRIVE_ADDRESS: ${{ secrets.PROTON_DRIVE_ADDRESS }}
+          PROTON_DRIVE_PASSWORD: ${{ secrets.PROTON_DRIVE_PASSWORD }}
+          PROTON_DRIVE_2FA_SECRET: ${{ secrets.PROTON_DRIVE_2FA_SECRET }}
+          TUTA_ADDRESS: ${{ secrets.TUTA_ADDRESS }}
+          TUTA_PASSWORD: ${{ secrets.TUTA_PASSWORD }}
+          TUTA_RECOVERY_CODE: ${{ secrets.TUTA_RECOVERY_CODE }}
+          MAILTM_ADDRESS: ${{ secrets.MAILTM_ADDRESS }}
+          MAILTM_PASSWORD: ${{ secrets.MAILTM_PASSWORD }}
+          MAILTM_TOKEN: ${{ secrets.MAILTM_TOKEN }}
+        run: |
+          python scripts/seal_mail_accounts.py
+
+      - name: Persist the sealed vault
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          git add data/.sealed_vault.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(vault): the mailboxes and the cloud disk, sealed [skip ci]"
+          else
+            echo "No vault changes."
+          fi
+          bash scripts/sync_state.sh
