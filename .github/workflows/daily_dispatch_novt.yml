@@ -21,6 +21,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      preview:
+        description: 'Render the health letter in the cloud and print it — send nothing'
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
   contents: write
@@ -101,6 +106,21 @@ jobs:
           REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
         run: |
           FLAGS=""
+          if [ "${{ inputs.preview }}" = "true" ]; then
+            # Render the letter IN THE CLOUD and show it — send nothing.
+            # The operator's inbox is not a test bench: the daily guard is
+            # right to refuse a second letter, and a check that needs a
+            # duplicate to prove itself is not a check. This renders the
+            # letter exactly as it would be sent, from the same artefacts.
+            python harness/daily_dispatcher.py --preview data/health_preview.html
+            if ! grep -q "^Почтовые ящики" data/health_preview.txt; then
+              echo "FAIL: the mailbox block is NOT in the letter"
+              exit 1
+            fi
+            echo "----- MAILBOX BLOCK (rendered in the cloud, not sent) -----"
+            grep -A 3 "^Почтовые ящики" data/health_preview.txt
+            exit 0
+          fi
           if [ "${{ inputs.health_only }}" = "true" ]; then
             FLAGS="--health-only"
           elif [ "${{ inputs.news_only }}" = "true" ]; then

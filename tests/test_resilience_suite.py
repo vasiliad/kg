@@ -7570,6 +7570,51 @@ def test_84_the_mailbox_inventory_travels_as_a_measured_artefact():
           "says «unknown» instead of «zero».")
 
 
+def test_85_the_letter_can_be_rendered_without_being_sent():
+    """
+    Measured 2026-11-05: the cloud's health letter was skipped — «already
+    delivered today» — and the run proved nothing about the letter itself:
+    the guard fires BEFORE the letter is built, so a check that needs a
+    duplicate to prove itself is not a check. The operator's inbox is not a
+    test bench, and the guard is right to refuse a second letter.
+
+    So the letter has a third way to exist: render it, print it, send
+    nothing. The preview is the SAME builder and the SAME renderer as the
+    sent letter — a preview that renders something else would prove nothing
+    — and it writes BOTH the HTML and its plain-text twin, because a
+    letter must be readable as text too.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 85: the letter can be rendered without being sent")
+    print("=" * 60)
+    import tempfile
+    from harness import daily_dispatcher as dd
+
+    tmp = Path(tempfile.mkdtemp(prefix="letter-preview-"))
+    html_path = tmp / "health_preview.html"
+
+    # No SMTP is configured in the offline suite — if the preview tried to
+    # send, it would fail loudly instead of silently mailing the operator.
+    code = dd.main(["--preview", str(html_path)])
+    assert code == 0, f"the preview must succeed: {code}"
+    assert html_path.exists(), "the HTML preview must be written"
+    text_path = html_path.with_suffix(".txt")
+    assert text_path.exists(), "the plain-text twin must be written too"
+
+    html = html_path.read_text(encoding="utf-8")
+    plain = text_path.read_text(encoding="utf-8")
+    assert "Проверка связи" in html, html[:400]
+    assert "Проверка связи" in plain, plain[:400]
+    # The preview is the SAME letter as the sent one — not a stub.
+    assert "Почтовые ящики" in plain, (
+        f"the preview must contain the letter's own blocks: {plain[:400]}")
+    assert "Действующий флот" in plain, plain[:400]
+    assert html.count("<html") == 1, "the preview must be a whole letter"
+
+    print("[+] Test 85 Passed: the letter can be rendered and shown in the "
+          "cloud — HTML and text — without sending a second letter.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -7664,6 +7709,7 @@ if __name__ == "__main__":
         test_82_the_mailbox_record_says_which_mailboxes_survive_a_restart,
         test_83_the_operator_mailbox_addresses_never_reach_the_public_repository,
         test_84_the_mailbox_inventory_travels_as_a_measured_artefact,
+        test_85_the_letter_can_be_rendered_without_being_sent,
     ]
     failed = []
     for t in tests:

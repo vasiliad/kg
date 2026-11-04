@@ -1442,7 +1442,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         preview_path = Path(args.preview)
         health = build_health_report_email()
         preview_path.write_text(health["html"], encoding="utf-8")
+        # The plain-text twin: the letter must be readable as text too (a
+        # phone screen, a text-only client), and a preview that only speaks
+        # HTML cannot prove that.
+        plain_path = preview_path.with_suffix(".txt")
+        plain_path.write_text(health["plain"], encoding="utf-8")
         print(f"[*] Health letter preview: {preview_path}")
+        print(f"[*] Health letter text: {plain_path}")
         print("[*] validate_html:", email_render.validate_html(health["html"]) or "OK")
         return 0
 
