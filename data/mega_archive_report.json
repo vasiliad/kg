@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-04T14:09:17.260306+00:00",
+  "checked_at": "2026-11-04T14:18:20.203002+00:00",
   "status": "failed",
   "archive": "kg-archive",
   "folder": "",
@@ -8,5 +8,9 @@
   "missing": [],
   "errors": [
     "login: MegaNetworkError: HTTP 402 with a non-JSON body [no content-type]: ''"
-  ]
+  ],
+  "door": {
+    "state": "open",
+    "note": "MEGA answered a throwaway address"
+  }
 }
