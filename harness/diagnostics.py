@@ -15,7 +15,8 @@ import json
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, Optional, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -385,6 +386,9 @@ def main() -> int:
         "keenable": report["keenable"],
         "telegram": report["telegram"],
     })
+    # The heartbeat: every probed credential's last success / first failure,
+    # so decay is visible in the report BEFORE the channel dies.
+    report["heartbeat"] = record_heartbeat(report)
 
     _hdr("SUMMARY")
     nvidia = report["nvidia"]
@@ -405,6 +409,15 @@ def main() -> int:
         cred_line = "ALL SET (живость — см. пробы выше)"
     print(f"  Credentials: {cred_line}")
 
+    _hdr("CREDENTIAL HEARTBEAT (last success / first failure since)")
+    for name, entry in (report.get("heartbeat") or {}).items():
+        entry = entry or {}
+        if entry.get("ok"):
+            print(f"  [+] {name}: живой, последний успех {entry.get('last_ok_at') or entry.get('at')}")
+        else:
+            print(f"  [!] {name}: МЁРТВ с {entry.get('dead_since') or entry.get('at')} "
+                  f"({entry.get('reason') or 'без причины'})")
+
     out_path = PROJECT_ROOT / "diagnostics_report.json"
     # Atomic: the supervisor reads this file's age to decide whether the
     # diagnostics cycle is alive.
@@ -415,6 +428,104 @@ def main() -> int:
 
     critical_ok = nvidia.get("ok") and report["telegram"].get("ok")
     return 0 if critical_ok else 1
+
+
+# ---------------------------------------------------------------------------
+# The credential heartbeat — the complex sees its own decay BEFORE it dies.
+#
+# Measured over the audit: a dead key is only ever noticed when its channel
+# goes quiet (Keenable has been http_401 for days and the first thing anyone
+# saw was a missing search tier). The heartbeat records, for every probed
+# credential, the LAST SUCCESS and the FIRST FAILURE since — so the letter
+# and the report can say «KEENABLE_API_KEY мёртв с 2026-10-30», not
+# «что-то не ищет». Statuses and timestamps only: never a value.
+# ---------------------------------------------------------------------------
+
+HEARTBEAT_PATH = PROJECT_ROOT / "data" / ".credential_heartbeat.json"
+
+CREDENTIAL_PROBES: Tuple[tuple, ...] = (
+    ("NVIDIA_API_KEY", "nvidia"),
+    ("TINYFISH_API_KEYS", "tinyfish"),
+    ("LANGSEARCH_API_KEY", "langsearch"),
+    ("KEENABLE_API_KEY", "keenable"),
+    ("TELEGRAM_BOT_TOKEN", "telegram"),
+)
+
+_MAIL_LINE = re.compile(
+    r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) UTC\][^\n]*"
+    r"ОТЧЁТЫ ОТПРАВЛЕНЫ[^\n]*статус=DELIVERED"
+)
+
+
+def _last_mail_delivery() -> Optional[str]:
+    """The newest DELIVERED dispatch stamp in the operational log, if any."""
+    try:
+        text = (PROJECT_ROOT / "nim_history.log").read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+    stamps = _MAIL_LINE.findall(text)
+    return max(stamps) if stamps else None
+
+
+def record_heartbeat(report: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    Merges this run's probe verdicts into data/.credential_heartbeat.json.
+
+    A success keeps the previous `last_ok_at` history and clears
+    `dead_since`; a failure keeps the OLDEST `dead_since` (when the key
+    first died) — that is the number the operator needs. No credential
+    value ever enters the file.
+    """
+    now = now or datetime.now(timezone.utc)
+    stamp = now.isoformat()
+    try:
+        old = json.loads(HEARTBEAT_PATH.read_text(encoding="utf-8"))
+        old = old if isinstance(old, dict) else {}
+    except Exception:
+        old = {}
+
+    heartbeat: Dict[str, Any] = {}
+    for env_name, probe_key in CREDENTIAL_PROBES:
+        probe = report.get(probe_key) or {}
+        ok = bool(probe.get("ok"))
+        prev = old.get(env_name) if isinstance(old.get(env_name), dict) else {}
+        entry = {
+            "ok": ok,
+            "at": stamp,
+            "reason": "" if ok else str(probe.get("reason") or "")[:120],
+            "last_ok_at": stamp if ok else prev.get("last_ok_at"),
+            "last_fail_at": stamp if not ok else prev.get("last_fail_at"),
+            "dead_since": (prev.get("dead_since") if not ok else None),
+        }
+        if not ok and not entry["dead_since"]:
+            entry["dead_since"] = stamp
+        heartbeat[env_name] = entry
+
+    # The mail channel is measured by the dispatch itself: its heartbeat is
+    # the newest DELIVERED line in the log.
+    last_mail = _last_mail_delivery()
+    mail_ok = False
+    if last_mail:
+        try:
+            delivered_at = datetime.strptime(last_mail, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            mail_ok = (now - delivered_at).total_seconds() <= 26 * 3600
+        except ValueError:
+            mail_ok = False
+    prev_mail = old.get("GMAIL_APP_PASSWORD") if isinstance(old.get("GMAIL_APP_PASSWORD"), dict) else {}
+    mail_entry = {
+        "ok": mail_ok,
+        "at": stamp,
+        "reason": "" if mail_ok else "письма не доставлялись более 26 часов",
+        "last_ok_at": last_mail or prev_mail.get("last_ok_at"),
+        "last_fail_at": stamp if not mail_ok else prev_mail.get("last_fail_at"),
+        "dead_since": prev_mail.get("dead_since") if not mail_ok else None,
+    }
+    if not mail_ok and not mail_entry["dead_since"]:
+        mail_entry["dead_since"] = stamp
+    heartbeat["GMAIL_APP_PASSWORD"] = mail_entry
+
+    atomic_io.write_json_atomic(HEARTBEAT_PATH, heartbeat)
+    return heartbeat
 
 
 if __name__ == "__main__":

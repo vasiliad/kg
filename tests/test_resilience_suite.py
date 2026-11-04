@@ -5334,6 +5334,96 @@ def test_67_the_runtime_contract_must_be_pinned():
           f"install from the contract — the runtime changes only by commit.")
 
 
+def test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies():
+    """
+    The operator's survival strategy, in one layer: build the reserve
+    infrastructure BEFORE the problems start. Measured during the audit: a
+    dead key was only ever noticed when its channel went quiet — Keenable
+    has answered http_401 for days and the first symptom was a missing
+    search tier, not a named secret.
+
+    The heartbeat (data/.credential_heartbeat.json) records, for every
+    probed credential, the LAST SUCCESS and the FIRST FAILURE since —
+    statuses and timestamps only, never a value — and both the diagnostics
+    report and the «Проверка связи» letter carry it, so the operator reads
+    «KEENABLE_API_KEY мёртв с 2026-10-30» instead of «что-то не ищет».
+    """
+    print("\n" + "=" * 60)
+    print("TEST 68: the heartbeat shows the decay before the death")
+    print("=" * 60)
+    import tempfile as _tf
+    from datetime import datetime, timezone
+    from harness import diagnostics
+    from harness import email_render
+
+    tmp = Path(_tf.mkdtemp(prefix="heartbeat-test-"))
+    saved_path = diagnostics.HEARTBEAT_PATH
+    diagnostics.HEARTBEAT_PATH = tmp / ".credential_heartbeat.json"
+    try:
+        # round 1: keenable is dead
+        hb = diagnostics.record_heartbeat({
+            "nvidia": {"ok": True},
+            "keenable": {"ok": False, "reason": "http_401"},
+        }, now=datetime(2026, 11, 4, 4, 0, tzinfo=timezone.utc))
+        assert hb["KEENABLE_API_KEY"]["dead_since"] == "2026-11-04T04:00:00+00:00", hb
+        assert hb["KEENABLE_API_KEY"]["ok"] is False
+        assert hb["NVIDIA_API_KEY"]["ok"] is True
+        assert hb["NVIDIA_API_KEY"]["last_ok_at"] == "2026-11-04T04:00:00+00:00"
+
+        # round 2: still dead — dead_since keeps the FIRST failure
+        hb = diagnostics.record_heartbeat({
+            "nvidia": {"ok": True},
+            "keenable": {"ok": False, "reason": "http_401"},
+        }, now=datetime(2026, 11, 4, 6, 0, tzinfo=timezone.utc))
+        assert hb["KEENABLE_API_KEY"]["dead_since"] == "2026-11-04T04:00:00+00:00", \
+            f"the first death must survive: {hb['KEENABLE_API_KEY']}"
+
+        # round 3: recovered — dead_since clears, last_ok_at moves
+        hb = diagnostics.record_heartbeat({
+            "nvidia": {"ok": True},
+            "keenable": {"ok": True},
+        }, now=datetime(2026, 11, 4, 8, 0, tzinfo=timezone.utc))
+        assert hb["KEENABLE_API_KEY"]["dead_since"] is None
+        assert hb["KEENABLE_API_KEY"]["last_ok_at"] == "2026-11-04T08:00:00+00:00"
+
+        # no credential VALUE may ever reach the file
+        written = (tmp / ".credential_heartbeat.json").read_text(encoding="utf-8")
+        for leak in ("nvapi", "sk-", "Bearer"):
+            assert leak not in written, f"a credential fragment reached the heartbeat: {leak}"
+        assert set(json.loads(written)) == {
+            "NVIDIA_API_KEY", "TINYFISH_API_KEYS", "LANGSEARCH_API_KEY",
+            "KEENABLE_API_KEY", "TELEGRAM_BOT_TOKEN", "GMAIL_APP_PASSWORD"}, \
+            "the heartbeat must cover exactly the probed credentials plus mail"
+    finally:
+        diagnostics.HEARTBEAT_PATH = saved_path
+
+    # --- the letter carries the heartbeat ---------------------------------
+    report = {
+        "subject": "Проверка связи", "now_label": "04.11.2026 11:00 НСК",
+        "api": {"state": "OK", "ok": True},
+        "disk": {"free_gb": 600, "percent_used": 40},
+        "arbiter": {"model": "m", "mode": "штатный"},
+        "strain": {"errors_24h": 0, "delivered_24h": 2, "failed_24h": 0,
+                   "actions_runs_24h": ""},
+        "incidents": [], "fleet": [],
+        "heartbeat": [
+            {"name": "NVIDIA_API_KEY", "ok": True, "last_ok_at": "2026-11-04T04:00:00+00:00"},
+            {"name": "KEENABLE_API_KEY", "ok": False, "dead_since": "2026-10-30T06:00:00+00:00",
+             "reason": "http_401"},
+        ],
+        "recipient_tag": "настроен (sha256:deadbeef)", "sender_name": "KG",
+    }
+    html, plain = email_render.render_health(report)
+    assert not email_render.validate_html(html), "the heartbeat card broke the HTML"
+    assert "Срок жизни ключей" in plain and "МЁРТВ с 2026-10-30" in plain, \
+        f"the plain letter must name the dead key and since when: {plain[:400]}"
+    assert "KEENABLE_API_KEY" in html and "http_401" in html
+    assert "живой" in plain, "the live key must be shown as live"
+
+    print("[+] Test 68 Passed: the heartbeat names the dead key and its first "
+          "death — before the channel goes quiet.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -5411,6 +5501,7 @@ if __name__ == "__main__":
         test_65_the_digest_link_must_confirm_the_source,
         test_66_the_reports_survive_one_dead_google_account,
         test_67_the_runtime_contract_must_be_pinned,
+        test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies,
     ]
     failed = []
     for t in tests:

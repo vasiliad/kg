@@ -558,6 +558,38 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         f"</td></tr></table>"
     )
 
+    # --- the credential heartbeat: decay visible BEFORE the channel dies ----
+    heartbeat = report.get("heartbeat") or []
+    if heartbeat:
+        rows = []
+        for entry in heartbeat:
+            entry = entry or {}
+            name = str(entry.get("name") or "")
+            ok = bool(entry.get("ok"))
+            color = GOOD if ok else BAD
+            if ok:
+                state = f"живой · последний успех {entry.get('last_ok_at') or entry.get('at') or '—'}"
+            else:
+                state = f"МЁРТВ с {entry.get('dead_since') or entry.get('at') or '—'}"
+                if entry.get("reason"):
+                    state += f" ({entry['reason']})"
+            rows.append(
+                f'<div style="padding:8px 0; border-bottom:1px solid {LINE}; '
+                f'display:block;">'
+                f'<div style="font-size:13px; font-weight:700; color:{INK}; word-break:break-word;">{escape(name)}</div>'
+                f'<div style="font-size:13px; color:{color}; padding-top:2px;">{escape(state)}</div>'
+                f"</div>"
+            )
+        body.append(
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
+            f'<tr><td style="padding:12px 14px;">'
+            f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">'
+            "Срок жизни ключей (последний успех / первая смерть)</div>"
+            + "".join(rows) +
+            "</td></tr></table>"
+        )
+
     # --- the arbiter -------------------------------------------------------
     body.append(
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
@@ -671,6 +703,19 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
             plain.append(f"    {incident.get('message')}")
     else:
         plain.append("- событий не зафиксировано")
+    if heartbeat:
+        plain.append("")
+        plain.append("Срок жизни ключей:")
+        for entry in heartbeat:
+            entry = entry or {}
+            name = str(entry.get("name") or "")
+            if entry.get("ok"):
+                plain.append(f"- {name}: живой, последний успех {entry.get('last_ok_at') or entry.get('at') or '—'}")
+            else:
+                state = f"МЁРТВ с {entry.get('dead_since') or entry.get('at') or '—'}"
+                if entry.get("reason"):
+                    state += f" ({entry['reason']})"
+                plain.append(f"- {name}: {state}")
     plain.append("")
     plain.append("Действующий флот:")
     if fleet:

@@ -191,6 +191,19 @@ def _fleet_rows(state: Dict[str, Any]) -> List[Dict[str, str]]:
     return rows
 
 
+def _read_heartbeat() -> List[Dict[str, Any]]:
+    """The credential heartbeat (statuses and timestamps only, never values)."""
+    path = PROJECT_ROOT / "data" / ".credential_heartbeat.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return [{"name": str(k), **(v if isinstance(v, dict) else {})}
+                    for k, v in data.items()]
+    except Exception:
+        pass
+    return []
+
+
 def build_health_report_email() -> Dict[str, str]:
     """
     Builds Email 1: system health, disk metrics, incidents, and the fleet.
@@ -267,6 +280,10 @@ def build_health_report_email() -> Dict[str, str]:
             for log in interesting
         ],
         "fleet": _fleet_rows(state),
+        # The credential heartbeat: last success / first failure per key, so
+        # the letter shows the decay BEFORE the channel dies (written by the
+        # diagnostics cycle into data/.credential_heartbeat.json).
+        "heartbeat": _read_heartbeat(),
         "recipient_tag": redaction.recipient_tag(resolve_recipient()),
         "sender_name": SENDER_NAME,
     }
