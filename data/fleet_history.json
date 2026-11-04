@@ -324,5 +324,26 @@
       "deepseek-ai/deepseek-v4.1-flash": 66.75,
       "z-ai/glm-5.3-flash": 79.17
     }
+  },
+  {
+    "tuned_at": "2026-11-04 02:36:50 UTC",
+    "fleet": [
+      "mistralai/mistral-large-4-1t-a52b",
+      "nvidia/nemotron-3-ultra-550b-a55b"
+    ],
+    "primary": "mistralai/mistral-large-4-1t-a52b",
+    "tasks": [
+      "reasoning",
+      "code",
+      "json",
+      "translation",
+      "toolcall",
+      "prose",
+      "canary_news"
+    ],
+    "scores": {
+      "nvidia/nemotron-3-ultra-550b-a55b": 96.75,
+      "mistralai/mistral-large-4-1t-a52b": 96.92
+    }
   }
 ]
