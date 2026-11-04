@@ -57,14 +57,33 @@ jobs:
           REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The backup account and the archive copy — wired here too
+          # (audited 2026-11-04: the code had them, no workflow passed them,
+          # so the failover and the archive could never activate).
+          GMAIL_SENDER_2: ${{ secrets.GMAIL_SENDER_2 }}
+          GMAIL_APP_PASSWORD_2: ${{ secrets.GMAIL_APP_PASSWORD_2 }}
+          ARCHIVE_RECIPIENT_EMAIL: ${{ secrets.ARCHIVE_RECIPIENT_EMAIL }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
-        run: python harness/diagnostics.py || true
+        # NOT `|| true` (audited 2026-11-04): diagnostics.py answers 1 when a
+        # critical provider is dead, and the workflow threw that answer away —
+        # the run stayed GREEN while NVIDIA or Telegram was down. The module
+        # writes its report BEFORE it returns, so the evidence is not lost.
+        run: python harness/diagnostics.py
 
       - name: Publish Diagnostics Report
+        # `if: always()` — the report must reach the repository even when
+        # the verdict is red. A red run that publishes nothing leaves the
+        # supervisor with a stale artefact and the operator with no evidence.
+        if: always()
         run: |
           git config --global user.name "vasiliad"
           git config --global user.email "vasiliadi@users.noreply.github.com"
           git add diagnostics_report.json || true
+          # The credential heartbeat: the decay record of every probed
+          # credential. Audited 2026-11-04: it was written by two cycles and
+          # committed by neither, so the history of the decay died with the
+          # runner — the operator only ever saw the last verdict.
+          git add data/.credential_heartbeat.json || true
           if ! git diff --staged --quiet; then
             git commit -m "chore(diagnostics): cloud dependency health report [skip ci]"
             echo "Diagnostics report committed."

@@ -6116,6 +6116,138 @@ def test_73_the_mail_wire_recovers_and_an_unkept_promise_ends_the_run_red():
           "a refused password does not, and an unkept promise ends the day red.")
 
 
+def test_74_the_cloud_reaches_every_tier_and_the_state_survives_the_runner():
+    """
+    The complex's promises are only as good as the wiring that carries them.
+
+    Audited 2026-11-04:
+      * the sender had a BACKUP account and an ARCHIVE copy — and NO workflow
+        passed either secret, so the failover and the archive could never
+        activate, however the operator configured them. A backup that was
+        never wired is a promise kept only on paper;
+      * emergency_cron.yml passed `secrets.GITHUB_TOKEN`, a secret that does
+        not exist: the variable was always empty, which looks configured to
+        every reader and silences the backup alert channel;
+      * emergency_cron.yml had no REDACTION_SALT, so the emergency path
+        fingerprinted addresses with a plain SHA-256 while every other cycle
+        used the HMAC — the same address got two different tags;
+      * diagnostics.py answers 1 when a critical provider is dead, and the
+        workflow threw that answer away with `|| true` — the run stayed
+        GREEN while NVIDIA or Telegram was down;
+      * data/.credential_heartbeat.json — the record that shows the wire
+        DECAYING before it dies — was written by two cycles and committed by
+        neither, so the decay history died with the runner;
+      * six artefacts that two jobs can write were missing from
+        sync_state.sh's conflict list: an unresolved conflict there throws
+        the whole push away.
+
+    And the general rule, so this class of defect cannot come back: EVERY
+    secret a workflow reads must be in .env.example — the operator's setup
+    document. The document used to list eight variables while the workflows
+    read twenty.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 74: the cloud reaches every tier, and the state survives")
+    print("=" * 60)
+    import os
+    import re
+
+    wf_dir = PROJECT_ROOT / ".github" / "workflows"
+    workflows = {p.name: p.read_text(encoding="utf-8") for p in sorted(wf_dir.glob("*.yml"))}
+
+    # --- 1. every workflow that sends mail must reach all three tiers -----
+    mail_workflows = [name for name, text in workflows.items() if "GMAIL_SENDER" in text]
+    assert len(mail_workflows) >= 5, f"the mail workflows changed shape: {mail_workflows}"
+    for name in mail_workflows:
+        text = workflows[name]
+        for secret in ("GMAIL_SENDER_2", "GMAIL_APP_PASSWORD_2", "ARCHIVE_RECIPIENT_EMAIL"):
+            assert f"secrets.{secret}" in text, (
+                f"{name} sends mail but never receives {secret} — the tier could "
+                f"never activate")
+        assert "GMAIL_APP_PASSWORD" in text, \
+            f"{name} has the sender address but no app password — it cannot send"
+
+    # --- 2. the emergency path: a real token, one salt --------------------
+    emergency = workflows["emergency_cron.yml"]
+    # The check looks for the MAPPING, not the word: a comment that explains
+    # why the dangling reference was removed must not trip the test.
+    assert not re.search(r"GITHUB_TOKEN:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}", emergency), \
+        "secrets.GITHUB_TOKEN does not exist — the variable was always empty"
+    assert "github.token" in emergency, "the emergency path must hold a real token"
+    assert "REDACTION_SALT" in emergency, \
+        "without the salt the emergency path fingerprints differently from every other cycle"
+    assert not re.search(r"KAGGLE_\w+:\s*\$\{\{", emergency), \
+        "no code reads the Kaggle variables — the tier is documented and does not exist"
+
+    # --- 3. diagnostics must not throw its own verdict away ---------------
+    diagnostics_wf = workflows["diagnostics.yml"]
+    assert "python harness/diagnostics.py || true" not in diagnostics_wf, \
+        "diagnostics.py answers 1 when a critical provider is dead — the workflow " \
+        "must not throw that answer away"
+    assert "if: always()" in diagnostics_wf, \
+        "the report must reach the repository even when the verdict is red"
+
+    # --- 4. the credential heartbeat must be committed by its writers ------
+    for name in ("daily_dispatch_novt.yml", "diagnostics.yml", "emergency_cron.yml"):
+        assert "data/.credential_heartbeat.json" in workflows[name], (
+            f"{name} writes the credential heartbeat but never commits it — "
+            f"the decay history dies with the runner")
+
+    # --- 5. the shared sync must know every file two jobs can write -------
+    sync = (PROJECT_ROOT / "scripts" / "sync_state.sh").read_text(encoding="utf-8")
+    for artefact in ("data/mega_archive_report.json", "data/survival_report.json",
+                     "data/local_keeper.json", "data/provider_candidates.json",
+                     "data/.credential_heartbeat.json", "data/.sealed_vault.json"):
+        assert artefact in sync, (
+            f"{artefact} is missing from the conflict list — an unresolved "
+            f"conflict on it throws the whole push away")
+
+    # --- 6. the bot window must leave the supervisor's report behind ------
+    bot_wf = workflows["telegram_bot.yml"]
+    assert "data/.cycle_supervisor.json" in bot_wf, \
+        "the bot window must commit the supervisor's report"
+    supervisor_step = bot_wf.split("Commit the supervisor's report")[-1]
+    assert "if: always()" in supervisor_step, \
+        "the report must be committed even when the daemon above it failed"
+
+    # --- 7. THE GENERAL RULE: every secret a workflow reads is documented -
+    env_example = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    used = set()
+    for name, text in workflows.items():
+        # Comments are not configuration: a line that explains why a dangling
+        # reference was removed must not count as a reference.
+        body = "\n".join(line for line in text.splitlines()
+                         if not line.strip().startswith("#"))
+        for found in re.findall(r"secrets\.([A-Z][A-Z0-9_]*)", body):
+            used.add(found)
+    undocumented = sorted(s for s in used if s not in env_example)
+    assert not undocumented, (
+        "these secrets are read by the workflows but are NOT in .env.example — "
+        f"the operator cannot configure what they cannot see: {undocumented}")
+    assert used, "no secrets found — the scan itself is broken"
+
+    # --- 8. the complex must REPORT its dormant tiers --------------------
+    from harness import diagnostics as diag
+    saved = {k: os.environ.pop(k, None) for k in diag.TIER_CREDENTIALS}
+    try:
+        state = diag.check_tiers_armed()
+        assert sorted(state["dormant"]) == sorted(diag.TIER_CREDENTIALS), \
+            f"an unconfigured tier must be reported as dormant: {state}"
+        os.environ["GMAIL_SENDER_2"] = "backup@example.invalid"
+        state = diag.check_tiers_armed()
+        assert "GMAIL_SENDER_2" not in state["dormant"], \
+            "a configured tier must not be reported as dormant"
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    print("[+] Test 74 Passed: every tier is reachable from the cloud, the "
+          "credential heartbeat survives, and the setup document matches the code.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -6199,6 +6331,7 @@ if __name__ == "__main__":
         test_71_the_own_cloud_copy_is_wired_and_the_upload_is_correct,
         test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies,
         test_73_the_mail_wire_recovers_and_an_unkept_promise_ends_the_run_red,
+        test_74_the_cloud_reaches_every_tier_and_the_state_survives_the_runner,
     ]
     failed = []
     for t in tests:

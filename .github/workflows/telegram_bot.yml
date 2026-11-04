@@ -103,8 +103,37 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The wire's other two tiers (audited 2026-11-04: implemented in
+          # the sender, wired into NO workflow — so they could never fire).
+          GMAIL_SENDER_2: ${{ secrets.GMAIL_SENDER_2 }}
+          GMAIL_APP_PASSWORD_2: ${{ secrets.GMAIL_APP_PASSWORD_2 }}
+          ARCHIVE_RECIPIENT_EMAIL: ${{ secrets.ARCHIVE_RECIPIENT_EMAIL }}
+          # The search tier of the model executor.
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
         run: bash scripts/run_telegram_daemon.sh
+
+      # The supervisor's own memory of what it dispatched. The daemon commits
+      # it too — but only if the daemon runs at all, and the daemon does not
+      # run when the step above it failed. `if: always()` so a failed window
+      # still leaves the record behind: without it the next window cannot
+      # know that this one already tried, and «GitHub did not answer» is
+      # read as «idle» all over again (that is how the complex once sent
+      # the same letter four times in a day).
+      - name: Commit the supervisor's report
+        if: always()
+        run: |
+          git config --global user.name "vasiliad"
+          git config --global user.email "vasiliadi@users.noreply.github.com"
+          # Each path on its own: `git add` with several paths aborts
+          # entirely when one pathspec does not match.
+          git add data/.cycle_supervisor.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(bot): persist the supervisor's report [skip ci]"
+          else
+            echo "No supervisor report changes."
+          fi
+          bash scripts/sync_state.sh
 
       # `if: always()` — the chain must survive a crashed daemon step too.
       # The queued-window check keeps exactly one chain alive: if the watchdog

@@ -42,6 +42,20 @@ CONFLICT_FILES=(
   "data/.bot_silence_alarm.json"
   # Written by cloud_tests.yml — the proof that the verification cycle ran.
   "data/cloud_tests_report.json"
+  # Written by mega_archive.yml — the proof that the own-cloud copy happened.
+  "data/mega_archive_report.json"
+  # Written by survival_protocol.yml — the complex's verdict about its own
+  # survival, the keeper's state and the provider candidates it measured.
+  "data/survival_report.json"
+  "data/local_keeper.json"
+  "data/provider_candidates.json"
+  # The credential heartbeat: every probed credential's last success and
+  # first failure. It is written by the diagnostics cycle AND by the daily
+  # dispatcher — two writers, one file, so it needs the snapshot rule.
+  "data/.credential_heartbeat.json"
+  # The sealed vault: ciphertext only, but it is still a file two jobs can
+  # touch, and an unresolved conflict would throw the whole push away.
+  "data/.sealed_vault.json"
 )
 
 # The append-only logs are NOT snapshots: both writers' lines are true, so a

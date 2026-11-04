@@ -57,6 +57,12 @@ jobs:
           REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The wire's other two tiers (audited 2026-11-04: implemented in
+          # the sender, wired into NO workflow — so they could never fire).
+          GMAIL_SENDER_2: ${{ secrets.GMAIL_SENDER_2 }}
+          GMAIL_APP_PASSWORD_2: ${{ secrets.GMAIL_APP_PASSWORD_2 }}
+          ARCHIVE_RECIPIENT_EMAIL: ${{ secrets.ARCHIVE_RECIPIENT_EMAIL }}
           SOVEREIGN_FORCE_DETERMINISTIC: '1'
         run: python harness/bot_selftest.py
 

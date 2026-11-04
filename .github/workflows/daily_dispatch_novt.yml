@@ -79,6 +79,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The wire has three tiers, and all three must be REACHABLE from
+          # the cloud: the primary account, the backup account (used once,
+          # only when the primary's wire fails), and the archive copy (a
+          # mailbox that belongs to neither the operator nor GitHub).
+          # Audited 2026-11-04: the code had all three, and NO workflow
+          # passed the last two — so the failover and the archive could
+          # never activate, however the operator configured them. An empty
+          # value simply means «not configured yet»; the tier switches on
+          # by itself the moment the secret exists.
+          GMAIL_SENDER_2: ${{ secrets.GMAIL_SENDER_2 }}
+          GMAIL_APP_PASSWORD_2: ${{ secrets.GMAIL_APP_PASSWORD_2 }}
+          ARCHIVE_RECIPIENT_EMAIL: ${{ secrets.ARCHIVE_RECIPIENT_EMAIL }}
+          # The search tier of the model executor.
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
           LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
@@ -117,6 +131,11 @@ jobs:
           # Each path is added on its own.
           git add nim_history.log 2>/dev/null || true
           git add data/daily_digest.json 2>/dev/null || true
+          # The credential heartbeat: the record that shows the wire DECAYING
+          # before it dies. Audited 2026-11-04: it was written by two cycles
+          # and committed by NEITHER, so the decay history died with the
+          # runner and the operator only ever saw the last run's verdict.
+          git add data/.credential_heartbeat.json 2>/dev/null || true
           if ! git diff --staged --quiet; then
             git commit -m "chore(dispatch): record report dispatch outcome [skip ci]"
             echo "Dispatch outcome committed."

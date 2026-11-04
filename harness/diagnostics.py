@@ -16,7 +16,7 @@ import requests
 from datetime import datetime, timezone
 from pathlib import Path
 import re
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -44,6 +44,19 @@ PROJECT_MODEL_IDS = [
 LOCAL_ONLY_MODEL_IDS = [
     "Qwen/Qwen2.5-1.5B-Instruct",
 ]
+
+# The OPTIONAL tiers of the complex. Each one is a promise the documentation
+# makes and the operator fulfils with a secret; until the secret exists the
+# tier is DORMANT, and the report must say so in those words. Measured
+# 2026-11-04: the failover account and the archive copy existed in the
+# sender and in NO workflow, and nothing told the operator — the backup
+# sender was a promise kept only on paper.
+TIER_CREDENTIALS = {
+    "GMAIL_SENDER_2": "резервный отправитель (второй Google-аккаунт)",
+    "GMAIL_APP_PASSWORD_2": "пароль резервного отправителя",
+    "ARCHIVE_RECIPIENT_EMAIL": "копия письма в архивный ящик",
+    "TAVILY_API_KEY": "поисковый тариф модели",
+}
 
 
 def _hdr(title: str) -> None:
@@ -275,6 +288,9 @@ def check_credentials_present(measured: Optional[Dict[str, Dict[str, Any]]] = No
         "TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_PASSWORD",
         "GMAIL_SENDER", "GMAIL_APP_PASSWORD", "DISPATCH_RECIPIENT_EMAIL",
     ]
+    # The OPTIONAL tiers live in their own section (check_tiers_armed): they
+    # are not required for the primary wire, so mixing them into «ok» would
+    # turn every honest report into a red one over a missing BACKUP.
     measured = measured if isinstance(measured, dict) else {}
     out: Dict[str, bool] = {}
     verdicts: Dict[str, str] = {}
@@ -297,6 +313,36 @@ def check_credentials_present(measured: Optional[Dict[str, Dict[str, Any]]] = No
             print(f"  [+] {n}: {len(val)} chars — {verdict}")
         verdicts[n] = verdict
     return {"ok": all(out.values()), "inventory": out, "verdicts": verdicts}
+
+
+def check_tiers_armed() -> Dict[str, Any]:
+    """
+    Which of the OPTIONAL tiers are armed.
+
+    Measured 2026-11-04: the failover account and the archive copy were
+    implemented in the sender and wired into no workflow at all — and
+    nothing anywhere told the operator that. A «backup sender» that was
+    never configured is not a backup; it is a promise in the documentation
+    and nowhere else.
+
+    These tiers are not required: without them the primary wire still
+    works. So their absence is not a FAILURE — it is a FACT, and the
+    report says it plainly, with the exact secret the operator has to set.
+    """
+    _hdr("[5b] Optional tiers (the primary wire works without them)")
+    armed: Dict[str, bool] = {}
+    dormant: List[str] = []
+    for name, what in TIER_CREDENTIALS.items():
+        present = bool(os.getenv(name, "").strip())
+        armed[name] = present
+        if present:
+            print(f"  [+] {name}: настроен ({what})")
+        else:
+            dormant.append(name)
+            print(f"  [-] {name}: НЕ НАСТРОЕН ({what}) — секрет не задан")
+    if dormant:
+        print(f"  [!] {len(dormant)} tier(s) dormant: {', '.join(dormant)}")
+    return {"armed": armed, "dormant": dormant, "ok": not dormant}
 
 
 def check_bot_health() -> Dict[str, Any]:
@@ -386,6 +432,11 @@ def main() -> int:
         "keenable": report["keenable"],
         "telegram": report["telegram"],
     })
+    # The optional tiers: which promises are still dormant. This is not a
+    # verdict on the complex's health — it is the list of what the operator
+    # has NOT armed yet, so nobody reads «the backup sender» in the
+    # documentation and believes in a failover that was never configured.
+    report["tiers"] = check_tiers_armed()
     # The heartbeat: every probed credential's last success / first failure,
     # so decay is visible in the report BEFORE the channel dies.
     report["heartbeat"] = record_heartbeat(report)

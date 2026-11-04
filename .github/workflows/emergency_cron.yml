@@ -59,11 +59,20 @@ jobs:
           LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPO: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NOT `secrets.GITHUB_TOKEN` — that secret does not exist, so the
+          # variable was always EMPTY (audited 2026-11-04). An empty token
+          # looks like «a token was configured» to every reader of the code,
+          # and it silences the backup alert channel (which asks for a token
+          # before it opens an Issue). `github.token` is the workflow's own
+          # token, with the permissions this workflow already declares.
+          GITHUB_TOKEN: ${{ github.token }}
+          # The salt of the fingerprints. Without it the emergency path
+          # hashes addresses with a plain SHA-256 while every other cycle
+          # uses the HMAC — so the same address gets two different tags, and
+          # the operator cannot correlate them.
+          REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
         run: |
           # If triggered manually, pass --force
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_run }}" = "true" ]; then
@@ -110,6 +119,14 @@ jobs:
         env:
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The wire's other two tiers (audited 2026-11-04: implemented in
+          # the sender, wired into NO workflow — so they could never fire).
+          # The alarm is the LAST letter the complex sends before the
+          # operator notices the silence: it must not be the one letter
+          # that dies with the primary account.
+          GMAIL_SENDER_2: ${{ secrets.GMAIL_SENDER_2 }}
+          GMAIL_APP_PASSWORD_2: ${{ secrets.GMAIL_APP_PASSWORD_2 }}
+          ARCHIVE_RECIPIENT_EMAIL: ${{ secrets.ARCHIVE_RECIPIENT_EMAIL }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -131,6 +148,10 @@ jobs:
           git add config.yaml 2>/dev/null || true
           git add data/.bot_silence_alarm.json 2>/dev/null || true
           git add data/.cycle_supervisor.json 2>/dev/null || true
+          # The credential heartbeat — the decay record (audited 2026-11-04:
+          # written by two cycles, committed by neither, so the history of
+          # the decay died with the runner).
+          git add data/.credential_heartbeat.json 2>/dev/null || true
 
           if ! git diff --staged --quiet; then
             git commit -m "chore(heartbeat): autonomous state sync [skip ci]"
