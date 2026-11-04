@@ -6614,9 +6614,16 @@ def test_77_the_complex_can_build_its_own_account_again():
     def _get(url, headers=None, timeout=None, **kw):
         seen.append(f"GET {url}")
         if url.endswith("/domains"):
-            return _Resp(200, [{"domain": "fldubai.com"}])
+            # The MEASURED shape: mail.tm answers with JSON-LD (a Hydra
+            # collection), not the bare list the old examples show. A parser
+            # that expects a list sees nothing and says «no domain» — which
+            # is exactly what the first cloud run of this chain said.
+            return _Resp(200, {"@type": "hydra:Collection", "hydra:totalItems": 1,
+                               "hydra:member": [{"domain": "fldubai.com",
+                                                 "isActive": True}]})
         if url.endswith("/messages"):
-            return _Resp(200, [{"id": "M1"}])
+            return _Resp(200, {"@type": "hydra:Collection", "hydra:totalItems": 1,
+                               "hydra:member": [{"id": "M1"}]})
         if "/messages/M1" in url:
             return _Resp(200, {
                 "text": "Welcome. Please confirm: https://mega.nz/#confirmAbC123",

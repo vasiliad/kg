@@ -122,15 +122,37 @@ def vault_salt(explicit: Optional[str] = None) -> str:
 
 # --- the mailbox (mail.tm's PUBLIC API — documented for automation) ---------
 
+def collection(payload: Any) -> List[Any]:
+    """
+    The items of a collection, whatever shape the provider wears today.
+
+    Measured 2026-11-04: mail.tm answers with JSON-LD (a Hydra collection):
+    «{"@type":"hydra:Collection","hydra:member":[…]}» — not the bare list the
+    older examples show. A parser that expects a list sees no items and
+    reports «mail.tm offered no domain» — which is what the first cloud run
+    of this chain said. Both shapes are accepted.
+    """
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for key in ("hydra:member", "member", "items", "data", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+    return []
+
+
 def mailbox_domains() -> List[str]:
     """The domains mail.tm offers right now (the list moves; the API does not)."""
     r = requests.get(f"{MAILTM_API}/domains", timeout=30)
     if r.status_code != 200:
         raise RuntimeError(f"mail.tm did not answer with its domains: HTTP {r.status_code}")
     domains = []
-    for item in r.json() or []:
+    for item in collection(r.json()):
         if isinstance(item, dict) and item.get("domain"):
             domains.append(item["domain"])
+        elif isinstance(item, str):
+            domains.append(item)
     if not domains:
         raise RuntimeError("mail.tm offered no domain")
     return domains
@@ -175,7 +197,7 @@ def mailbox_wait_for_signup(token: str, attempts: int = 12, wait: int = 5) -> st
     for attempt in range(1, attempts + 1):
         r = requests.get(f"{MAILTM_API}/messages", headers=headers, timeout=30)
         if r.status_code == 200:
-            for message in r.json() or []:
+            for message in collection(r.json()):
                 mid = message.get("id") if isinstance(message, dict) else None
                 if not mid:
                     continue
