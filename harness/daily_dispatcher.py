@@ -63,7 +63,6 @@ from harness import atomic_io
 from harness import redaction
 from harness import state_vault
 from harness import email_render
-from harness import mail_accounts
 from harness import runtime_settings
 from harness import tool_call
 from harness.disk_guard import DiskGuard
@@ -203,6 +202,47 @@ def _read_heartbeat() -> List[Dict[str, Any]]:
     except Exception:
         pass
     return []
+
+
+def _read_mailbox_tiers(path: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    The mailbox inventory, as MEASURED by the diagnostics cycle.
+
+    The dispatch job cannot measure it itself: the vault is sealed under
+    VAULT_SALT, and this job carries only REDACTION_SALT (measured
+    2026-11-05: the two salts do NOT open the same vault). So the letter
+    reads the artefact the cycle that HOLDS the salt wrote — the same
+    pattern as the credential heartbeat.
+
+    No artefact is «unknown», never «zero»: a letter that could not look
+    must not report an empty shelf.
+    """
+    path = path or (PROJECT_ROOT / "data" / ".mailbox_tiers.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"measured": False,
+                "why": "the diagnostics cycle has not measured the mailboxes yet"}
+    if not isinstance(data, dict):
+        return {"measured": False, "why": "the mailbox inventory is not an inventory"}
+    tiers = dict(data)
+    tiers["measured"] = bool(tiers.get("measured"))
+    # How old is this measurement? An inventory measured three days ago,
+    # printed as if it were measured now, is the same lie as a green run
+    # with a stale artefact: the numbers are right, the moment is not.
+    checked = tiers.get("checked_at")
+    if checked:
+        try:
+            stamp = datetime.fromisoformat(str(checked))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age_h = (datetime.now(timezone.utc) - stamp).total_seconds() / 3600.0
+            tiers["age_hours"] = round(age_h, 1)
+            if age_h > 24:
+                tiers["stale"] = True
+        except Exception:
+            pass
+    return tiers
 
 
 def _read_copy_report(path: Path, folder_key: str, missing_label: str) -> Dict[str, Any]:
@@ -359,7 +399,7 @@ def build_health_report_email() -> Dict[str, str]:
         # What the complex can actually USE: how many mailboxes it reads
         # unattended, how many only a person can open, and how many of the
         # mailboxes it registered itself survive a restart of this machine.
-        "mailboxes": mail_accounts.mailbox_tiers(),
+        "mailboxes": _read_mailbox_tiers(),
         "recipient_tag": redaction.recipient_tag(resolve_recipient()),
         "sender_name": SENDER_NAME,
     }

@@ -698,8 +698,11 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
             b_facts = [f"читаются без человека: {b_readable}",
                        f"только человеком: {b_human}"]
         else:
-            b_facts = ["не измерено в этом цикле: нет ни адресов в окружении, "
-                       "ни соли vault"]
+            # The reason belongs to the note below, not to the facts line:
+            # the reason CHANGES with the cycle (no salt yet / the cycle has
+            # not run yet), and a facts line that names one reason while the
+            # note names another is a contradiction in a letter.
+            b_facts = ["не измерено в этом цикле"]
         if b_sealed or b_local or b_session:
             b_facts.append(f"свои, запечатаны в vault: {b_sealed}")
         if b_local:
@@ -707,13 +710,23 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         if b_session:
             b_facts.append(f"сессионные (без пароля): {b_session}")
         b_color = "#b45309" if (b_local or not b_measured) else GOOD
-        b_note = ""
+        b_notes: List[str] = []
         if not b_measured:
-            b_note = ("инвентарь ящиков не измерен: этому циклу нужна соль "
-                      "vault или адреса в окружении")
+            b_notes.append(str(boxes.get("why") or
+                               "инвентарь ящиков не измерен: этому циклу нужна "
+                               "соль vault или адреса в окружении"))
         elif b_local:
-            b_note = ("есть свои ящики, чьи учётные данные не запечатаны — "
-                      "они не переживут эту машину")
+            b_notes.append("есть свои ящики, чьи учётные данные не запечатаны — "
+                           "они не переживут эту машину")
+        # An old measurement is still a measurement — but it is not NOW, and
+        # the letter must not pass it off as now.
+        if b_measured and boxes.get("stale"):
+            b_color = "#b45309"
+            b_age = boxes.get("age_hours")
+            age_text = (f" {b_age} ч назад" if b_age is not None else "")
+            b_notes.append(f"инвентарь измерен{age_text} — цикл измерения не "
+                           "срабатывал, цифры могут быть устаревшими")
+        b_note = " · ".join(b_notes)
         body.append(
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
             f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
