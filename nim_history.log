@@ -125,3 +125,4 @@
 [2026-11-05 14:30:58 UTC] ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов=12 | измерено=3 | состав=nvidia/nemotron-3-ultra-550b-a55b (Дежурный основной, 96.75), mistralai/mistral-large-4-1t-a52b (Дежурный быстрый, 95.59), minimaxai/minimax-m3.1-flash (Дежурный кодер, 84.65)
 [2026-11-05 20:26:29 UTC] ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов=12 | измерено=4 | состав=nvidia/nemotron-3-ultra-550b-a55b (Дежурный основной, 96.75), minimaxai/minimax-m3.1-flash (Дежурный быстрый, 80.46), mistralai/mistral-large-4-1t-a52b (Дежурный кодер, 75.0)
 [2026-11-05 20:26:29 UTC] ДРЕЙФ ФЛОТА | Дрейф флота: DEGRADED; средний сдвиг -8.26; худший: mistralai/mistral-large-4-1t-a52b (-20.59).
+[2026-11-05 23:13:08 UTC] EMERGENCY RUN SUCCESS | Diff: +0/-0 | Fleet: 3 models | Reason: State stale by 9.2h (threshold: 6h)
