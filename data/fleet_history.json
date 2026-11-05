@@ -436,5 +436,31 @@
       "minimaxai/minimax-m3.1-flash": 92.39,
       "mistralai/mistral-large-4-1t-a52b": 95.85
     }
+  },
+  {
+    "tuned_at": "2026-11-05 06:59:17 UTC",
+    "fleet": [
+      "mistralai/mistral-large-4-1t-a52b",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "minimaxai/minimax-m3.1-flash",
+      "stepfun-ai/step-5-preview"
+    ],
+    "primary": "mistralai/mistral-large-4-1t-a52b",
+    "tasks": [
+      "reasoning",
+      "code",
+      "json",
+      "translation",
+      "toolcall",
+      "prose",
+      "canary_news"
+    ],
+    "scores": {
+      "minimaxai/minimax-m3.1-flash": 86.62,
+      "nvidia/nemotron-3-ultra-550b-a55b": 96.75,
+      "mistralai/mistral-large-4-1t-a52b": 98.48,
+      "z-ai/glm-5.3-flash": 19.07,
+      "stepfun-ai/step-5-preview": 69.23
+    }
   }
 ]
