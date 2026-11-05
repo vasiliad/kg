@@ -1,24 +1,24 @@
 {
-  "attempted_at": "2026-11-05T04:43:39.512335+00:00",
+  "attempted_at": "2026-11-05T04:53:07.042148+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
   "stage": "apply_check",
   "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -20.96, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -69.17)\n- mistralai/mistral-large-4-1t-a52b: балл 95.85, задержка 6.98с, ok_rate 1.0, слабейшая задача instruction=1.0\n- minimaxai/minimax-m3.1-flash: балл 92.39, задержка 4.23с, ok_rate 1.0, слабейшая задача instruction=0.5\nТекущая смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 117, ошибок 5, ответов 138",
   "branch": null,
-  "error": "error: corrupt patch at /tmp/forge-patch-6gi33wo6/proposed.patch:25\n",
-  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: corrupt patch at /tmp/forge-patch-6gi33wo6/proposed.patch:25\n",
+  "error": "error: corrupt patch at /tmp/forge-patch-dq44gypb/proposed.patch:50\n",
+  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: corrupt patch at /tmp/forge-patch-dq44gypb/proposed.patch:50\n",
   "writer": {
     "model": "mistralai/mistral-large-4-1t-a52b",
     "role": "duty_primary",
     "score": 95.85,
     "verified": true,
-    "elapsed": 245.33,
+    "elapsed": 273.52,
     "status": "SUCCESS"
   },
   "chooser": {
     "model": "mistralai/mistral-large-4-1t-a52b",
     "role": "duty_primary",
-    "elapsed": 7.42,
+    "elapsed": 7.32,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
@@ -29,17 +29,17 @@
   "repair": {
     "attempted": true,
     "ok": false,
-    "status": "same_patch"
+    "status": "SUCCESS"
   },
   "gate": {
     "ok": false,
     "stage": "apply_check",
     "branch": null,
-    "error": "error: corrupt patch at /tmp/forge-patch-6gi33wo6/proposed.patch:25\n"
+    "error": "error: corrupt patch at /tmp/forge-patch-dq44gypb/proposed.patch:50\n"
   },
-  "patch_bytes": 1134,
+  "patch_bytes": 1840,
   "attempt_day": "2026-11-05",
-  "checked_at": "2026-11-05T04:43:39.512219+00:00",
-  "verdict_id": "20261105T044339Z",
-  "patch_file": "data/forge_autopilot/20261105T044339Z.patch"
+  "checked_at": "2026-11-05T04:53:07.042023+00:00",
+  "verdict_id": "20261105T045307Z",
+  "patch_file": "data/forge_autopilot/20261105T045307Z.patch"
 }

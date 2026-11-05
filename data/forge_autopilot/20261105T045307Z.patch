@@ -1,0 +1,50 @@
+diff --git a/harness/fleet_drift.py b/harness/fleet_drift.py
+--- a/harness/fleet_drift.py
++++ b/harness/fleet_drift.py
+@@ -112,10 +112,11 @@
+     if not prev or not curr:
+         return {
+             "status": "FIRST",
+             "mean_score_delta": None,
+             "worst": None,
++            "degraded": [],
+             "added": sorted(set(curr_fleet) - set(prev_fleet)),
+             "removed": sorted(set(prev_fleet) - set(curr_fleet)),
+             "per_model": {},
+             "note": "нет предыдущего замера для сравнения",
+         }
+@@ -122,6 +123,7 @@
+ 
+     per_model: Dict[str, Dict[str, Any]] = {}
+     deltas: List[float] = []
+     worst: Optional[Dict[str, Any]] = None
++    degraded: List[Dict[str, Any]] = []
+     for mid, m in curr.items():
+         old = prev.get(mid)
+@@ -146,4 +148,6 @@
+         deltas.append(delta)
+         if worst is None or delta < worst["delta"]:
+             worst = {"id": mid, "delta": delta}
++        if delta <= -MODEL_DELTA_THRESHOLD:
++            degraded.append({"id": mid, "delta": delta})
+ 
+@@ -175,8 +179,9 @@
+     return {
+         "status": status,
+         "mean_score_delta": mean_delta,
+         "worst": worst,
++        "degraded": sorted(degraded, key=lambda d: d["delta"]),
+         "added": added,
+         "removed": removed,
+         "per_model": per_model,
+         "compared_models": len(per_model),
+@@ -239,6 +244,9 @@
+     worst = drift.get("worst")
+     if isinstance(worst, dict) and worst.get("id"):
+         parts.append(f"худший: {worst['id']} ({worst.get('delta', 0):+.2f})")
++    degraded = drift.get("degraded") or []
++    if degraded:
++        parts.append(f"просели: {', '.join(d['id'] for d in degraded[:3])}")
+     added = drift.get("added") or []
+     removed = drift.get("removed") or []
+     if added:
