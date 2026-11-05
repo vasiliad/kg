@@ -1,0 +1,25 @@
+diff --git a/harness/fleet_drift.py b/harness/fleet_drift.py
+--- a/harness/fleet_drift.py
++++ b/harness/fleet_drift.py
+@@ -86,5 +86,7 @@ def _primary(report: Optional[Dict[str, Any]]) -> Optional[str]:
+ def _primary(report: Optional[Dict[str, Any]]) -> Optional[str]:
+-    for f in (report or {}).get("fleet") or []:
++    if not isinstance(report, dict):
++        return None
++    for f in report.get("fleet") or []:
+         if isinstance(f, dict) and "duty_primary" in (f.get("roles") or []):
+             return f.get("id")
+     return None
+@@ -93,7 +95,11 @@ def _task_set(report: Optional[Dict[str, Any]]) -> Optional[List[str]]:
+ def _task_set(report: Optional[Dict[str, Any]]) -> Optional[List[str]]:
+     """The probe set a cycle was measured with, if the report records it."""
+-    policy = (report or {}).get("policy") or {}
++    if not isinstance(report, dict):
++        return None
++    policy = report.get("policy") or {}
++    if not isinstance(policy, dict):
++        return None
+     tasks = policy.get("quality_tasks")
+     if isinstance(tasks, list) and tasks:
+         return [str(t) for t in tasks]
+     return None
