@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-04T19:33:57.534278+00:00",
+  "checked_at": "2026-11-05T06:27:52.291304+00:00",
   "status": "ok",
   "remote": "protondrive:/immortal/",
   "account": "sha256:71182a53",
@@ -8,30 +8,30 @@
     {
       "artefact": "nim_history.log",
       "remote": "protondrive:/immortal/nim_history.log",
-      "bytes": 24399,
+      "bytes": 26050,
       "verified": true,
-      "sha256": "8e33d756330a74848b01ff57654f81cc12be6fdd30a4e2ea98fa12ce5ff55129"
+      "sha256": "3d7677ce2c33c05daf2e66fd141416ea9f339ba2284ffcbb128fb37369229353"
     },
     {
       "artefact": "diagnostics_report.json",
       "remote": "protondrive:/immortal/diagnostics_report.json",
-      "bytes": 8175,
+      "bytes": 8471,
       "verified": true,
-      "sha256": "4c1b0b8f83b84e4e92e03e36b85b82f57747636dd0611f9a7f8c9a26a3a677e1"
+      "sha256": "3b4a9cdd3e4258d78971306be88b34466a96b3b2564efa94d902b2b54e804ae5"
     },
     {
       "artefact": "data/daily_digest.json",
       "remote": "protondrive:/immortal/data/daily_digest.json",
-      "bytes": 13436,
+      "bytes": 19030,
       "verified": true,
-      "sha256": "0247dd59b303294adfa2a491c41ae33248c37acb045db871295b0b988b5ff692"
+      "sha256": "41a4a0c9f7ee7b97555ced61c286e5ce03372703df364917292923125e3f7333"
     },
     {
       "artefact": "data/fleet_report.json",
       "remote": "protondrive:/immortal/data/fleet_report.json",
-      "bytes": 14624,
+      "bytes": 13376,
       "verified": true,
-      "sha256": "42dfc30306c196aaa6b101f0cf4c6f4a6548a17b70824f6010e69e83f2a161eb"
+      "sha256": "5271467d95bde64dc58fdce86c23ad8e8cad6791464465b560284fde1cb45a38"
     },
     {
       "artefact": "data/bot_selftest_report.json",
@@ -43,23 +43,23 @@
     {
       "artefact": "data/cloud_tests_report.json",
       "remote": "protondrive:/immortal/data/cloud_tests_report.json",
-      "bytes": 240,
+      "bytes": 241,
       "verified": true,
-      "sha256": "4972fce57d2bde8f50deb6576f5f0ac17becb503ccb6bf45b49a8d1626e35fe4"
+      "sha256": "66dd6eabbeab4150c9fa4eaeb05778c7904c7cd8a1b23b8d582b69ae7dd3187f"
     },
     {
       "artefact": "data/survival_report.json",
       "remote": "protondrive:/immortal/data/survival_report.json",
       "bytes": 306,
       "verified": true,
-      "sha256": "97a432c84bade239e8a3a52428ae5074666adaabdc48f0d98fdc1a387c929e1e"
+      "sha256": "d9c343c3cec0c91b62731be6c8fce45d5260cf9fda224e09448329b9a58cd1d3"
     },
     {
       "artefact": "data/forge_autopilot.json",
       "remote": "protondrive:/immortal/data/forge_autopilot.json",
-      "bytes": 2387,
+      "bytes": 2252,
       "verified": true,
-      "sha256": "20ddcdf40c2f693b7c61a73dc72efaa98f87f875b581f690079d16dcfa87128b"
+      "sha256": "732e0e8bd3a4a39a57859e1d2c1d3cf6919cab89a3371cd0e1bae8a7b04406fb"
     },
     {
       "artefact": "data/duty_shift.json",
@@ -78,23 +78,23 @@
     {
       "artefact": "data/.cycle_supervisor.json",
       "remote": "protondrive:/immortal/data/.cycle_supervisor.json",
-      "bytes": 2365,
+      "bytes": 2977,
       "verified": true,
-      "sha256": "908a949b02b941090c3cdbe29a577baba69e41f9326be3b7ec470ca8ee85b419"
+      "sha256": "1f0e32c4263f3160c9ebb48976e0334d7966cbd2f42b87d8d4f4510a93b8fac0"
     },
     {
       "artefact": "data/.bot_sessions.json",
       "remote": "protondrive:/immortal/data/.bot_sessions.json",
       "bytes": 691,
       "verified": true,
-      "sha256": "033692060f9c4603d2b5c28ca896f62eedb78fcc6a501f334d5255d4abcc862c"
+      "sha256": "92784cff068250219ccc5ac9039664491f804635a07c61a158bba2a7e6e66690"
     },
     {
       "artefact": "data/.credential_heartbeat.json",
       "remote": "protondrive:/immortal/data/.credential_heartbeat.json",
       "bytes": 1305,
       "verified": true,
-      "sha256": "7507ce2f29c3849bb0f135fe5d4c1d3040a7c8edce55d409ad6073c079ee602c"
+      "sha256": "102e01307eb23c2a55f0844c7a198a05cc60dace33253ca70af1f4c53c8f9798"
     },
     {
       "artefact": "data/.sealed_vault.json",
