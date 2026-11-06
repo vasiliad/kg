@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-06T03:15:08.854654+00:00",
+  "checked_at": "2026-11-06T04:08:52.351834+00:00",
   "repo": "vasiliad/kg",
   "dry_run": false,
   "cycles": [
@@ -7,30 +7,29 @@
       "name": "fleet",
       "workflow": "fleet_tuner.yml",
       "artefact": "data/fleet_report.json",
-      "age_h": 7.17,
+      "age_h": 8.06,
       "max_age_h": 7.0,
       "stale": true,
-      "action": "busy",
-      "busy": true
+      "action": "dispatched",
+      "busy": false,
+      "last_run_age_h": 8.06,
+      "local_dispatch_age_h": 13.9,
+      "effective_age_h": 8.06
     },
     {
       "name": "diagnostics",
       "workflow": "diagnostics.yml",
       "artefact": "diagnostics_report.json",
-      "age_h": 7.37,
+      "age_h": 0.89,
       "max_age_h": 7.0,
-      "stale": true,
-      "action": "dispatched",
-      "busy": false,
-      "last_run_age_h": 7.38,
-      "local_dispatch_age_h": 13.28,
-      "effective_age_h": 7.38
+      "stale": false,
+      "action": "fresh"
     },
     {
       "name": "selftest",
       "workflow": "bot_selftest.yml",
       "artefact": "data/bot_selftest_report.json",
-      "age_h": 15.5,
+      "age_h": 16.39,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh"
@@ -39,7 +38,7 @@
       "name": "daily_dispatch",
       "workflow": "daily_dispatch_novt.yml",
       "artefact": "nim_history.log",
-      "age_h": 21.41,
+      "age_h": 22.3,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -49,40 +48,44 @@
       "name": "cloud_tests",
       "workflow": "cloud_tests.yml",
       "artefact": "data/cloud_tests_report.json",
-      "age_h": 6.73,
+      "age_h": 7.62,
       "max_age_h": 7.0,
-      "stale": false,
-      "action": "fresh"
+      "stale": true,
+      "action": "dispatched",
+      "busy": false,
+      "last_run_age_h": 7.88,
+      "local_dispatch_age_h": 13.03,
+      "effective_age_h": 7.88
     },
     {
       "name": "forge_autopilot",
       "workflow": "forge_autopilot.yml",
       "artefact": "data/forge_autopilot.json",
-      "age_h": 14.99,
+      "age_h": 15.89,
+      "max_age_h": 26.0,
+      "stale": true,
+      "action": "dispatched",
+      "due_today": true,
+      "busy": false,
+      "last_run_age_h": 15.89,
+      "local_dispatch_age_h": 23.42,
+      "effective_age_h": 15.89
+    },
+    {
+      "name": "survival_protocol",
+      "workflow": "survival_protocol.yml",
+      "artefact": "data/survival_report.json",
+      "age_h": 0.89,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
       "due_today": false
     },
     {
-      "name": "survival_protocol",
-      "workflow": "survival_protocol.yml",
-      "artefact": "data/survival_report.json",
-      "age_h": 16.53,
-      "max_age_h": 26.0,
-      "stale": true,
-      "action": "dispatched",
-      "due_today": true,
-      "busy": false,
-      "last_run_age_h": 16.53,
-      "local_dispatch_age_h": 23.39,
-      "effective_age_h": 16.53
-    },
-    {
       "name": "mega_archive",
       "workflow": "mega_archive.yml",
       "artefact": "data/mega_archive_report.json",
-      "age_h": 14.02,
+      "age_h": 14.91,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -92,7 +95,7 @@
       "name": "proton_drive",
       "workflow": "proton_drive_sync.yml",
       "artefact": "data/proton_drive_report.json",
-      "age_h": 13.77,
+      "age_h": 14.66,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -100,15 +103,16 @@
     }
   ],
   "dispatched": [
-    "diagnostics.yml",
-    "survival_protocol.yml"
+    "fleet_tuner.yml",
+    "cloud_tests.yml",
+    "forge_autopilot.yml"
   ],
   "dispatch_log": {
-    "fleet": "2026-11-05T14:14:59.701934+00:00",
+    "fleet": "2026-11-06T04:08:52.351834+00:00",
     "survival_protocol": "2026-11-06T03:15:08.854654+00:00",
     "diagnostics": "2026-11-06T03:15:08.854654+00:00",
-    "cloud_tests": "2026-11-05T15:06:49.286083+00:00",
-    "forge_autopilot": "2026-11-05T04:43:24.913428+00:00",
+    "cloud_tests": "2026-11-06T04:08:52.351834+00:00",
+    "forge_autopilot": "2026-11-06T04:08:52.351834+00:00",
     "daily_dispatch": "2026-11-05T05:35:32.213202+00:00",
     "mega_archive": "2026-11-05T05:35:32.213202+00:00",
     "proton_drive": "2026-11-05T06:27:35.149450+00:00"
