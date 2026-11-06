@@ -1,0 +1,11 @@
+diff --git a/harness/fleet_tuner.py b/harness/fleet_tuner.py
+--- a/harness/fleet_tuner.py
++++ b/harness/fleet_tuner.py
+@@ -300,6 +300,6 @@ class FleetTuner:
+     def composite(self, quality: float, latency: float, ok_rate: float) -> Tuple[float, float, float]:
+         p = self.policy["weights"]
+-        fast_cap = 30.0
++        fast_cap = float(self.policy.get("fast_latency_cap_sec", 30.0))
+         speed = max(0.0, min(1.0, 1.0 - (max(latency, 0.5) - 2.0) / fast_cap))
+         total = p["quality"] * quality + p["speed"] * speed + p["reliability"] * ok_rate
+         return round(100.0 * total, 2), round(speed, 3), round(quality, 3)

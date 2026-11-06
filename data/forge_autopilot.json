@@ -1,31 +1,33 @@
 {
-  "attempted_at": "2026-11-05T04:53:07.042148+00:00",
+  "attempted_at": "2026-11-06T04:09:12.359112+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
   "stage": "apply_check",
-  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -20.96, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -69.17)\n- mistralai/mistral-large-4-1t-a52b: балл 95.85, задержка 6.98с, ok_rate 1.0, слабейшая задача instruction=1.0\n- minimaxai/minimax-m3.1-flash: балл 92.39, задержка 4.23с, ok_rate 1.0, слабейшая задача instruction=0.5\nТекущая смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 117, ошибок 5, ответов 138",
+  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -8.26, худший: mistralai/mistral-large-4-1t-a52b (дельта -20.59)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.54с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 80.46, задержка 5.47с, ok_rate 1.0, слабейшая задача code=0.3\n- mistralai/mistral-large-4-1t-a52b: балл 75.0, задержка 58.07с, ok_rate 1.0, слабейшая задача instruction=1.0\nТекущая смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 144, ошибок 7, ответов 195",
   "branch": null,
-  "error": "error: corrupt patch at /tmp/forge-patch-dq44gypb/proposed.patch:50\n",
-  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: corrupt patch at /tmp/forge-patch-dq44gypb/proposed.patch:50\n",
+  "error": "error: corrupt patch at /tmp/forge-patch-c1v1lvm3/proposed.patch:11\n",
+  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: corrupt patch at /tmp/forge-patch-c1v1lvm3/proposed.patch:11\n",
   "writer": {
-    "model": "mistralai/mistral-large-4-1t-a52b",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "score": 95.85,
+    "score": 96.75,
     "verified": true,
-    "elapsed": 273.52,
+    "elapsed": 150.29,
     "status": "SUCCESS"
   },
   "chooser": {
-    "model": "mistralai/mistral-large-4-1t-a52b",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "elapsed": 7.32,
+    "elapsed": 20.67,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
   "local_status": null,
-  "target": "harness/fleet_drift.py",
-  "normalised": false,
-  "notes": [],
+  "target": "harness/fleet_tuner.py",
+  "normalised": true,
+  "notes": [
+    "заголовок @@ -300,7 +300,7 @@ исправлен на измеренные -300,6 +300,6"
+  ],
   "repair": {
     "attempted": true,
     "ok": false,
@@ -35,12 +37,11 @@
     "ok": false,
     "stage": "apply_check",
     "branch": null,
-    "error": "error: corrupt patch at /tmp/forge-patch-dq44gypb/proposed.patch:50\n"
+    "error": "error: corrupt patch at /tmp/forge-patch-c1v1lvm3/proposed.patch:11\n"
   },
-  "patch_bytes": 1840,
-  "attempt_day": "2026-11-05",
-  "checked_at": "2026-11-05T12:15:34.301052+00:00",
-  "verdict_id": "20261105T045307Z",
-  "patch_file": "data/forge_autopilot/20261105T045307Z.patch",
-  "skipped_today": true
+  "patch_bytes": 640,
+  "attempt_day": "2026-11-06",
+  "checked_at": "2026-11-06T04:09:12.359010+00:00",
+  "verdict_id": "20261106T040912Z",
+  "patch_file": "data/forge_autopilot/20261106T040912Z.patch"
 }
