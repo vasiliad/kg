@@ -2,11 +2,12 @@
   "measured": true,
   "api_readable": 1,
   "human_only": 2,
-  "own_durable_sealed": 0,
+  "own_durable_sealed": 2,
   "own_durable_local": 0,
   "own_session": 0,
-  "own_total": 0,
+  "own_total": 2,
   "own_file_present": false,
-  "sealed_in_vault": 0,
-  "checked_at": "2026-11-06T03:15:33.666804+00:00"
+  "sealed_in_vault": 2,
+  "sealed_self_provisioned": 0,
+  "checked_at": "2026-11-06T05:12:20.504854+00:00"
 }
