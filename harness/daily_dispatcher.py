@@ -65,6 +65,7 @@ from harness import state_vault
 from harness import email_render
 from harness import runtime_settings
 from harness import tool_call
+from harness.copy_contract import COPY_STALE_AFTER_H
 from harness.disk_guard import DiskGuard
 from harness.state_manager import StateManager
 from harness.api_healthcheck import APIHealthChecker
@@ -80,6 +81,11 @@ def resolve_recipient() -> str:
 RECIPIENT_EMAIL = resolve_recipient()
 SENDER_EMAIL = os.getenv("GMAIL_SENDER", "")
 SENDER_NAME = runtime_settings.get_sender_name()
+# How old a copy's verdict may be before the letter stops calling it green.
+# The number is the supervisor's own rule (harness/copy_contract.py): a copy
+# older than its cycle's age (26h for both the archive and the drive) is
+# owed a fresh run, so a verdict older than that describes a copy nobody
+# has looked at lately.
 if not SENDER_EMAIL:
     print("[!] WARNING: GMAIL_SENDER not set! Email dispatch will be skipped.")
 
@@ -269,6 +275,23 @@ def _read_copy_report(path: Path, folder_key: str, missing_label: str) -> Dict[s
         state = "degraded"
     else:
         state = "ok"
+    # How old is this verdict? A copy verified three days ago is not the
+    # same fact as one verified an hour ago — and the supervisor's own rule
+    # is that a copy older than its cycle's age is owed a fresh run. So the
+    # letter shows the age, and an old verdict is not painted green.
+    checked_at = str(data.get("checked_at") or "")
+    age_hours: Optional[float] = None
+    stale = False
+    if checked_at:
+        try:
+            stamp = datetime.fromisoformat(checked_at)
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age_hours = round(
+                (datetime.now(timezone.utc) - stamp).total_seconds() / 3600.0, 1)
+            stale = age_hours > COPY_STALE_AFTER_H
+        except Exception:
+            pass
     return {
         "state": state,
         "status": status,
@@ -276,7 +299,12 @@ def _read_copy_report(path: Path, folder_key: str, missing_label: str) -> Dict[s
         "uploaded": data.get("count") or 0,
         "verified": data.get("verified") or 0,
         "account": str(data.get("account") or ""),
-        "checked_at": str(data.get("checked_at") or ""),
+        "checked_at": checked_at,
+        "age_hours": age_hours,
+        "stale": stale,
+        # The vault's own verdict from that cycle: can the copy of the
+        # credentials be restored? A copy nobody can open is not a backup.
+        "vault": data.get("vault") or {},
         "notes": notes,
     }
 

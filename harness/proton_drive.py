@@ -48,6 +48,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from harness import env_file
 from harness import redaction
 from harness import sealed_vault
+from harness.copy_contract import copy_verdict
 
 REPORT_PATH = PROJECT_ROOT / "data" / "proton_drive_report.json"
 
@@ -94,6 +95,10 @@ STATE_FILES: Tuple[str, ...] = (
 KEEPER_FILES: Tuple[str, ...] = (
     "data/.bot_settings.json",
 )
+
+# The one artefact that carries the complex's OWN credentials. It is copied
+# like everything else — but it is also the one whose COPY has to open.
+VAULT_ARTEFACT = "data/.sealed_vault.json"
 
 
 class DriveError(RuntimeError):
@@ -288,6 +293,9 @@ def sync_once(root: Optional[Path] = None,
         "notes": [],
         "degraded": False,
         "two_factor": "",
+        # The vault's own verdict: can the copy of the credentials be
+        # restored? A copy nobody can open is not a backup.
+        "vault": {},
     }
 
     creds = drive_credentials(salt)
@@ -328,6 +336,16 @@ def sync_once(root: Optional[Path] = None,
                 f"copy: rclone answered {code}: {message[:300] or 'no explanation'}")
             return report
 
+        # The bytes of the vault as they come BACK from the disk. This is the
+        # copy that has to open — not the file on this machine (measured
+        # 2026-11-06: a cycle that checked the local file would prove that
+        # the ORIGINAL opens and say nothing about the copy).
+        vault_copy: Optional[bytes] = None
+        # The bytes that went UP — the witness for the copy's verdict.
+        # Without them, a cycle that holds the wrong salt could not tell a
+        # damaged copy from a fine one, and would have to guess.
+        vault_source: Optional[bytes] = None
+
         # THE PROOF: read every file back and compare the bytes. An upload
         # that cannot be opened is not a copy.
         for rel, path in files:
@@ -344,6 +362,9 @@ def sync_once(root: Optional[Path] = None,
                 else:
                     verified = (out == data)
                     sha = hashlib.sha256(data).hexdigest()
+                    if rel == VAULT_ARTEFACT and verified:
+                        vault_copy = out
+                        vault_source = data
                     if not verified:
                         report["errors"].append(
                             f"read back {rel}: the copy reads back DIFFERENT "
@@ -365,9 +386,55 @@ def sync_once(root: Optional[Path] = None,
     verified_count = sum(1 for item in uploaded if item.get("verified"))
     report["verified"] = verified_count
     report["count"] = len(uploaded)
-    report["status"] = (
-        "ok" if uploaded and verified_count == len(uploaded) and not report["errors"]
-        else ("partial" if uploaded else "failed"))
+    # The vault: the ONE artefact that carries the complex's own
+    # credentials. The disk copy reads back byte-identical — but a copy
+    # nobody can open is not a backup, it is a file. So the cycle opens
+    # the copy that came BACK and says so. An entry that does not open is
+    # RED: that credential is already lost, however faithfully the bytes
+    # travelled.
+    if vault_copy is None:
+        # The vault was not among the copied files (or it did not read
+        # back). Then there is no copy of the credentials to judge — and
+        # that is a NAMED fact, not a silent one.
+        report["vault"] = {
+            "entries": 0, "opened": 0, "ok": False,
+            "why": "the vault was not copied — the credentials are not in "
+                   "this copy"}
+        report["notes"].append(
+            "the sealed vault was not among the copied files — the "
+            "credentials are not in this copy")
+        report["degraded"] = True
+    else:
+        try:
+            the_salt = vault_salt(salt)
+        except Exception as exc:
+            report["vault"] = {"entries": 0, "opened": 0, "ok": False,
+                               "unknown": True,
+                               "why": f"no salt for the vault: {exc}"}
+        else:
+            report["vault"] = sealed_vault.judge_copy(
+                vault_copy, the_salt, source=vault_source,
+                # The salt is only PROVEN right when this cycle read its
+                # own drive credentials out of the vault. With credentials
+                # from the environment, the salt may be a different one —
+                # and then «the copy does not open» is UNKNOWN, not broken.
+                salt_proven=(creds.get("source") == "vault"))
+        vault_check = report["vault"]
+        if vault_check.get("entries") and not vault_check.get("ok"):
+            if vault_check.get("unknown"):
+                # This cycle cannot read the vault, so it cannot tell
+                # whether the copy is intact. NOT a broken copy — an
+                # unread one. A named note, not a red.
+                report["notes"].append(
+                    "vault: this cycle cannot open the vault, so it cannot "
+                    "judge the copy of the credentials — "
+                    + str(vault_check.get("why") or "the vault did not open"))
+            else:
+                report["errors"].append(
+                    "vault: the copy of the credentials cannot be restored — "
+                    + str(vault_check.get("why") or "the vault did not open"))
+    report["status"] = copy_verdict(len(uploaded), verified_count,
+                                    report["errors"], report["vault"])
     # The copy was kept — but something about it is worth naming. Same
     # contract as the MEGA archive: a degradation is visible, not red.
     report["degraded"] = bool(report["notes"])

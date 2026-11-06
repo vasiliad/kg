@@ -42,6 +42,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from harness import redaction
 from harness import env_file
 from harness import sealed_vault
+from harness.copy_contract import copy_verdict
 from harness.mega_client import MegaClient
 from harness.mega_provision import load_accounts, maybe_provision
 
@@ -65,6 +66,10 @@ ARTEFACTS: Tuple[str, ...] = (
     "data/.cycle_supervisor.json",
     "data/.sealed_vault.json",
 )
+
+# The one artefact that carries the complex's OWN credentials. It is copied
+# like everything else — but it is also the one whose COPY has to open.
+VAULT_ARTEFACT = "data/.sealed_vault.json"
 
 
 def vault_salt(explicit: Optional[str] = None) -> str:
@@ -163,6 +168,9 @@ def archive_once(root: Optional[Path] = None,
         # The door's state — «open»/«closed» — and what it means. Filled in
         # only when the cloud refuses us; that is the moment it matters.
         "door": {},
+        # The vault's own verdict: can the copy of the credentials be
+        # restored? A copy nobody can open is not a backup.
+        "vault": {},
     }
 
     # EVERY sealed account gets a turn. Measured 2026-11-04: MEGA closed the
@@ -269,6 +277,15 @@ def archive_once(root: Optional[Path] = None,
     artefacts = collect_artefacts(base)
     present = {rel for rel, _ in artefacts}
     report["missing"] = [rel for rel in ARTEFACTS if rel not in present]
+    # The bytes of the vault as they come BACK from the cloud. This is the
+    # copy that has to open — not the file on this disk (measured
+    # 2026-11-06, when the archive's own test caught exactly that: it
+    # judged 22 entries of a vault it had never copied).
+    vault_copy: Optional[bytes] = None
+    # The bytes that went UP — the witness for the copy's verdict. Without
+    # them, a cycle that holds the wrong salt could not tell a damaged
+    # copy from a fine one, and would have to guess.
+    vault_source: Optional[bytes] = None
 
     for rel, path in artefacts:
         try:
@@ -305,6 +322,10 @@ def archive_once(root: Optional[Path] = None,
                 back = client.download_file(handle)
                 verified = (back == data)
                 sha = hashlib.sha256(data).hexdigest()
+                if rel == VAULT_ARTEFACT and verified:
+                    # Keep the bytes that came BACK: they are the copy.
+                    vault_copy = back
+                    vault_source = data
                 if not verified:
                     # A copy that reads back DIFFERENT is not a copy. It used
                     # to be only a «verified: false» flag in the per-artefact
@@ -335,6 +356,59 @@ def archive_once(root: Optional[Path] = None,
     uploaded = report["uploaded"]
     verified_count = sum(1 for item in uploaded if item.get("verified"))
     report["verified"] = verified_count
+    # The vault itself: the ONE artefact that carries the complex's own
+    # credentials. A byte-identical copy of a vault nobody can open is not
+    # a backup — it is a file. So the cycle opens the copy that came BACK
+    # from the cloud and says so; an entry that does not open is RED,
+    # because that credential is already lost no matter how faithfully the
+    # bytes moved.
+    if vault_copy is None:
+        # The vault was not among the copied artefacts (or it did not read
+        # back). Then there is no copy of the credentials to judge — and
+        # that is a NAMED fact, not a silent one: the operator must know
+        # that the credentials are NOT in this copy.
+        report["vault"] = {
+            "entries": 0, "opened": 0, "ok": False,
+            "why": "the vault was not copied — the credentials are not in "
+                   "this copy"}
+    else:
+        try:
+            the_salt = vault_salt(salt)
+        except Exception as exc:
+            report["vault"] = {"entries": 0, "opened": 0, "ok": False,
+                               "unknown": True,
+                               "why": f"no salt for the vault: {exc}"}
+        else:
+            report["vault"] = sealed_vault.judge_copy(
+                vault_copy, the_salt, source=vault_source,
+                # This cycle has already READ its own credentials out of
+                # the vault with this salt (load_accounts above) — so the
+                # salt is right, and a copy that does not open is DAMAGED,
+                # not merely unread.
+                salt_proven=True)
+    vault_check = report["vault"]
+    if vault_check.get("entries") and not vault_check.get("ok"):
+        if vault_check.get("unknown"):
+            # This cycle cannot read the vault, so it cannot tell whether
+            # the copy is intact. NOT a broken copy — an unread one. A
+            # named note, not a red: the two facts must not be confused.
+            report["notes"].append(
+                "vault: this cycle cannot open the vault, so it cannot "
+                "judge the copy of the credentials — "
+                + str(vault_check.get("why") or "the vault did not open"))
+            report["degraded"] = True
+        else:
+            report["errors"].append(
+                "vault: the copy of the credentials cannot be restored — "
+                + str(vault_check.get("why") or "the vault did not open"))
+    elif vault_copy is None:
+        # Not an error: the copy of what EXISTS was kept. But the absence
+        # of the credentials from this copy is a degradation the operator
+        # must see, not a detail.
+        report["notes"].append(
+            "the sealed vault was not among the copied artefacts — the "
+            "credentials are not in this copy")
+        report["degraded"] = True
     # The verdict, in the complex's own words:
     #   ok      — every artefact we HAD is in the cloud and reads back
     #            identical. The promise is kept, so the cycle is green.
@@ -343,9 +417,8 @@ def archive_once(root: Optional[Path] = None,
     #            ARTEFACT, so the cycle is RED. (Measured 2026-11-04: a
     #            half-archived day used to exit 0 and call itself green.)
     #   failed  — nothing was archived. RED.
-    report["status"] = (
-        "ok" if uploaded and verified_count == len(uploaded) and not report["errors"]
-        else ("partial" if uploaded else "failed"))
+    report["status"] = copy_verdict(len(uploaded), verified_count,
+                                    report["errors"], report["vault"])
     report["count"] = len(uploaded)
     return report
 

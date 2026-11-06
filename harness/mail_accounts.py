@@ -92,6 +92,20 @@ SELF_PROVISIONED_FILE = PROJECT_ROOT / "self_provisioned_mailboxes.json"
 # The vault's own naming for the complex's own mailboxes.
 SELF_PROVISIONED_PREFIX = "selfprov:"
 
+# The MEGA chain (harness/mega_provision.py) creates a mail.tm mailbox for
+# the account it registers, and seals it under the «mega:» names: the
+# account's email IS that mailbox's address, and its credentials are
+# mega:mailtm_password / mega:mailtm_token.
+#
+# Measured 2026-11-06: an inventory that counted only the «selfprov:»
+# names reported «свои, запечатаны в vault: 0» while the vault held TWO
+# durable mailboxes of the complex's own (mega: and mega:_2). That is a
+# FALSE ZERO — the worst kind of lie in this project, because the number
+# was right and the thing it described was not.
+MEGA_MAILBOX_EMAIL = "mega:email"
+MEGA_MAILBOX_PASSWORD = "mega:mailtm_password"
+MEGA_MAILBOX_TOKEN = "mega:mailtm_token"
+
 
 def _env(name: str, default: str = "") -> str:
     return (os.getenv(name, default) or default).strip()
@@ -277,6 +291,58 @@ def sealed_self_provisioned_count() -> int:
     return len(_sealed_self_provisioned_names())
 
 
+def sealed_own_mailboxes() -> List[Dict[str, str]]:
+    """
+    Every mailbox of the complex's own that is SEALED — one record per
+    mailbox, with the vault names that hold it.
+
+    Two layouts live in the vault, and BOTH are knowable from the entry
+    names alone (no salt needed, because the names are plaintext):
+      - «selfprov:<fingerprint>:address» — the drill's registrations, sealed
+        by scripts/seal_mail_accounts.py;
+      - «mega:email» + «mega:mailtm_password» — the MEGA chain's own
+        mail.tm mailbox. The password's presence is the SIGNATURE that the
+        complex made this mailbox itself; an account registered against
+        somebody else's address carries no such entry and is not counted.
+
+    The count is the fact that matters: measured 2026-11-06, the vault
+    holds two of the complex's own mailboxes, and an inventory that only
+    knew the «selfprov:» names said zero.
+    """
+    from harness import sealed_vault
+    try:
+        names = set(sealed_vault.entry_names())
+    except Exception:
+        return []
+    found: List[Dict[str, str]] = []
+    for name in sorted(n for n in names
+                       if n.startswith(SELF_PROVISIONED_PREFIX)
+                       and n.endswith(":address")):
+        base = name[:-len(":address")]
+        found.append({"kind": "selfprov", "address": name,
+                      "password": base + ":password",
+                      "token": base + ":token"})
+    for name in sorted(n for n in names
+                       if n.startswith(MEGA_MAILBOX_EMAIL)
+                       and (n == MEGA_MAILBOX_EMAIL
+                            or n[len(MEGA_MAILBOX_EMAIL):].startswith("_"))):
+        suffix = name[len(MEGA_MAILBOX_EMAIL):]
+        password = MEGA_MAILBOX_PASSWORD + suffix
+        if password not in names:
+            # The account was registered against somebody else's mailbox —
+            # not a mailbox of the complex's own.
+            continue
+        found.append({"kind": "mega", "address": name,
+                      "password": password,
+                      "token": MEGA_MAILBOX_TOKEN + suffix})
+    return found
+
+
+def sealed_own_mailbox_count() -> int:
+    """How many mailboxes of the complex's own are sealed — knowable without the salt."""
+    return len(sealed_own_mailboxes())
+
+
 def self_provisioned(salt: Optional[str] = None,
                      path: Optional[Path] = None) -> List[Dict[str, str]]:
     """
@@ -288,28 +354,27 @@ def self_provisioned(salt: Optional[str] = None,
     """
     from harness import sealed_vault
     rows: List[Dict[str, str]] = []
-    names = _sealed_self_provisioned_names()
+    sealed = sealed_own_mailboxes()
+    names = [item["address"] for item in sealed]
     sealed_names = set(names)
     try:
         the_salt = vault_salt(salt)
     except Exception:
         the_salt = ""
-    if the_salt and names:
+    if the_salt and sealed:
         wanted: List[str] = []
-        for name in names:
-            base = name[:-len(":address")]
-            wanted.extend([name, base + ":password", base + ":token"])
+        for item in sealed:
+            wanted.extend([item["address"], item["password"], item["token"]])
         opened = sealed_vault.open_many(wanted, salt=the_salt)
-        for name in names:
-            base = name[:-len(":address")]
-            address = (opened.get(name) or "").strip()
+        for item in sealed:
+            address = (opened.get(item["address"]) or "").strip()
             if not address:
                 continue
             rows.append({
                 "provider": "mailtm",
                 "address": address,
-                "password": (opened.get(base + ":password") or "").strip(),
-                "token": (opened.get(base + ":token") or "").strip(),
+                "password": (opened.get(item["password"]) or "").strip(),
+                "token": (opened.get(item["token"]) or "").strip(),
                 "tier": TIER_DURABLE_SEALED,
             })
 
@@ -374,9 +439,14 @@ def mailbox_tiers(salt: Optional[str] = None) -> Dict[str, Any]:
     readable = 1 if addresses.get("mailtm") else 0
     human = sum(1 for key in ("proton", "tuta") if addresses.get(key))
     own = self_provisioned(salt)
-    sealed = sum(1 for box in own if box.get("tier") == TIER_DURABLE_SEALED)
     local = sum(1 for box in own if box.get("tier") == TIER_DURABLE_LOCAL)
     session = sum(1 for box in own if box.get("tier") == TIER_SESSION)
+    # The SEALED count comes from the vault's entry NAMES, not from the rows:
+    # the rows can only show the vault when the salt opens it, and a closed
+    # vault must never turn a sealed mailbox into «not sealed». Measured
+    # 2026-11-06: the rows said 0 while the names said 2 — a false zero,
+    # because only the «selfprov:» layout was being looked at.
+    sealed = sealed_own_mailbox_count()
     # Is the keeper's working file of registrations reachable from HERE?
     # It is not tracked (it holds plaintext passwords), so on the cloud
     # runner it is absent by design — and «I see none of my own mailboxes»
@@ -393,12 +463,14 @@ def mailbox_tiers(salt: Optional[str] = None) -> Dict[str, Any]:
         "own_durable_sealed": sealed,
         "own_durable_local": local,
         "own_session": session,
-        "own_total": len(own),
+        "own_total": sealed + local + session,
         "own_file_present": file_present,
         # The count of sealed entries is knowable without the salt — the
         # names are plaintext — so this number never hides behind «the
-        # vault is closed».
-        "sealed_in_vault": sealed_self_provisioned_count(),
+        # vault is closed». Both layouts count here: the drill's
+        # «selfprov:» names and the MEGA chain's «mega:» mailboxes.
+        "sealed_in_vault": sealed_own_mailbox_count(),
+        "sealed_self_provisioned": sealed_self_provisioned_count(),
     }
 
 

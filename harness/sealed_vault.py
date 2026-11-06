@@ -136,3 +136,129 @@ def open_many(names: List[str], salt: Optional[str] = None,
         out[name] = cipher.decrypt_and_verify(
             _b64d(entry["ct"]), _b64d(entry["tag"])).decode("utf-8")
     return out
+
+
+def self_check_bytes(data: bytes, salt: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Can the vault in THESE BYTES be opened — entry by entry?
+
+    This is the check that belongs to a COPY: it takes the bytes that came
+    back from the cloud, not the file that went there. The difference
+    matters — a cycle that checked the file on disk would prove that the
+    ORIGINAL opens, and say nothing about the copy (measured 2026-11-06,
+    when the archive's own test caught exactly that: it judged 22 entries
+    of a vault it had never copied).
+
+    The GCM tag is the proof: a wrong salt or a tampered ciphertext fails
+    the tag instead of yielding garbage. The result is a FACT, not a
+    feeling — and an empty vault is reported as empty, never as «broken»
+    and never as «fine».
+    """
+    try:
+        parsed = json.loads(bytes(data).decode("utf-8"))
+    except Exception as exc:
+        return {"entries": 0, "opened": 0, "ok": False,
+                "why": f"the copied vault is not readable as a vault: {exc}"}
+    if not isinstance(parsed, dict):
+        return {"entries": 0, "opened": 0, "ok": False,
+                "why": "the copied vault is not a vault"}
+    entries = [e for e in (parsed.get("entries") or []) if isinstance(e, dict)]
+    names = [str(entry.get("name") or "") for entry in entries]
+    if not names:
+        return {"entries": 0, "opened": 0, "ok": False,
+                "why": "the copied vault is empty — there is nothing to open yet"}
+    opened = 0
+    broken: List[str] = []
+    try:
+        key = _vault_key(salt)
+    except Exception as exc:
+        return {"entries": len(names), "opened": 0, "ok": False,
+                "why": f"the copied vault cannot be opened at all: {exc}"}
+    for entry in entries:
+        name = str(entry.get("name") or "")
+        try:
+            cipher = AES.new(key, AES.MODE_GCM, nonce=_b64d(entry["nonce"]))
+            cipher.decrypt_and_verify(_b64d(entry["ct"]), _b64d(entry["tag"]))
+            opened += 1
+        except Exception:
+            broken.append(name)
+    if broken:
+        return {"entries": len(names), "opened": opened, "ok": False,
+                "broken": broken[:5],
+                "why": f"{len(broken)} of {len(names)} entries do not open — "
+                       "the copy of the credentials cannot restore them"}
+    return {"entries": len(names), "opened": opened, "ok": True, "why": ""}
+
+
+def self_check(salt: Optional[str] = None,
+               path: Optional[Path] = None) -> Dict[str, Any]:
+    """
+    Can this vault be opened AT ALL — entry by entry?
+
+    The same check as self_check_bytes, for a vault that is still on this
+    machine. A cycle that COPIES the vault must use the bytes that came
+    BACK, not this one — the copy is what has to open.
+    """
+    try:
+        raw = (path or VAULT_PATH).read_bytes()
+    except Exception as exc:
+        return {"entries": 0, "opened": 0, "ok": False,
+                "why": f"the vault cannot be read: {exc}"}
+    return self_check_bytes(raw, salt)
+
+
+def judge_copy(copy_bytes: bytes, salt: Optional[str] = None,
+               source: Optional[bytes] = None,
+               path: Optional[Path] = None,
+               salt_proven: Optional[bool] = None) -> Dict[str, Any]:
+    """
+    The verdict of a COPY of the vault — measured against the source.
+
+    A copy that does not open has two possible causes, and they are
+    DIFFERENT facts:
+      - the copy is damaged (the salt is known right, and still the copy
+        does not open) — the credential copy is BROKEN, and the promise was
+        not kept;
+      - this cycle cannot read the vault at all — the copy may be perfectly
+        fine, and «I cannot read it» must never become «it is broken».
+
+    Measured 2026-11-05: the two salts do NOT open the same vault. So a
+    cycle holding only REDACTION_SALT would see a vault it cannot open and
+    could report a broken backup — a false red about a backup that is
+    probably fine.
+
+    Two witnesses, in this order:
+      1. salt_proven=True — this cycle USED the salt successfully (it read
+         its own credentials out of the vault). Then the salt is right, and
+         a copy that does not open is DAMAGED.
+      2. the SOURCE bytes that went up. If they open with this salt, the
+         salt is right ⇒ a copy that does not open is DAMAGED. If neither
+         opens, this cycle simply cannot read the vault ⇒ UNKNOWN, a named
+         note and never a red.
+
+    The result says which of the two happened, so the report never has to
+    guess.
+    """
+    copy_check = self_check_bytes(copy_bytes, salt)
+    if copy_check.get("ok"):
+        return copy_check
+    if salt_proven:
+        return dict(copy_check, why=(
+            "the copy does not open, although this cycle opened the vault "
+            "with the same salt — the copy is damaged"))
+    if source is not None:
+        source_check = self_check_bytes(source, salt)
+    else:
+        source_check = self_check(salt, path=path)
+    # The source opens with this salt ⇒ the salt is right ⇒ a copy that
+    # does not open is DAMAGED. That breaks the promise.
+    if source_check.get("ok"):
+        return dict(copy_check, why=(
+            "the copy does not open, although the original does with the "
+            "same salt — the copy is damaged"))
+    # Neither opens: this cycle simply cannot read the vault. UNKNOWN —
+    # not broken. Named so the operator can see the difference.
+    return dict(copy_check, unknown=True, why=(
+        "this cycle cannot open the vault, so it cannot tell whether the "
+        "copy is intact — " + str(copy_check.get("why") or "the vault did "
+        "not open")))

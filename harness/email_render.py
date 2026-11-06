@@ -502,6 +502,12 @@ def _copy_verdict(copy: Dict[str, Any]) -> Tuple[str, str, List[str]]:
     else:
         headline = "копия неполная" if state == "partial" else "копии нет"
         color = BAD
+    # A verdict that is not current is not a green verdict. The copy may
+    # well be there — but nobody has looked at it lately, and the letter
+    # must not pass an old «copy is there» off as «the copy is there».
+    age = copy.get("age_hours")
+    if state == "ok" and copy.get("stale"):
+        headline, color = "копия на месте, но проверка устарела", "#b45309"
     facts: List[str] = []
     if copy.get("folder"):
         facts.append(f"папка {copy['folder']}")
@@ -510,8 +516,24 @@ def _copy_verdict(copy: Dict[str, Any]) -> Tuple[str, str, List[str]]:
                      f"сверено {copy.get('verified') or 0}")
     if copy.get("account"):
         facts.append(f"аккаунт {copy['account']}")
-    if copy.get("checked_at"):
+    if age is not None:
+        facts.append(f"проверено {age} ч назад")
+    elif copy.get("checked_at"):
         facts.append(f"проверено {copy['checked_at']}")
+    vault = copy.get("vault") or {}
+    if vault.get("entries"):
+        # The copy of the credentials: can it be restored? A backup nobody
+        # can open is not a backup, and the operator must see that here.
+        if vault.get("unknown"):
+            # This cycle could not read the vault — which is NOT the same
+            # as «the copy is broken». Say it in those words: a number
+            # «0 из 22» would accuse a healthy copy of being lost.
+            facts.append(f"vault: этот цикл не может его открыть — "
+                         f"{vault.get('opened') or 0} из "
+                         f"{vault.get('entries')}, судить нельзя")
+        else:
+            facts.append(f"vault открывается: {vault.get('opened') or 0} "
+                         f"из {vault.get('entries')}")
     return headline, color, facts
 
 
@@ -732,6 +754,13 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
                 b_notes.append("своих ящиков не видно: ни один не запечатан в "
                                "vault, а файл регистраций хранителя этому "
                                "циклу недоступен")
+        # The keeper's file of registrations is unreachable from here (it is
+        # untracked — it holds passwords in the clear). Whatever was in it
+        # and was never sealed is simply NOT VISIBLE from this cycle, and
+        # the letter must not let that silence read as «nothing was lost».
+        elif not boxes.get("own_file_present"):
+            b_notes.append("файл регистраций хранителя этому циклу недоступен — "
+                           "ящики, что были в нём, отсюда не видны")
         # An old measurement is still a measurement — but it is not NOW, and
         # the letter must not pass it off as now.
         if b_measured and boxes.get("stale"):

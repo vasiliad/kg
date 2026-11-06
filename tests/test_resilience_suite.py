@@ -7615,6 +7615,481 @@ def test_85_the_letter_can_be_rendered_without_being_sent():
           "cloud — HTML and text — without sending a second letter.")
 
 
+def test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes():
+    """
+    Measured 2026-11-06: a FALSE ZERO. The vault holds two durable
+    mailboxes of the complex's own — «mega:email» + «mega:mailtm_password»
+    and the «_2» pair, the mailboxes the MEGA chain made for itself — and
+    the inventory counted only the «selfprov:» names. So the letter said
+    «свои, запечатаны в vault: 0» while two mailboxes were sitting in the
+    vault, sealed, ready to be used.
+
+    A false zero is the worst kind of lie in this project: the number was
+    right and the thing it described was not, and it was right in the
+    direction that makes the complex look emptier than it is. It came from
+    a shape change the code did not know about: the complex's own
+    mailboxes live under TWO layouts now, and only one was being read.
+
+    Three contracts, proved here (no network, no salt):
+    (a) BOTH layouts are counted — the drill's «selfprov:» names and the
+        MEGA chain's «mega:» mailboxes;
+    (b) the count comes from the entry NAMES, which are plaintext in the
+        ciphertext file — so a closed vault can never turn a sealed
+        mailbox into «not sealed»;
+    (c) a «mega:email» WITHOUT its «mega:mailtm_password» is NOT counted:
+        that account was registered against somebody else's mailbox, and
+        counting it would be the opposite lie.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 86: the inventory counts both layouts of our own mailboxes")
+    print("=" * 60)
+    import tempfile
+    from harness import mail_accounts as ma
+    from harness import sealed_vault
+    from harness import email_render
+
+    tmp = Path(tempfile.mkdtemp(prefix="own-mailboxes-"))
+    vpath = tmp / "vault.json"
+    salt = "salt-for-the-own-mailbox-test"
+
+    # A vault that holds: the MEGA chain's own mailbox (slot 1 and slot 2),
+    # one drill registration, and one «mega:email» with NO password — an
+    # account registered against somebody else's mailbox.
+    for name, value in (
+        ("mega:email", "chain-one@example.invalid"),
+        ("mega:mailtm_password", "chain-one-password"),
+        ("mega:mailtm_token", "chain-one-token"),
+        ("mega:email_2", "chain-two@example.invalid"),
+        ("mega:mailtm_password_2", "chain-two-password"),
+        ("mega:mailtm_token_2", "chain-two-token"),
+        ("selfprov:abc123:address", "drill@example.invalid"),
+        ("selfprov:abc123:password", "drill-password"),
+        ("selfprov:abc123:token", "drill-token"),
+        ("mega:email_3", "someone-else@example.invalid"),
+    ):
+        sealed_vault.put(name, value, salt=salt, path=vpath)
+
+    saved_path = sealed_vault.VAULT_PATH
+    saved_file = ma.SELF_PROVISIONED_FILE
+    saved_salt = os.environ.get("VAULT_SALT")
+    os.environ["VAULT_SALT"] = salt
+    sealed_vault.VAULT_PATH = vpath
+    ma.SELF_PROVISIONED_FILE = tmp / "no-local-file.json"
+    try:
+        # --- (a) and (b): both layouts, counted from the NAMES alone -------
+        # The salt is thrown away on purpose: the count must not depend on
+        # being able to OPEN the vault.
+        saved_vault_salt = ma.vault_salt
+        ma.vault_salt = lambda explicit=None: (_ for _ in ()).throw(
+            RuntimeError("no salt in this half of the test"))
+        try:
+            own = ma.sealed_own_mailboxes()
+            kinds = sorted(item["kind"] for item in own)
+            assert kinds == ["mega", "mega", "selfprov"], \
+                f"both layouts must be counted, from the names alone: {own}"
+            assert ma.sealed_own_mailbox_count() == 3, own
+
+            # The inventory says the same thing, and says it as a tier.
+            tiers = ma.mailbox_tiers()
+            assert tiers["own_durable_sealed"] == 3, \
+                f"the false zero must be gone: {tiers}"
+            assert tiers["own_total"] == 3, tiers
+            assert tiers["sealed_in_vault"] == 3, tiers
+        finally:
+            ma.vault_salt = saved_vault_salt
+
+        # --- (c) somebody else's mailbox is not ours ------------------------
+        names = set(sealed_vault.entry_names(path=vpath))
+        assert "mega:email_3" in names, "the fixture must hold the impostor"
+        assert "mega:mailtm_password_3" not in names, \
+            "the fixture must NOT hold a password for it"
+        counted = [item["address"] for item in ma.sealed_own_mailboxes()]
+        assert "mega:email_3" not in counted, (
+            "an account registered against somebody else's mailbox is not "
+            f"ours: {counted}")
+        assert "mega:email_2" in counted, counted
+
+        # --- and the letter shows the number, not a zero -------------------
+        html, plain = email_render.render_health({
+            "subject": "Проверка связи", "mailboxes": tiers})
+        assert "запечатаны в vault: 3" in plain, \
+            f"the letter must show the measured count: {plain}"
+        assert "запечатаны в vault: 0" not in plain, plain
+    finally:
+        sealed_vault.VAULT_PATH = saved_path
+        ma.SELF_PROVISIONED_FILE = saved_file
+        if saved_salt is None:
+            os.environ.pop("VAULT_SALT", None)
+        else:
+            os.environ["VAULT_SALT"] = saved_salt
+
+    print("[+] Test 86 Passed: both layouts of the complex's own mailboxes "
+          "are counted from the vault's names — the false zero is gone, and "
+          "somebody else's mailbox is still not counted as ours.")
+
+
+def test_87_a_copy_of_the_vault_must_be_provable_openable():
+    """
+    Measured 2026-11-06: the archive and the drive copied the sealed vault
+    — the ONE artefact that carries the complex's own credentials — and
+    called the run green because the bytes came back identical. But bytes
+    are not a backup: a vault nobody can open is a file. The GCM tag is the
+    only thing that can tell the two apart, so the cycle must OPEN what it
+    copied and say so.
+
+    Six contracts, proved here (no network, no cloud account):
+    (a) self_check opens a healthy vault entry by entry and says «ok»;
+    (b) a tampered entry fails the tag, is NAMED, and turns the verdict red
+        — a credential that does not open is already lost, however
+        faithfully the bytes travelled;
+    (c) the copy's verdict is ONE rule, shared by the archive and the drive
+        (the same function, not two copies of the same idea);
+    (d) an EMPTY vault is not «broken»: it has nothing to restore, which is
+        a different fact;
+    (e) the check runs on the BYTES THAT CAME BACK from the cloud — a cycle
+        must never judge a vault it did not copy;
+    (f) «I cannot read it» is NOT «it is broken»: a cycle that holds the
+        wrong salt cannot judge the copy, and says UNKNOWN instead of
+        accusing a healthy backup of being lost.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 87: a copy of the vault must be provable openable")
+    print("=" * 60)
+    import tempfile
+    from harness import sealed_vault
+    from harness import copy_contract
+    from harness import mega_archive as ma
+    from harness import proton_drive as pd
+
+    tmp = Path(tempfile.mkdtemp(prefix="vault-copy-"))
+    vpath = tmp / ".sealed_vault.json"
+    salt = "salt-for-the-vault-copy-test"
+    for name, value in (("mega:email", "chain@example.invalid"),
+                        ("mega:mailtm_password", "chain-password"),
+                        ("drive:address", "drive@example.invalid")):
+        sealed_vault.put(name, value, salt=salt, path=vpath)
+
+    # --- (a) a healthy vault opens ---------------------------------------
+    check = sealed_vault.self_check(salt, path=vpath)
+    assert check["entries"] == 3, check
+    assert check["opened"] == 3, check
+    assert check["ok"] is True, check
+
+    # A wrong salt does not open it — and does not pretend to.
+    wrong = sealed_vault.self_check("not-the-salt", path=vpath)
+    assert wrong["ok"] is False, wrong
+    assert wrong["opened"] == 0, wrong
+    assert wrong.get("why"), "a closed vault must say WHY"
+
+    # --- (b) a tampered entry is named and breaks the verdict -------------
+    data = json.loads(vpath.read_text(encoding="utf-8"))
+    data["entries"][1]["ct"] = ("A" if data["entries"][1]["ct"][0] != "A"
+                                else "B") + data["entries"][1]["ct"][1:]
+    vpath.write_text(json.dumps(data), encoding="utf-8")
+    broken = sealed_vault.self_check(salt, path=vpath)
+    assert broken["ok"] is False, \
+        f"a vault with an entry that does not open is not ok: {broken}"
+    assert broken["opened"] == 2, broken
+    assert broken.get("broken"), f"the broken entry must be NAMED: {broken}"
+    assert "mega:mailtm_password" in broken["broken"], broken
+
+    # --- (c) ONE rule, shared by both copies ------------------------------
+    assert ma.copy_verdict is copy_contract.copy_verdict, \
+        "the archive must use the shared rule"
+    assert pd.copy_verdict is copy_contract.copy_verdict, \
+        "the drive must use the shared rule"
+    assert copy_contract.copy_verdict(12, 12, [], broken) == "partial", \
+        "a broken vault must make the copy RED, not green"
+    assert copy_contract.copy_verdict(12, 12, [], {"entries": 3, "opened": 3,
+                                                    "ok": True}) == "ok"
+    assert copy_contract.copy_verdict(12, 11, [], {}) == "partial", \
+        "a copy that did not read back identical is not green"
+    assert copy_contract.copy_verdict(0, 0, ["nothing was uploaded"], {}) == "failed", \
+        "nothing archived is a failure, not a partial"
+
+    # --- (d) an empty vault is empty, not broken --------------------------
+    empty_path = tmp / "empty.json"
+    empty_path.write_text(json.dumps({"version": 1, "cipher": "AES-256-GCM",
+                                      "kdf": "PBKDF2-HMAC-SHA256",
+                                      "entries": []}), encoding="utf-8")
+    empty = sealed_vault.self_check(salt, path=empty_path)
+    assert empty["entries"] == 0 and empty["opened"] == 0, empty
+    assert empty["ok"] is False, empty
+    assert "empty" in str(empty.get("why") or "").lower(), empty
+    # And an empty vault does not make the COPY red: there is nothing there
+    # to restore — a different fact from a vault that does not open.
+    assert copy_contract.copy_verdict(12, 12, [], empty) == "ok", \
+        "an empty vault has nothing to restore"
+
+    # --- (e) the check runs on the COPY, not on the file on disk ----------
+    # Measured 2026-11-06: the archive's own test (test 78) caught this. The
+    # self-check opened the vault on THIS machine and reported 22 entries
+    # that did not open — while the cycle had copied two files and no vault
+    # at all. It judged a vault it never copied. The proof has to be about
+    # the bytes that came BACK from the cloud.
+    archive_root = tmp / "archive-root"
+    (archive_root / "data").mkdir(parents=True)
+    (archive_root / "nim_history.log").write_text("the day's record\n",
+                                                  encoding="utf-8")
+    # A FRESH, healthy vault: the one above was tampered with on purpose in
+    # part (b), and this part checks a copy that DOES open.
+    healthy = tmp / "healthy-vault.json"
+    for name, value in (("mega:email", "chain@example.invalid"),
+                        ("mega:mailtm_password", "chain-password"),
+                        ("drive:address", "drive@example.invalid")):
+        sealed_vault.put(name, value, salt=salt, path=healthy)
+    (archive_root / "data" / ".sealed_vault.json").write_bytes(
+        healthy.read_bytes())
+
+    class _Cloud:
+        """A cloud that keeps what it is given — byte for byte."""
+
+        def __init__(self):
+            self.stored: Dict[str, bytes] = {}
+
+        def login(self, email, password):
+            return {"sid": "SID", "master_key_ok": True}
+
+        def root_handle(self):
+            return "ROOTNODE"
+
+        def mkdir(self, parent, name):
+            return f"H:{name}"
+
+        def find_children(self, parent, name):
+            return []
+
+        def upload_file(self, parent, name, data):
+            self.stored[name] = data
+            return {"handle": f"H:{name}", "chunks": 1}
+
+        def download_file(self, handle):
+            return self.stored.get(handle.split(":", 1)[-1], b"")
+
+    saved_accounts, saved_client = ma.load_accounts, ma.MegaClient
+    saved_salt = ma.vault_salt
+    ma.load_accounts = lambda salt=None, path=None: [
+        {"slot": 1, "email": "one@example.invalid", "password": "pw"}]
+    ma.vault_salt = lambda explicit=None: salt
+    ma.MegaClient = lambda *a, **k: _Cloud()
+    try:
+        report = ma.archive_once(root=archive_root, salt=salt)
+    finally:
+        ma.load_accounts, ma.MegaClient = saved_accounts, saved_client
+        ma.vault_salt = saved_salt
+
+    # The vault WAS among the copied artefacts, and the COPY opened — with
+    # the salt the cycle used. Nothing is judged that was not copied.
+    assert report["vault"]["entries"] == 3, report["vault"]
+    assert report["vault"]["opened"] == 3, report["vault"]
+    assert report["vault"]["ok"] is True, report["vault"]
+    assert report["status"] == "ok", \
+        f"a copy that opens is a kept promise: {report}"
+
+    # And a vault that was NOT copied is NAMED, not silently passed over.
+    other_root = tmp / "archive-root-2"
+    (other_root / "data").mkdir(parents=True)
+    (other_root / "nim_history.log").write_text("the day's record\n",
+                                                encoding="utf-8")
+    ma.load_accounts = lambda salt=None, path=None: [
+        {"slot": 1, "email": "one@example.invalid", "password": "pw"}]
+    ma.vault_salt = lambda explicit=None: salt
+    ma.MegaClient = lambda *a, **k: _Cloud()
+    try:
+        without = ma.archive_once(root=other_root, salt=salt)
+    finally:
+        ma.load_accounts, ma.MegaClient = saved_accounts, saved_client
+        ma.vault_salt = saved_salt
+    assert without["vault"]["entries"] == 0, without["vault"]
+    assert any("vault" in note for note in without["notes"]), \
+        f"the absence of the credentials must be NAMED: {without['notes']}"
+    assert without["degraded"] is True, \
+        "a copy without the credentials is a degradation the operator must see"
+
+    # --- (f) «I cannot read it» is NOT «it is broken» ---------------------
+    # Measured 2026-11-06: the two salts do NOT open the same vault. A cycle
+    # that holds only REDACTION_SALT sees a vault it cannot open — and if
+    # that were called «the backup of the credentials is broken», the letter
+    # would accuse a healthy copy of being lost. The witness decides: the
+    # source that went up opens with this salt ⇒ the copy is damaged;
+    # neither opens ⇒ this cycle simply cannot read the vault, and the
+    # verdict is UNKNOWN — a named note, never a red.
+    healthy_bytes = healthy.read_bytes()
+
+    unknown = sealed_vault.judge_copy(healthy_bytes, "not-the-salt",
+                                      source=healthy_bytes)
+    assert unknown["ok"] is False, unknown
+    assert unknown.get("unknown") is True, \
+        f"a cycle that cannot read the vault must say so: {unknown}"
+    assert unknown.get("why"), "an unknown verdict must say WHY"
+    # And it does NOT make the copy red: the bytes travelled intact, this
+    # cycle simply cannot open what it copied.
+    assert copy_contract.copy_verdict(12, 12, [], unknown) == "ok", \
+        "a copy this cycle cannot read is not a broken copy"
+
+    # A DAMAGED copy is a different fact, and it IS red.
+    damaged = json.loads(healthy_bytes.decode("utf-8"))
+    damaged["entries"][0]["ct"] = ("A" if damaged["entries"][0]["ct"][0] != "A"
+                                    else "B") + damaged["entries"][0]["ct"][1:]
+    damaged_bytes = json.dumps(damaged).encode("utf-8")
+    broken_copy = sealed_vault.judge_copy(damaged_bytes, salt,
+                                          source=healthy_bytes)
+    assert broken_copy["ok"] is False, broken_copy
+    assert not broken_copy.get("unknown"), \
+        f"a damaged copy is damaged, not unknown: {broken_copy}"
+    assert copy_contract.copy_verdict(12, 12, [], broken_copy) == "partial", \
+        "a damaged copy of the credentials breaks the promise"
+
+    # And in the DRIVE cycle the same distinction is visible end to end: a
+    # cycle whose credentials came from the environment holds no proof that
+    # its salt is the right one, so an unreadable vault is a NOTE.
+    drive_root = tmp / "drive-root"
+    (drive_root / "data").mkdir(parents=True)
+    (drive_root / "nim_history.log").write_text("the day's record\n",
+                                                 encoding="utf-8")
+    (drive_root / "data" / ".sealed_vault.json").write_bytes(healthy_bytes)
+    drive_stored: Dict[str, bytes] = {}
+
+    class _Done:
+        def __init__(self, returncode=0, stdout=b"", stderr=b""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def _fake_run(cmd, env=None, capture_output=None, timeout=None):
+        args = list(cmd)[1:]
+        if args[0] == "copy":
+            src = Path(args[1])
+            for path in src.rglob("*"):
+                if path.is_file():
+                    drive_stored[path.relative_to(src).as_posix()] = path.read_bytes()
+            return _Done()
+        if args[0] == "cat":
+            rel = args[1].split(":/immortal/", 1)[-1]
+            if rel not in drive_stored:
+                return _Done(returncode=1, stderr=b"not found")
+            return _Done(stdout=drive_stored[rel])
+        raise AssertionError(f"unexpected rclone call: {args}")
+
+    saved_run = pd.subprocess.run
+    saved_creds = pd.drive_credentials
+    saved_salt = pd.vault_salt
+    pd.subprocess.run = _fake_run
+    # Credentials from the ENVIRONMENT: this cycle has used its salt for
+    # nothing, so the salt is not proven — exactly the keeper's situation.
+    pd.drive_credentials = lambda salt=None: {
+        "address": "drive@example.invalid", "password": "pw",
+        "tfa": "", "source": "environment"}
+    pd.vault_salt = lambda explicit=None: "not-the-salt"
+    try:
+        unread = pd.sync_once(root=drive_root)
+    finally:
+        pd.subprocess.run = saved_run
+        pd.drive_credentials = saved_creds
+        pd.vault_salt = saved_salt
+    assert unread["vault"].get("unknown") is True, \
+        f"a cycle that cannot read the vault must not claim it is broken: {unread}"
+    assert unread["status"] == "ok", \
+        f"the bytes travelled intact — this cycle simply cannot read them: {unread}"
+    assert any("vault" in note for note in unread["notes"]), \
+        f"the unreadable vault must be NAMED: {unread['notes']}"
+    assert unread["degraded"] is True, \
+        "a copy this cycle cannot judge is a degradation the operator must see"
+
+    print("[+] Test 87 Passed: the copy of the vault is opened entry by "
+          "entry — a tampered entry is named and turns the verdict red, "
+          "both cloud copies judge it by one shared rule, the check runs on "
+          "the bytes that came back from the cloud, and a copy this cycle "
+          "cannot read is never called broken.")
+
+
+def test_88_a_stale_copy_verdict_is_not_a_green_one():
+    """
+    Measured 2026-11-06: the letter printed «копия на месте» from a report
+    that was days old. The copy was probably there — but nobody had LOOKED
+    at it lately, and the supervisor's own rule says a copy older than its
+    cycle's age (26h) is owed a fresh run. So the verdict describes a
+    moment that has passed, and painting it green is the same lie as a
+    stale inventory printed as if it were fresh.
+
+    Three contracts, proved here (no network, no cloud account):
+    (a) a report older than the threshold is marked stale, and the letter
+        says so in amber, with the age in words;
+    (b) a FRESH report is green and carries no warning — the rule must not
+        cry wolf;
+    (c) the letter also shows the vault's own verdict from that cycle: how
+        many entries of the copied credentials open.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 88: a stale copy verdict is not a green one")
+    print("=" * 60)
+    import tempfile
+    from harness import daily_dispatcher as dd
+    from harness import email_render
+    from harness import copy_contract
+
+    tmp = Path(tempfile.mkdtemp(prefix="stale-copy-"))
+    report_path = tmp / "mega_archive_report.json"
+    old = (datetime.now(timezone.utc) - timedelta(hours=50)).isoformat()
+    fresh = datetime.now(timezone.utc).isoformat()
+
+    # --- (a) an old verdict is not green ----------------------------------
+    report_path.write_text(json.dumps({
+        "status": "ok", "folder": "kg-archive/2026-11-04", "count": 12,
+        "verified": 12, "account": "sha256:aaa", "checked_at": old,
+        "notes": [], "vault": {"entries": 22, "opened": 22, "ok": True},
+    }), encoding="utf-8")
+    read = dd._read_archive_report(path=report_path)
+    assert read["state"] == "ok", read
+    assert read.get("stale") is True, \
+        f"a 50-hour-old verdict must be marked stale: {read}"
+    assert read.get("age_hours") and read["age_hours"] > 40, read
+
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": read})
+    assert "копия на месте, но проверка устарела" in plain, \
+        f"an old verdict must not be painted green: {plain}"
+    assert "ч назад" in plain, f"the letter must show the age: {plain}"
+    assert "#b45309" in html, "the stale verdict must be amber, not green"
+
+    # --- (b) a fresh verdict IS green -------------------------------------
+    report_path.write_text(json.dumps({
+        "status": "ok", "folder": "kg-archive/2026-11-06", "count": 12,
+        "verified": 12, "account": "sha256:aaa", "checked_at": fresh,
+        "notes": [], "vault": {"entries": 22, "opened": 22, "ok": True},
+    }), encoding="utf-8")
+    fresh_read = dd._read_archive_report(path=report_path)
+    assert not fresh_read.get("stale"), fresh_read
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": fresh_read})
+    assert "копия на месте, но проверка устарела" not in plain, plain
+    assert "копия на месте" in plain, plain
+
+    # --- (c) the vault's own verdict is in the letter ----------------------
+    assert "vault открывается: 22 из 22" in plain, \
+        f"the operator must see whether the copied vault opens: {plain}"
+
+    # And a vault that does NOT open says so in the same place.
+    report_path.write_text(json.dumps({
+        "status": "partial", "folder": "kg-archive/2026-11-06", "count": 12,
+        "verified": 12, "account": "sha256:aaa", "checked_at": fresh,
+        "notes": [], "vault": {"entries": 22, "opened": 21, "ok": False},
+    }), encoding="utf-8")
+    broken_read = dd._read_archive_report(path=report_path)
+    html, plain = email_render.render_health({
+        "subject": "Проверка связи", "own_cloud": broken_read})
+    assert "vault открывается: 21 из 22" in plain, plain
+    assert "копия неполная" in plain, plain
+
+    # --- and the threshold is the supervisor's own number ------------------
+    assert dd.COPY_STALE_AFTER_H == copy_contract.COPY_STALE_AFTER_H, \
+        "the letter and the contract must use one threshold"
+
+    print("[+] Test 88 Passed: an old copy verdict is amber and says how old "
+          "it is — a fresh one is green, and the vault's own verdict is in "
+          "the letter either way.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -7710,6 +8185,9 @@ if __name__ == "__main__":
         test_83_the_operator_mailbox_addresses_never_reach_the_public_repository,
         test_84_the_mailbox_inventory_travels_as_a_measured_artefact,
         test_85_the_letter_can_be_rendered_without_being_sent,
+        test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes,
+        test_87_a_copy_of_the_vault_must_be_provable_openable,
+        test_88_a_stale_copy_verdict_is_not_a_green_one,
     ]
     failed = []
     for t in tests:
