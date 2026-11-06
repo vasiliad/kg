@@ -119,6 +119,20 @@ jobs:
             fi
             echo "----- MAILBOX BLOCK (rendered in the cloud, not sent) -----"
             grep -A 3 "^Почтовые ящики" data/health_preview.txt
+            # The copies of the record: the operator must see the verdict of
+            # BOTH of them, and so must the check — a preview that cannot
+            # show what it checked is not a check. Both blocks are always
+            # in the letter: a copy without a report is «unknown», not
+            # absent.
+            for block in "^Своё облако" "^Proton Drive"; do
+              if ! grep -q "$block" data/health_preview.txt; then
+                echo "FAIL: the copy block «$block» is NOT in the letter"
+                exit 1
+              fi
+            done
+            echo "----- COPY BLOCKS (rendered in the cloud, not sent) -----"
+            grep -A 4 "^Своё облако" data/health_preview.txt
+            grep -A 4 "^Proton Drive" data/health_preview.txt
             exit 0
           fi
           if [ "${{ inputs.health_only }}" = "true" ]; then

@@ -270,7 +270,14 @@ def self_provisioned_key(address: str) -> str:
 
 
 def _sealed_self_provisioned_names() -> List[str]:
-    """The vault names of the complex's own mailboxes (no salt needed)."""
+    """
+    The vault names of the DRILL's registrations (no salt needed).
+
+    Narrow on purpose: this is one of the two layouts, and the breakdown
+    between them is worth keeping — «two of ours are sealed» is a fact,
+    «two of ours are sealed, one under each layout» is the same fact with
+    the receipt.
+    """
     from harness import sealed_vault
     try:
         names = sealed_vault.entry_names()
@@ -280,6 +287,11 @@ def _sealed_self_provisioned_names() -> List[str]:
             if n.startswith(SELF_PROVISIONED_PREFIX) and n.endswith(":address")]
 
 
+def sealed_selfprov_layout_count() -> int:
+    """How many of ours are sealed under the drill's «selfprov:» layout."""
+    return len(_sealed_self_provisioned_names())
+
+
 def sealed_self_provisioned_count() -> int:
     """
     How many of the complex's own mailboxes are sealed in the vault.
@@ -287,8 +299,15 @@ def sealed_self_provisioned_count() -> int:
     The COUNT comes from the entry NAMES — which are plaintext in the
     ciphertext file — so the number is known even when the salt is not at
     hand. «I cannot open the vault» must never become «there are none».
+
+    BOTH layouts count. Measured 2026-11-06: this counter looked only at
+    the «selfprov:» names and said 0 while the vault held two of the
+    complex's own mailboxes — the MEGA chain's «mega:email» +
+    «mega:mailtm_password» pairs, which the complex made itself. The
+    signature says it: a mailbox of ours carries the password the complex
+    sealed for it. A false zero in a sibling field is the same lie.
     """
-    return len(_sealed_self_provisioned_names())
+    return sealed_own_mailbox_count()
 
 
 def sealed_own_mailboxes() -> List[Dict[str, str]]:
@@ -470,7 +489,13 @@ def mailbox_tiers(salt: Optional[str] = None) -> Dict[str, Any]:
         # vault is closed». Both layouts count here: the drill's
         # «selfprov:» names and the MEGA chain's «mega:» mailboxes.
         "sealed_in_vault": sealed_own_mailbox_count(),
+        # «How many of ours are sealed that WE registered ourselves» — all
+        # of them, under either layout: the signature of a mailbox of ours
+        # is the password the complex sealed for it. Measured 2026-11-06,
+        # this field said 0 next to «sealed_in_vault: 2» — the same false
+        # zero under a narrower name. The breakdown is kept beside it.
         "sealed_self_provisioned": sealed_self_provisioned_count(),
+        "sealed_selfprov_layout": sealed_selfprov_layout_count(),
     }
 
 

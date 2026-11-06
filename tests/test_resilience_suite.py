@@ -7639,6 +7639,11 @@ def test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes():
     (c) a «mega:email» WITHOUT its «mega:mailtm_password» is NOT counted:
         that account was registered against somebody else's mailbox, and
         counting it would be the opposite lie.
+
+    And the same false zero must not survive under another name: the
+    artefact's «sealed_self_provisioned» said 0 next to «sealed_in_vault:
+    2» in the cloud run of 2026-11-06. Every mailbox of ours carries the
+    password the complex sealed for it — that is what «ours» means here.
     """
     print("\n" + "=" * 60)
     print("TEST 86: the inventory counts both layouts of our own mailboxes")
@@ -7695,6 +7700,16 @@ def test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes():
                 f"the false zero must be gone: {tiers}"
             assert tiers["own_total"] == 3, tiers
             assert tiers["sealed_in_vault"] == 3, tiers
+            # Measured 2026-11-06 in the cloud: the artefact said
+            # «sealed_in_vault: 2, sealed_self_provisioned: 0» — the same
+            # false zero under a narrower name, in the same file, one line
+            # apart. Every mailbox of ours carries the password the complex
+            # sealed for it: that is the signature of «we made it».
+            assert tiers["sealed_self_provisioned"] == 3, \
+                f"every sealed mailbox of ours is one we registered: {tiers}"
+            # The breakdown survives, under a name that says what it is.
+            assert tiers["sealed_selfprov_layout"] == 1, \
+                f"the drill's own layout must still be countable: {tiers}"
         finally:
             ma.vault_salt = saved_vault_salt
 
