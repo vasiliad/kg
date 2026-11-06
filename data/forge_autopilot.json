@@ -41,7 +41,8 @@
   },
   "patch_bytes": 640,
   "attempt_day": "2026-11-06",
-  "checked_at": "2026-11-06T04:09:12.359010+00:00",
+  "checked_at": "2026-11-06T12:02:25.149013+00:00",
   "verdict_id": "20261106T040912Z",
-  "patch_file": "data/forge_autopilot/20261106T040912Z.patch"
+  "patch_file": "data/forge_autopilot/20261106T040912Z.patch",
+  "skipped_today": true
 }
