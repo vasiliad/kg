@@ -235,14 +235,18 @@ def run_daily(force: bool = False) -> Dict[str, Any]:
 
     # The patch itself is kept next to the verdict: the operator must be
     # able to read WHAT the complex proposed, not only that it proposed.
+    # It is stored as a VALID patch: LF endings and a final newline. The
+    # stored file is what the operator (and the next cycle) may apply, so
+    # it must not carry the defect that killed the gate on 2026-11-06.
     diff_text = str(verdict.pop("_diff", "") or "")
     if diff_text:
         PATCH_DIR.mkdir(parents=True, exist_ok=True)
         patch_path = PATCH_DIR / f"{verdict['verdict_id']}.patch"
-        patch_path.write_bytes(diff_text.replace("\r\n", "\n").encode("utf-8"))
+        stored = diff_text.replace("\r\n", "\n").rstrip("\n")
+        patch_path.write_bytes((stored + "\n").encode("utf-8"))
         try:
             rel = str(patch_path.relative_to(PROJECT_ROOT))
-        except ValueError:
+        except Exception:
             rel = str(patch_path)
         verdict["patch_file"] = rel.replace("\\", "/")
         verdict["patch_bytes"] = len(diff_text.encode("utf-8"))

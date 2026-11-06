@@ -3837,7 +3837,12 @@ def test_54_the_proposal_must_be_possible_and_the_judge_must_be_pristine():
     )
     fixed_good, notes_good = code_forge.normalize_diff(good)
     assert not notes_good, "a correct patch must be left alone"
-    assert fixed_good == good.rstrip("\n"), "a correct patch must not change"
+    # A correct patch must not change — EXCEPT that it must end with a
+    # newline: measured 2026-11-06, git refused a diff whose last line was
+    # not newline-terminated («corrupt patch at line 11»), and the forge's
+    # own proposal died at the gate four days in a row for that reason.
+    assert fixed_good == good.rstrip("\n") + "\n", \
+        "a correct patch must not change, but it must end with a newline"
 
     # --- the GROUNDED proposal -------------------------------------------
     saved_duty = forge_writers.duty_writer
@@ -8105,6 +8110,111 @@ def test_88_a_stale_copy_verdict_is_not_a_green_one():
           "the letter either way.")
 
 
+def test_89_the_forges_own_patch_must_be_a_valid_patch():
+    """
+    Measured 2026-11-06: the complex's own self-improvement had been dead
+    for four days. Every attempt died at the same gate with the same words:
+    «error: corrupt patch at proposed.patch:11» — while the patch itself
+    was ONE good line against the real file, and the hunk header had even
+    been repaired automatically. The cause was in the BYTES: the model's
+    answer was stripped, so the diff reached the gate WITHOUT its final
+    newline, and git reads such a hunk as truncated — «corrupt patch».
+
+    The proposal was not the problem. The transport was. Three contracts,
+    proved here with the REAL proposal and with git itself:
+    (a) the parser keeps the diff newline-terminated;
+    (b) the repair says so out loud, and never accuses a normal patch;
+    (c) git ACCEPTS the proposal that died — the same bytes, applied.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 89: the forge's own patch must be a valid patch")
+    print("=" * 60)
+    import tempfile
+    import subprocess
+    from harness import code_forge
+
+    GIT = ["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf"]
+
+    # --- (a) the answer as it arrives: no final newline --------------------
+    raw = (
+        "diff --git a/x.py b/x.py\n"
+        "--- a/x.py\n"
+        "+++ b/x.py\n"
+        "@@ -1,2 +1,2 @@\n"
+        "-old\n"
+        "+new\n"
+        " keep"          # <- the model stopped here: no newline, no fence
+    )
+    parsed = code_forge.extract_diff(raw)
+    assert parsed.endswith("\n"), \
+        "the diff that leaves the parser must end with a newline"
+    fixed, notes = code_forge.normalize_diff(raw)
+    assert fixed.endswith("\n"), \
+        "the repaired diff must end with a newline — git calls it corrupt otherwise"
+    assert any("перевода строки" in n for n in notes), \
+        f"the missing newline must be reported, not hidden: {notes}"
+
+    # A normal patch is not accused of anything.
+    good = (
+        "diff --git a/x.py b/x.py\n"
+        "@@ -1,2 +1,2 @@\n"
+        "-old\n"
+        "+new\n"
+        " keep\n"
+    )
+    fixed_good, notes_good = code_forge.normalize_diff(good)
+    assert not notes_good, f"a correct patch must be left alone: {notes_good}"
+    assert fixed_good == good, "a correct patch must not change"
+
+    # --- (b) git itself must accept it -------------------------------------
+    tmp = Path(tempfile.mkdtemp(prefix="forge-patch-"))
+    # BYTES, not text: on Windows a text write turns "\n" into "\r\n", and
+    # then the patch would fail to apply for a reason that has nothing to
+    # do with the patch (the same trap the gate itself had to pin).
+    (tmp / "x.py").write_bytes(b"old\nkeep\n")
+    subprocess.run(GIT + ["init", "-q"], cwd=str(tmp), check=True,
+                   capture_output=True)
+    patch_file = tmp / "p.patch"
+    patch_file.write_bytes(fixed.encode("utf-8"))
+    proc = subprocess.run(GIT + ["apply", "--check", str(patch_file)],
+                          cwd=str(tmp), capture_output=True, text=True)
+    assert proc.returncode == 0, \
+        f"git must accept the normalised patch: {proc.stderr}"
+
+    # --- (c) the REAL proposal of 2026-11-06 must apply now ----------------
+    real = Path(__file__).resolve().parent.parent / "data" / "forge_autopilot" \
+        / "20261106T040912Z.patch"
+    if real.exists():
+        raw_real = real.read_text(encoding="utf-8", newline="")
+        fixed_real, _notes_real = code_forge.normalize_diff(
+            code_forge.extract_diff(raw_real))
+        assert fixed_real.endswith("\n"), \
+            "the stored proposal must be newline-terminated too"
+        scratch = Path(tempfile.mkdtemp(prefix="forge-real-"))
+        target = scratch / "harness"
+        target.mkdir(parents=True, exist_ok=True)
+        source = Path(__file__).resolve().parent.parent / "harness" / "fleet_tuner.py"
+        # The gate applies the patch to a CLONE, where the blobs are LF. The
+        # working tree of a Windows checkout is CRLF, so the bytes are
+        # normalised here too — the test must reproduce the gate, not the
+        # accident of the host's line-ending policy.
+        (target / "fleet_tuner.py").write_bytes(
+            source.read_bytes().replace(b"\r\n", b"\n"))
+        subprocess.run(GIT + ["init", "-q"], cwd=str(scratch), check=True,
+                       capture_output=True)
+        real_patch = scratch / "real.patch"
+        real_patch.write_bytes(fixed_real.encode("utf-8"))
+        proc = subprocess.run(GIT + ["apply", "--check", str(real_patch)],
+                              cwd=str(scratch), capture_output=True, text=True)
+        assert proc.returncode == 0, \
+            (f"the proposal that died four days in a row must apply now: "
+             f"{proc.stderr}")
+
+    print("[+] Test 89 Passed: the diff keeps its final newline, the repair "
+          "says so, and git accepts the very patch that used to die as "
+          "«corrupt» — the self-improvement loop can breathe again.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -8203,6 +8313,7 @@ if __name__ == "__main__":
         test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes,
         test_87_a_copy_of_the_vault_must_be_provable_openable,
         test_88_a_stale_copy_verdict_is_not_a_green_one,
+        test_89_the_forges_own_patch_must_be_a_valid_patch,
     ]
     failed = []
     for t in tests:

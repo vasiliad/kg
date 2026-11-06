@@ -263,7 +263,13 @@ def extract_diff(text: str) -> str:
     # A diff without hunks is not a diff.
     if "@@" not in tail:
         return ""
-    return tail
+    # A unified diff MUST end with a newline. Measured 2026-11-06: the answer
+    # was stripped above, so the diff reached the gate WITHOUT its final
+    # newline — and git read the hunk as truncated: «corrupt patch at line
+    # 11». The forge's own attempt died at the gate four days in a row for
+    # exactly this reason: a transport accident (no newline), not a bad
+    # proposal. The line is put back here, at the source.
+    return tail + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +387,10 @@ def normalize_diff(diff_text: str) -> Tuple[str, List[str]]:
     """
     if not diff_text:
         return "", []
+    # Whether the ANSWER ended with a newline is a fact about the answer and
+    # not about this function's own splitting: the fact is read BEFORE the
+    # text is split, so a normal diff is not accused of a missing newline.
+    had_final_newline = diff_text.replace("\r\n", "\n").endswith("\n")
     raw = diff_text.replace("\r\n", "\n").split("\n")
     while raw and raw[-1].strip() == "":
         raw.pop()
@@ -435,7 +445,17 @@ def normalize_diff(diff_text: str) -> Tuple[str, List[str]]:
         out.append(f"@@ -{old_start},{old_count} +{new_start},{new_count} @@{tail}")
         out.extend(body)
         i = j
-    return "\n".join(out), notes
+    text = "\n".join(out)
+    # The last line of a unified diff MUST be newline-terminated. Measured
+    # 2026-11-06: the repaired diff was joined without it, and git refused
+    # the very same patch it had just repaired the header of — «corrupt
+    # patch at line 11». The repair fixed the symptom it could see and left
+    # the cause; the newline is restored here, and the fact is reported.
+    if text and not text.endswith("\n"):
+        text += "\n"
+        if not had_final_newline:
+            notes.append("в конце диффа не было перевода строки — добавлен")
+    return text, notes
 
 
 def patch_paths(patch_text: str) -> List[str]:
@@ -578,8 +598,13 @@ def apply_self_improvement(
     # in a diff is a transport accident, not an intention. The file is
     # written in BYTES on purpose — Windows' text mode would put the CRLF
     # back (measured: the patch then refuses to apply to its own clone).
+    # The final NEWLINE is guaranteed here as well: measured 2026-11-06,
+    # git refused the whole patch with «corrupt patch at line 11» because
+    # the last line was not newline-terminated. The gate must judge the
+    # CONTENT of the proposal, not the way the transport ended the file.
     patch_file = scratch / "proposed.patch"
-    patch_file.write_bytes((patch_text or "").replace("\r\n", "\n").encode("utf-8"))
+    patch_bytes = (patch_text or "").replace("\r\n", "\n").rstrip("\n")
+    patch_file.write_bytes((patch_bytes + "\n").encode("utf-8") if patch_bytes else b"")
     try:
         proc = subprocess.run(GIT + ["apply", "--check", str(patch_file)],
                               cwd=str(scratch), capture_output=True, text=True,
