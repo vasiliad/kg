@@ -24,6 +24,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# The digest's full news is written from 1200-1600 chars of source text, so
+# a page that came back shorter than this is too thin to write from — it is
+# the measured line that decides whether the reserve reader gets called.
+READ_SOURCE_MIN_CHARS = 1200
+
 
 def _streamed_tool_call(chunks: List[Any]) -> Optional[Dict[str, Any]]:
     """
@@ -463,6 +468,39 @@ class MiniMaxExecutor:
         except Exception as e:
             return f"The page could not be read: {type(e).__name__}."
 
+    def _firecrawl_scrape(self, url: str, max_chars: int = 8000) -> str:
+        """
+        Firecrawl /v2/scrape: the page as clean markdown.
+
+        The RESERVE reader — its free quota is a one-off credit grant, so it
+        only pays for pages the cheap HTML reader could not read well
+        (JavaScript shells, thin text). Measured 2026-11-07: the answer is
+        {"success": true, "data": {"markdown": "..."}}. An empty string on
+        any failure — the cheap read is never replaced by silence.
+        """
+        firecrawl_key = os.getenv("FIRECRAWL_API_KEY", "")
+        if not firecrawl_key:
+            return ""
+        try:
+            res = requests.post(
+                "https://api.firecrawl.dev/v2/scrape",
+                headers={
+                    "Authorization": f"Bearer {firecrawl_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"url": url, "formats": ["markdown"]},
+                timeout=30,
+            )
+            if res.status_code != 200:
+                print(f"[!] Firecrawl scrape answered HTTP {res.status_code}; keeping the HTML read.")
+                return ""
+            data = res.json().get("data") or {}
+            markdown = str(data.get("markdown") or "").strip()
+            return markdown[:max_chars]
+        except Exception as e:
+            print(f"[!] Firecrawl scrape failed ({type(e).__name__}); keeping the HTML read.")
+            return ""
+
     def read_source_text(self, url: str, max_chars: int = 8000) -> str:
         """
         The text of a source page, for the digest.
@@ -472,8 +510,32 @@ class MiniMaxExecutor:
         operator asked for the news to be written out IN FULL, and a full
         account can only come from the page itself, not from a search
         snippet.
+
+        The CHEAP reader goes first and its result is MEASURED: a page that
+        answered well is used as-is (the Firecrawl quota is a one-off grant
+        — credits are not burned on a page that already read fine). A page
+        that failed or came back thinner than READ_SOURCE_MIN_CHARS (the
+        digest's full news cannot be written from less) is upgraded through
+        Firecrawl's markdown, and only then. The tier that served is
+        remembered in `last_read_tier`, like the search tiers.
         """
-        return self._fetch_page_text(url, max_chars=max_chars)
+        text = self._fetch_page_text(url, max_chars=max_chars)
+        thin = (
+            not text
+            or text.startswith("The page could not be read")
+            or text.startswith("The page returned no readable text")
+            or len(text) < READ_SOURCE_MIN_CHARS
+        )
+        if not thin:
+            self.last_read_tier = "HTML"
+            return text
+        upgraded = self._firecrawl_scrape(url, max_chars=max_chars)
+        if len(upgraded) > len(text):
+            print(f"[+] Firecrawl upgraded the page (the HTML read was thin): {url[:80]}")
+            self.last_read_tier = "Firecrawl"
+            return upgraded
+        self.last_read_tier = "HTML"
+        return text
 
     def _run_tool(self, call: Dict[str, Any], num_results: int = 5) -> Dict[str, Any]:
         """

@@ -616,6 +616,96 @@ def test_14f_firecrawl_is_a_reserve_tier_that_tells_the_truth():
           "silently without a key, and stands reserve behind Tavily.")
 
 
+def test_14g_the_reader_burns_reserve_credits_only_on_thin_pages():
+    """
+    The operator connected Firecrawl's scrape on 2026-11-07 («да подключай»)
+    to upgrade the digest's source reading. The quota is a ONE-OFF credit
+    grant, so the cheap HTML reader goes first and its result is measured:
+    credits are burned only on a page that failed or came back too thin to
+    write a full news from (READ_SOURCE_MIN_CHARS = 1200 — the digest's full
+    news is 1200-1600 chars).
+
+    Three contracts:
+      (a) a page the cheap reader read well NEVER reaches the reserve;
+      (b) a thin page IS upgraded, and the markdown wins only when it is
+          actually longer;
+      (c) a silent reserve (no quota, no key, HTTP 402) leaves the cheap
+          read standing — the reserve must never replace a read with
+          silence.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 14g: the digest reader — cheap first, reserve only for thin pages")
+    print("=" * 60)
+    import harness.minimax_executor as ex_mod
+
+    executor = ex_mod.MiniMaxExecutor.__new__(ex_mod.MiniMaxExecutor)
+    saved_post = ex_mod.requests.post
+    saved_fetch = ex_mod.MiniMaxExecutor._fetch_page_text
+    saved_key = os.environ.get("FIRECRAWL_API_KEY")
+    calls = []
+
+    class _ScrapeOk:
+        status_code = 200
+        text = "ok"
+        def json(self):
+            return {"success": True,
+                    "data": {"markdown": "# Заголовок\n\n" + "длинный текст " * 300}}
+
+    try:
+        os.environ["FIRECRAWL_API_KEY"] = "test-key"
+
+        # --- (a) a well-read page: the reserve is never called -------------
+        ex_mod.requests.post = lambda *a, **k: calls.append(a) or _ScrapeOk()
+        ex_mod.MiniMaxExecutor._fetch_page_text = (
+            lambda self, url, max_chars=4000: "полный текст страницы " * 200)
+        got = executor.read_source_text("https://a")
+        assert not calls, "a well-read page must not burn reserve credits"
+        assert got.startswith("полный текст"), got[:50]
+        assert getattr(executor, "last_read_tier", "") == "HTML"
+
+        # --- (b) a thin page: upgraded, and only a LONGER markdown wins ----
+        ex_mod.MiniMaxExecutor._fetch_page_text = (
+            lambda self, url, max_chars=4000: "короткий")
+        got = executor.read_source_text("https://b")
+        assert calls, "a thin page must be upgraded through the reserve"
+        assert "длинный текст" in got, got[:80]
+        assert getattr(executor, "last_read_tier", "") == "Firecrawl"
+
+        # a markdown SHORTER than the cheap read does not replace it
+        calls.clear()
+        class _ScrapeShort:
+            status_code = 200
+            text = "ok"
+            def json(self):
+                return {"success": True, "data": {"markdown": "чуть"}}
+        ex_mod.requests.post = lambda *a, **k: _ScrapeShort()
+        got = executor.read_source_text("https://c")
+        assert got == "короткий", "a shorter scrape must not replace the read"
+        assert getattr(executor, "last_read_tier", "") == "HTML"
+
+        # --- (c) a silent reserve: the cheap read stands -------------------
+        class _ScrapeDead:
+            status_code = 402
+            text = "quota exhausted"
+            def json(self):
+                return {}
+        ex_mod.requests.post = lambda *a, **k: _ScrapeDead()
+        got = executor.read_source_text("https://d")
+        assert got == "короткий", \
+            f"the reserve must never replace a read with silence: {got[:80]}"
+        assert getattr(executor, "last_read_tier", "") == "HTML"
+    finally:
+        ex_mod.requests.post = saved_post
+        ex_mod.MiniMaxExecutor._fetch_page_text = saved_fetch
+        if saved_key is None:
+            os.environ.pop("FIRECRAWL_API_KEY", None)
+        else:
+            os.environ["FIRECRAWL_API_KEY"] = saved_key
+
+    print("[+] Test 14g Passed: the cheap read wins when it can, the reserve "
+          "is burned only where it is needed, and silence never replaces a read.")
+
+
 def test_15_telegram_cursor_survives_restart():
     print("\n" + "=" * 60)
     print("TEST 15: Telegram cursor — survives a restart, never replays, never skips")
@@ -8800,6 +8890,7 @@ if __name__ == "__main__":
         test_14d_tinyfish_pool_rotates_and_fails_over,
         test_14e_langsearch_parses_standard_shape,
         test_14f_firecrawl_is_a_reserve_tier_that_tells_the_truth,
+        test_14g_the_reader_burns_reserve_credits_only_on_thin_pages,
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,
