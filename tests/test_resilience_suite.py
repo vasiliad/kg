@@ -535,6 +535,87 @@ def test_14e_langsearch_parses_standard_shape():
     print("[+] Test 14e Passed: LangSearch answers map to the standard shape.")
 
 
+def test_14f_firecrawl_is_a_reserve_tier_that_tells_the_truth():
+    """
+    The operator handed a Firecrawl key on 2026-11-07 («еще тебе в поиск»).
+    The tier's free quota is a ONE-OFF credit grant, so it must be a RESERVE:
+    after the quota-cheap tiers, before the anonymous last resort — it only
+    burns credits when everything above it is silent.
+
+    Four contracts:
+      (a) no key in the environment = a silent skip (never an error, never a
+          fabricated result);
+      (b) the measured v2 answer shape ({"success": true, "data": {"web":
+          [{title, url, description}]}}) maps to the standard search shape;
+      (c) an HTTP failure returns [] so the chain walks to the next tier;
+      (d) the tier ORDER is the promise: Tavily < Firecrawl < DuckDuckGo.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 14f: Firecrawl — a reserve tier, silent without a key")
+    print("=" * 60)
+    import harness.minimax_executor as ex
+
+    saved_key = os.environ.get("FIRECRAWL_API_KEY")
+
+    # --- (a) no key = silent skip -----------------------------------------
+    try:
+        os.environ.pop("FIRECRAWL_API_KEY", None)
+        executor = ex.MiniMaxExecutor.__new__(ex.MiniMaxExecutor)
+        assert executor._search_firecrawl("тест", 3) == [], \
+            "an unconfigured tier must be a silent no-op"
+    finally:
+        if saved_key is not None:
+            os.environ["FIRECRAWL_API_KEY"] = saved_key
+
+    # --- (b) the measured v2 shape parses into the standard one ------------
+    class _OkResp:
+        status_code = 200
+        text = "ok"
+        def json(self):
+            # Measured 2026-11-07 against api.firecrawl.dev/v2/search.
+            return {"success": True, "data": {"web": [
+                {"title": "T1", "url": "https://a", "description": "d1"},
+                {"title": "T2", "url": "https://b", "description": "d2"},
+            ]}}
+    saved_post = ex.requests.post
+    try:
+        os.environ["FIRECRAWL_API_KEY"] = "test-key"
+        ex.requests.post = lambda *a, **k: _OkResp()
+        got = ex.MiniMaxExecutor.__new__(ex.MiniMaxExecutor)._search_firecrawl("тест", 3)
+        assert got == [
+            {"title": "T1", "url": "https://a", "snippet": "d1"},
+            {"title": "T2", "url": "https://b", "snippet": "d2"},
+        ], f"the measured shape must map to the standard one: {got}"
+
+        # --- (c) an HTTP failure walks the chain ---------------------------
+        class _FailResp:
+            status_code = 503
+            text = "over quota"
+            def json(self):
+                return {}
+        ex.requests.post = lambda *a, **k: _FailResp()
+        assert ex.MiniMaxExecutor.__new__(ex.MiniMaxExecutor) \
+            ._search_firecrawl("тест", 3) == [], \
+            "a failing tier must hand the chain to the next one"
+    finally:
+        ex.requests.post = saved_post
+        if saved_key is None:
+            os.environ.pop("FIRECRAWL_API_KEY", None)
+        else:
+            os.environ["FIRECRAWL_API_KEY"] = saved_key
+
+    # --- (d) the reserve position is pinned --------------------------------
+    tiers = [t[0] for t in ex.MiniMaxExecutor.SEARCH_TIERS]
+    assert "Firecrawl" in tiers, f"the tier must be in the chain: {tiers}"
+    assert tiers.index("Firecrawl") > tiers.index("Tavily"), \
+        "the one-off quota must not be the daily driver: it sits after Tavily"
+    assert tiers.index("Firecrawl") < tiers.index("DuckDuckGo"), \
+        "a measured API outranks the anonymous last resort"
+
+    print("[+] Test 14f Passed: Firecrawl parses the measured shape, skips "
+          "silently without a key, and stands reserve behind Tavily.")
+
+
 def test_15_telegram_cursor_survives_restart():
     print("\n" + "=" * 60)
     print("TEST 15: Telegram cursor — survives a restart, never replays, never skips")
@@ -8717,6 +8798,7 @@ if __name__ == "__main__":
         test_14c_unknown_size_is_resolved_or_excluded,
         test_14d_tinyfish_pool_rotates_and_fails_over,
         test_14e_langsearch_parses_standard_shape,
+        test_14f_firecrawl_is_a_reserve_tier_that_tells_the_truth,
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,

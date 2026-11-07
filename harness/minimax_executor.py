@@ -170,6 +170,47 @@ class MiniMaxExecutor:
             })
         return results
 
+    def _search_firecrawl(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """
+        Firecrawl Search (key via FIRECRAWL_API_KEY env).
+
+        A RESERVE tier by design: the key's free quota is a one-off credit
+        grant, so this tier sits AFTER the quota-cheap tiers and BEFORE the
+        anonymous last resort — it only burns credits when everything above
+        it is silent. Measured 2026-11-07: v2 search answers
+        {"success": true, "data": {"web": [{title, url, description}]}}.
+        """
+        firecrawl_key = os.getenv("FIRECRAWL_API_KEY", "")
+        if not firecrawl_key:
+            return []
+        res = requests.post(
+            "https://api.firecrawl.dev/v2/search",
+            headers={
+                "Authorization": f"Bearer {firecrawl_key}",
+                "Content-Type": "application/json",
+            },
+            json={"query": query, "limit": num_results},
+            timeout=15
+        )
+        if res.status_code != 200:
+            print(f"[!] Firecrawl answered HTTP {res.status_code}; trying next tier.")
+            return []
+        data = res.json().get("data")
+        if isinstance(data, dict):
+            items = data.get("web") or data.get("results") or []
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = []
+        results = []
+        for item in items[:num_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("description", "") or item.get("snippet", "")
+            })
+        return results
+
     def _search_duckduckgo(self, query: str, num_results: int) -> List[Dict[str, str]]:
         """DuckDuckGo HTML — the last resort, with no key and no quota."""
         import re
@@ -188,11 +229,15 @@ class MiniMaxExecutor:
         return results
 
     # The order of the chain. The first tier that answers wins.
+    # Firecrawl sits AFTER the quota-cheap tiers: its free quota is a
+    # one-off grant, so it is a reserve, not a daily driver — and BEFORE
+    # the anonymous last resort, which is flakier than a measured API.
     SEARCH_TIERS: tuple = (
         ("TinyFish", "_search_tinyfish"),
         ("LangSearch", "_search_langsearch"),
         ("Keenable", "_search_keenable"),
         ("Tavily", "_search_tavily"),
+        ("Firecrawl", "_search_firecrawl"),
         ("DuckDuckGo", "_search_duckduckgo"),
     )
 

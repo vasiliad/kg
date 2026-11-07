@@ -102,6 +102,7 @@ jobs:
           TINYFISH_API_KEYS: ${{ secrets.TINYFISH_API_KEYS }}
           LANGSEARCH_API_KEY: ${{ secrets.LANGSEARCH_API_KEY }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           DISPATCH_RECIPIENT_EMAIL: ${{ secrets.DISPATCH_RECIPIENT_EMAIL }}
           REDACTION_SALT: ${{ secrets.REDACTION_SALT }}
         run: |

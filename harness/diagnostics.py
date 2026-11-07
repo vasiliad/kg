@@ -56,6 +56,7 @@ TIER_CREDENTIALS = {
     "GMAIL_APP_PASSWORD_2": "пароль резервного отправителя",
     "ARCHIVE_RECIPIENT_EMAIL": "копия письма в архивный ящик",
     "TAVILY_API_KEY": "поисковый тариф модели",
+    "FIRECRAWL_API_KEY": "резервный поисковый ярус (Firecrawl)",
 }
 
 
@@ -202,6 +203,33 @@ def check_langsearch() -> Dict[str, Any]:
             return {"ok": True, "results": len(results)}
         print("  STATUS: BROKEN - no results returned.")
         return {"ok": False, "reason": "no_results"}
+    except Exception as e:
+        print(f"  STATUS: UNREACHABLE - {type(e).__name__}: {e}")
+        return {"ok": False, "reason": "network_error"}
+
+
+def check_firecrawl() -> Dict[str, Any]:
+    """Probes the Firecrawl search tier (the reserve between Tavily and DuckDuckGo)."""
+    _hdr("[2d] Firecrawl (api.firecrawl.dev)")
+    key = os.getenv("FIRECRAWL_API_KEY", "")
+    if not key:
+        print("  STATUS: MISSING - FIRECRAWL_API_KEY secret is not set (tier skipped).")
+        return {"ok": False, "reason": "missing_key"}
+    try:
+        res = requests.post(
+            "https://api.firecrawl.dev/v2/search",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"query": "NVIDIA NIM model catalog", "limit": 3},
+            timeout=20,
+        )
+        print(f"  POST /v2/search -> HTTP {res.status_code}")
+        if res.status_code == 200:
+            data = res.json().get("data")
+            items = (data.get("web") if isinstance(data, dict) else None) or []
+            print(f"  STATUS: OK - {len(items)} search results returned.")
+            return {"ok": True, "results": len(items)}
+        print(f"  STATUS: BROKEN - {res.text[:200]}")
+        return {"ok": False, "reason": f"http_{res.status_code}"}
     except Exception as e:
         print(f"  STATUS: UNREACHABLE - {type(e).__name__}: {e}")
         return {"ok": False, "reason": "network_error"}
@@ -421,6 +449,7 @@ def main() -> int:
         "tinyfish": check_tinyfish(),
         "langsearch": check_langsearch(),
         "keenable": check_keenable(),
+        "firecrawl": check_firecrawl(),
         "telegram": check_telegram(),
         "state": check_github_state(),
         "bot_health": check_bot_health(),
@@ -453,6 +482,7 @@ def main() -> int:
     print(f"  TinyFish   : {'OK' if report['tinyfish'].get('ok') else 'DEGRADED (' + str(report['tinyfish'].get('reason')) + ')'}")
     print(f"  LangSearch : {'OK' if report['langsearch'].get('ok') else 'DEGRADED (' + str(report['langsearch'].get('reason')) + ')'}")
     print(f"  Keenable   : {'OK' if report['keenable'].get('ok') else 'DEGRADED (' + str(report['keenable'].get('reason')) + ')'}")
+    print(f"  Firecrawl  : {'OK' if report['firecrawl'].get('ok') else 'DEGRADED (' + str(report['firecrawl'].get('reason')) + ')'}")
     print(f"  Telegram   : {'OK' if report['telegram'].get('ok') else 'DEGRADED (' + str(report['telegram'].get('reason')) + ')'}")
     print(f"  Bot health : {'OK' if report['bot_health'].get('ok') else 'SILENT (' + str(report['bot_health'].get('reason')) + ')'}")
     creds = report["credentials"]
@@ -505,6 +535,7 @@ CREDENTIAL_PROBES: Tuple[tuple, ...] = (
     ("TINYFISH_API_KEYS", "tinyfish"),
     ("LANGSEARCH_API_KEY", "langsearch"),
     ("KEENABLE_API_KEY", "keenable"),
+    ("FIRECRAWL_API_KEY", "firecrawl"),
     ("TELEGRAM_BOT_TOKEN", "telegram"),
 )
 
