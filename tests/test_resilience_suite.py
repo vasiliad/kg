@@ -8215,6 +8215,256 @@ def test_89_the_forges_own_patch_must_be_a_valid_patch():
           "«corrupt» — the self-improvement loop can breathe again.")
 
 
+def test_90_the_ladder_must_measure_the_measurement():
+    """
+    Measured 2026-11-06: the emergency ladder read `active_models.json`
+    ["timestamp"] — a field the emergency runner writes ITSELF («now»). So
+    the ladder asked «when did I last run?» instead of «when was the fleet
+    measured?». The consequences were measured too:
+      * at 13:37 the ladder fired with «State stale by 14.4h» while the
+        fleet had been measured 6.4h earlier — the number was FALSE;
+      * two hours later the very same stamp would have read «up to date»
+        with a ten-hour-old measurement — silence exactly when it was
+        needed;
+      * `emergency_mode: true` then stayed in the state for the rest of
+        the day, and the letter kept announcing «Экстренный CPU fallback».
+
+    Four contracts are proved here:
+      (a) ONE clock for everybody, and the runner's own timestamp is never
+          a witness of a measurement;
+      (b) the gate fires on the MEASUREMENT's age and names it;
+      (c) the cycle that reacts to the measurement does not erase it — and
+          the fresh stamp of its own quick re-tune survives the rewrite;
+      (d) a flag does not outlive its cause: a stale emergency is cleared
+          once the fleet is measured again, a blackout emergency is not.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 90: the ladder must measure the measurement")
+    print("=" * 60)
+    from harness import state_clock
+    from harness import emergency_runner
+    import harness.fleet_tuner as ft
+    import harness.disk_guard as disk_guard
+
+    now = datetime.now(timezone.utc)
+
+    # --- (a) ONE clock; the runner's own timestamp is not a witness --------
+    runner_only = {
+        "timestamp": now.isoformat(),
+        "last_emergency_run": now.isoformat(),
+        "emergency_mode": True,
+    }
+    stamp, source = state_clock.fleet_state_stamp(runner_only)
+    assert stamp is None, \
+        "the emergency runner's own timestamp must never stand for a measurement"
+    assert source == "нет отметки замера", source
+
+    measured_state = {
+        "timestamp": now.isoformat(),          # the runner's own stamp: NOW
+        "fleet_decision": {"tuned_at": (now - timedelta(hours=10)).isoformat()},
+    }
+    stamp, source = state_clock.fleet_state_stamp(measured_state)
+    assert source == "fleet_decision.tuned_at", source
+    age, _ = state_clock.fleet_state_age_hours(measured_state, now=now)
+    assert abs(age - 10.0) < 0.1, f"the age must be the MEASUREMENT's age: {age}"
+
+    # --- (b)+(c)+(d) in a throwaway state dir ------------------------------
+    tmp = Path(tempfile.mkdtemp(prefix="ladder-"))
+    cwd = os.getcwd()
+    os.chdir(str(tmp))
+    state_file = tmp / "active_models.json"
+    try:
+        state_file.write_text(json.dumps({
+            "timestamp": now.isoformat(),
+            "fleet_decision": {"tuned_at": (now - timedelta(hours=1)).isoformat()},
+        }), encoding="utf-8")
+        should, reason = emergency_runner.should_trigger_emergency({})
+        assert should is False, f"a fresh measurement must not raise an alarm: {reason}"
+
+        # A ten-hour-old measurement next to a brand-new runner stamp: the
+        # OLD ladder read the stamp and stayed silent — silence exactly
+        # when it was needed.
+        state_file.write_text(json.dumps({
+            "timestamp": now.isoformat(),
+            "fleet_decision": {"tuned_at": (now - timedelta(hours=10)).isoformat()},
+        }), encoding="utf-8")
+        should, reason = emergency_runner.should_trigger_emergency({})
+        assert should is True, "a ten-hour-old measurement must raise the alarm"
+        assert "State stale by" in reason, \
+            f"the reason must be about the MEASUREMENT, not the run: {reason}"
+        assert "threshold" in reason, reason
+
+        # No witness at all: «I cannot read it» is not «it is fresh».
+        state_file.write_text(json.dumps({"timestamp": now.isoformat()}),
+                              encoding="utf-8")
+        should, reason = emergency_runner.should_trigger_emergency({})
+        assert should is True, "a state with no witness must raise the alarm"
+        assert "Отметка замера" in reason, \
+            f"the reason must name the missing witness: {reason}"
+
+        # --- (c) the cycle that reacts to the measurement keeps it ---------
+        # The whole run is faked at the boundary (API, scanner, keeper, git);
+        # everything between the gate and the state file is the REAL code.
+        fresh_stamp = now.isoformat()
+
+        class _FakeHealth:
+            def __init__(self, api_key=None): pass
+            def check_key_validity(self):
+                return {"valid": True, "status_code": 200, "message": "ok"}
+
+        class _FakeScanner:
+            def __init__(self, api_key=None): pass
+            def fetch_available_models(self):
+                return [{"id": "fresh/model", "vendor": "nvidia"}]
+            def detect_catalog_diff(self, models, previous_state_path=None):
+                return {"new_count": 0, "removed_count": 0, "status": "NO_CHANGE"}
+            def filter_high_tier_models(self, models):
+                return list(models)
+            def resolve_fleet_ids(self, models):
+                return {"renamed": {}, "missing": [], "live_count": len(models)}
+
+        class _FakeTracker:
+            def rank_models(self, models):
+                return list(models)
+
+        class _FakeExecutor:
+            def __init__(self, **kwargs): pass
+            def execute_task(self, **kwargs):
+                return {"content": "summary", "reasoning_content": "",
+                        "elapsed_sec": 1.0}
+
+        class _FakeTuner:
+            def __init__(self, api_key=None, quick=False): pass
+            def run(self):
+                # The quick re-tune MEASURED the roster and wrote a FRESH
+                # stamp into the state file — exactly what the real tuner does.
+                payload = json.loads(state_file.read_text(encoding="utf-8"))
+                payload["fleet_decision"] = {"tuned_at": fresh_stamp,
+                                             "method": "live_probe"}
+                payload["fleet_source"] = "live_probe"
+                payload["active_fleet"] = [{
+                    "id": "fresh/model", "quality_score": 91.0,
+                    "roles": ["duty_primary"],
+                    "measured": {"score_as_of": fresh_stamp}}]
+                state_file.write_text(json.dumps(payload), encoding="utf-8")
+                return {"fleet": payload["active_fleet"]}
+
+        class _FakeDiskGuard:
+            def __init__(self): pass
+            def enforce_quota_guard(self):
+                return {"status": "OK"}
+
+        class _FakeCompleted:
+            stdout = ""; stderr = ""; returncode = 0
+
+        class _FakeSubprocess:
+            @staticmethod
+            def run(*args, **kwargs):
+                return _FakeCompleted()
+
+        old_state = {
+            "timestamp": now.isoformat(),
+            "fleet_source": "static_seed",     # not measured -> the re-tune runs
+            "active_fleet": [{"id": "old/model", "quality_score": 50.0}],
+            "fleet_decision": {"tuned_at": (now - timedelta(hours=10)).isoformat()},
+            "emergency_mode": False,
+        }
+        state_file.write_text(json.dumps(old_state), encoding="utf-8")
+
+        saved_cfg = emergency_runner.load_config
+        saved_health = emergency_runner.APIHealthChecker
+        saved_scanner = emergency_runner.NIMScanner
+        saved_tracker = emergency_runner.BenchmarkTracker
+        saved_executor = emergency_runner.MiniMaxExecutor
+        saved_subproc = emergency_runner.subprocess
+        saved_identity = emergency_runner._ensure_git_identity
+        saved_push = emergency_runner._push_state
+        saved_tuner = ft.FleetTuner
+        saved_guard = disk_guard.DiskGuard
+        # Without a key in the environment the runner goes sovereign BEFORE
+        # the health checker is ever built — the fake would never be used.
+        saved_key = os.environ.get("NVIDIA_API_KEY")
+        os.environ["NVIDIA_API_KEY"] = "test-key-for-the-ladder"
+        try:
+            emergency_runner.load_config = lambda path="config.yaml": {}
+            emergency_runner.APIHealthChecker = _FakeHealth
+            emergency_runner.NIMScanner = _FakeScanner
+            emergency_runner.BenchmarkTracker = _FakeTracker
+            emergency_runner.MiniMaxExecutor = _FakeExecutor
+            emergency_runner.subprocess = _FakeSubprocess
+            emergency_runner._ensure_git_identity = lambda: None
+            emergency_runner._push_state = lambda: None
+            ft.FleetTuner = _FakeTuner
+            disk_guard.DiskGuard = _FakeDiskGuard
+
+            res = emergency_runner.run_emergency_orchestration(
+                force=False, dry_run=False)
+            assert res.get("status") == "COMPLETED", \
+                f"the OLD ladder would have skipped this run: {res}"
+
+            after = json.loads(state_file.read_text(encoding="utf-8"))
+            assert after.get("emergency_mode") is True, "the alarm must be on"
+            assert after.get("emergency_cause") == "state_stale", \
+                f"the cause must be recorded: {after.get('emergency_cause')}"
+            assert str(after.get("emergency_reason") or "").startswith("State stale by"), \
+                after.get("emergency_reason")
+            # The FRESH stamp survived the emergency rewrite: the ladder did
+            # not call its own re-measurement stale.
+            assert (after.get("fleet_decision") or {}).get("tuned_at") == fresh_stamp, \
+                ("the fresh stamp of the quick re-tune must survive the "
+                 f"emergency rewrite: {after.get('fleet_decision')}")
+
+            # --- (d) a flag must not outlive its cause ----------------------
+            payload = json.loads(state_file.read_text(encoding="utf-8"))
+            payload["emergency_mode"] = True
+            payload["emergency_cause"] = "state_stale"
+            payload["emergency_reason"] = "State stale by 10.0h (threshold: 6h)"
+            payload["fleet_decision"] = {"tuned_at": now.isoformat()}
+            state_file.write_text(json.dumps(payload), encoding="utf-8")
+            cleared = emergency_runner.clear_stale_emergency("флот измерен заново")
+            assert cleared, \
+                "a stale emergency must be cleared once the fleet is measured again"
+            verdict = json.loads(state_file.read_text(encoding="utf-8"))
+            assert verdict.get("emergency_mode") is False, "the flag must be OFF"
+            assert verdict.get("emergency_cause") == "", \
+                "the cause must be gone with the flag"
+            assert verdict.get("emergency_cleared_at"), \
+                "the clearing must be timestamped"
+            assert "measured again" in str(verdict.get("emergency_cleared_because") or "")
+
+            payload["emergency_mode"] = True
+            payload["emergency_cause"] = "zero_api_blackout"
+            payload["emergency_reason"] = "Total external API blackout"
+            state_file.write_text(json.dumps(payload), encoding="utf-8")
+            cleared = emergency_runner.clear_stale_emergency("флот измерен заново")
+            assert not cleared, \
+                "a blackout emergency must survive a fresh measurement"
+            verdict = json.loads(state_file.read_text(encoding="utf-8"))
+            assert verdict.get("emergency_mode") is True, \
+                "the blackout flag must stay"
+        finally:
+            emergency_runner.load_config = saved_cfg
+            emergency_runner.APIHealthChecker = saved_health
+            emergency_runner.NIMScanner = saved_scanner
+            emergency_runner.BenchmarkTracker = saved_tracker
+            emergency_runner.MiniMaxExecutor = saved_executor
+            emergency_runner.subprocess = saved_subproc
+            emergency_runner._ensure_git_identity = saved_identity
+            emergency_runner._push_state = saved_push
+            ft.FleetTuner = saved_tuner
+            disk_guard.DiskGuard = saved_guard
+            if saved_key is None:
+                os.environ.pop("NVIDIA_API_KEY", None)
+            else:
+                os.environ["NVIDIA_API_KEY"] = saved_key
+    finally:
+        os.chdir(str(cwd))
+
+    print("[+] Test 90 Passed: the ladder measures the MEASUREMENT, keeps its "
+          "record through the rewrite, and a flag dies with its cause — "
+          "not an hour later.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -8314,6 +8564,7 @@ if __name__ == "__main__":
         test_87_a_copy_of_the_vault_must_be_provable_openable,
         test_88_a_stale_copy_verdict_is_not_a_green_one,
         test_89_the_forges_own_patch_must_be_a_valid_patch,
+        test_90_the_ladder_must_measure_the_measurement,
     ]
     failed = []
     for t in tests:

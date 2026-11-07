@@ -784,6 +784,12 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         )
 
     # --- the arbiter -------------------------------------------------------
+    arbiter_notes_html = ""
+    for note in (arbiter.get("notes") or []):
+        arbiter_notes_html += (
+            f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">'
+            f'{escape(str(note))}</div>'
+        )
     body.append(
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
         f'style="border:1px solid {LINE}; margin:0 0 20px 0;">'
@@ -791,6 +797,7 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         f'<div style="font-size:12px; color:{MUTED}; text-transform:uppercase; letter-spacing:0.4px;">Верховный арбитр</div>'
         f'<div style="font-size:15px; font-weight:700; color:{INK}; padding-top:3px;">{escape(arbiter.get("model") or "—")}</div>'
         f'<div style="font-size:13px; color:{MUTED}; padding-top:3px;">Режим: {escape(arbiter.get("mode") or "—")}</div>'
+        + arbiter_notes_html +
         f"</td></tr></table>"
     )
 
@@ -881,6 +888,10 @@ def render_health(report: Dict[str, Any]) -> Tuple[str, str]:
         f"2. Диск: {disk.get('free_gb')} ГБ свободно ({disk.get('percent_used')}% занято)",
         f"3. Арбитр: {arbiter.get('model') or '—'}",
         f"   Режим: {arbiter.get('mode') or '—'}",
+    ]
+    for note in (arbiter.get("notes") or []):
+        plain.append(f"   {note}")
+    plain += [
         f"4. Красная линия: ошибок за 24 часа {errors_24h}"
         f" · писем доставлено {delivered}, не доставлено {failed}"
         f" · {'запусков Actions за сутки: ' + budget if budget else 'запусков Actions за сутки: не посчитано'}",

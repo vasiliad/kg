@@ -371,6 +371,30 @@ def build_health_report_email() -> Dict[str, str]:
     else:
         mode = "Штатный сетевой режим (NIM)"
 
+    # WHEN the fleet was measured, and how old the alarm is. Measured
+    # 2026-11-06: the letter announced «Экстренный CPU fallback» with no
+    # date — the flag had been standing since 13:40 while the fleet was
+    # measured again at 14:33, and the operator had no way to tell a fresh
+    # alarm from a forgotten one. The age of the MEASUREMENT and the age of
+    # the ALARM both travel to the letter now.
+    from harness.state_clock import fleet_state_age_hours, fleet_state_line_ru
+    fleet_age_h, fleet_source = fleet_state_age_hours(state)
+    arbiter_notes = [fleet_state_line_ru(state)]
+    emergency_since = str(state.get("last_emergency_run") or state.get("timestamp") or "")
+    if state.get("emergency_mode") and emergency_since:
+        emergency_age_h, _ = fleet_state_age_hours({"last_updated": emergency_since})
+        if emergency_age_h is None:
+            age_txt = ""
+        elif emergency_age_h >= 1:
+            age_txt = f" (авария {round(emergency_age_h, 1)} ч назад)"
+        else:
+            age_txt = f" (авария {round(emergency_age_h * 60)} мин назад)"
+        reason = str(state.get("emergency_reason") or "")
+        arbiter_notes.append(
+            f"аварийный режим{age_txt}" + (f": {reason}" if reason else ""))
+    elif state.get("emergency_mode"):
+        arbiter_notes.append("аварийный режим: когда начался — неизвестно")
+
     now_novt = datetime.now(timezone(timedelta(hours=7))).strftime("%d.%m.%Y %H:%M НСК")
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -395,6 +419,11 @@ def build_health_report_email() -> Dict[str, str]:
         "arbiter": {
             "model": state.get("local_arbiter") or "не зафиксирован",
             "mode": mode,
+            # The facts that make the mode readable: when the fleet was
+            # measured, and how old the alarm is.
+            "notes": arbiter_notes,
+            "fleet_age_hours": fleet_age_h,
+            "fleet_source": fleet_source,
         },
         "strain": {
             "errors_24h": errors_24h,

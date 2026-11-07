@@ -34,34 +34,146 @@ from harness.benchmark_tracker import BenchmarkTracker
 from harness.minimax_executor import MiniMaxExecutor
 from harness.state_manager import StateManager
 from harness.nim_pacer import nim_pacer
+# The clock of the measured state lives in ONE place, so the ladder, the
+# letter and the reports read the same witness (measured 2026-11-06: the
+# ladder used its own timestamp and called a 6.4-hour-old measurement
+# «stale by 14.4h»).
+from harness.state_clock import (
+    STATE_STALE_AFTER_H,
+    fleet_state_age_hours,
+    fleet_state_stamp,
+)
+
 
 def load_config(path: str = "config.yaml") -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+# The fleet is measured every ~6h by the tuner. The emergency ladder asks
+# exactly one question: HOW OLD IS THE MEASUREMENT?
+#
+# Measured 2026-11-06: the ladder answered it with `timestamp` — a field
+# the emergency runner writes ITSELF («now») — so it measured «when did I
+# last run», not «when was the fleet measured». The consequences were
+# measured too: at 13:37 the ladder fired with «State stale by 14.4h»
+# while the fleet had actually been measured 6.4h earlier, and two hours
+# later the SAME state would have been called «up to date» although it was
+# ten hours old. A ladder that measures the wrong clock cannot see a real
+# outage — and it cries wolf when there is none.
+#
+# The clock itself lives in harness/state_clock.py, so the ladder, the
+# letter and the reports all read the SAME witness.
+
+
+def _fleet_state_age(state: Dict[str, Any]) -> Tuple[Optional[float], str]:
+    """How old the measurement is (None when there is no measurement)."""
+    return fleet_state_age_hours(state)
+
+
 def should_trigger_emergency(config: Dict[str, Any], force: bool = False) -> (bool, str):
     if force:
         return True, "Trigger forced by user / CLI flag --force"
 
-    # Check last update timestamp in active_models.json
+    # How old is the MEASUREMENT?
     state_file = config.get("github_state", {}).get("state_file", "active_models.json")
     if os.path.exists(state_file):
         try:
             with open(state_file, "r", encoding="utf-8") as f:
                 state_data = json.load(f)
-                ts_str = state_data.get("timestamp") or state_data.get("last_updated")
-                if ts_str:
-                    ts_clean = ts_str.replace("Z", "+00:00")
-                    last_dt = datetime.fromisoformat(ts_clean)
-                    now_dt = datetime.now(timezone.utc)
-                    age_hours = (now_dt - last_dt).total_seconds() / 3600.0
-                    print(f"[*] Last verified state timestamp: {ts_str} ({age_hours:.1f} hours ago)")
-                    if age_hours >= 6:
-                        return True, f"State stale by {age_hours:.1f}h (threshold: 6h)"
+            stamp, source = fleet_state_stamp(state_data)
+            if stamp is None:
+                # «I cannot read it» is not «it is broken» — but it is also
+                # not «everything is fine»: the state cannot be verified, so
+                # the ladder runs and says exactly that.
+                return True, ("Отметка замера флота отсутствует — состояние "
+                              "нечем подтвердить")
+            now_dt = datetime.now(timezone.utc)
+            age_hours = (now_dt - stamp).total_seconds() / 3600.0
+            print(f"[*] Fleet measured at {stamp.isoformat()} "
+                  f"(source: {source}; {age_hours:.1f} hours ago)")
+            if age_hours >= STATE_STALE_AFTER_H:
+                return True, (f"State stale by {age_hours:.1f}h "
+                              f"(threshold: {STATE_STALE_AFTER_H}h; "
+                              f"measured {stamp.isoformat()})")
         except Exception as e:
             print(f"[!] Warning reading state file: {e}")
 
     return False, "Sovereign complex is operational and state is up to date"
+
+
+def _measured_arbiter(state: Dict[str, Any]) -> str:
+    """Who serves the operator now, according to the MEASURED roster."""
+    members = [m for m in (state.get("active_fleet") or []) if isinstance(m, dict)]
+    primary = None
+    for member in members:
+        roles = [str(r) for r in (member.get("roles") or [])]
+        if "duty_primary" in roles:
+            primary = member
+            break
+    chosen = primary or (members[0] if members else None)
+    if not chosen or not chosen.get("id"):
+        return "не зафиксирован"
+    return f"{chosen.get('id')} (дежурная команда по живому замеру)"
+
+
+def clear_stale_emergency(reason: str = "") -> bool:
+    """
+    An emergency state must not outlive its cause.
+
+    Measured 2026-11-06: `emergency_mode: true` and the reason «State stale
+    by 14.4h» stayed in the state file for the rest of the day — the
+    operator's letter kept announcing «Экстренный CPU fallback» long after
+    the fleet had been measured again (14:33). A flag with a reason that no
+    longer exists is a lie with a timestamp.
+
+    The flag is cleared ONLY when its cause was staleness and the fleet has
+    been measured since. A sovereign (zero-API) migration has a different
+    cause and survives: the API is still down there.
+    """
+    state_mgr = StateManager()
+    try:
+        state = state_mgr.load_local_state()
+    except Exception as e:
+        print(f"[!] Could not read the state to clear the emergency: {e}")
+        return False
+    if not isinstance(state, dict) or not state.get("emergency_mode"):
+        return False
+    cause = str(state.get("emergency_cause") or "")
+    if not cause:
+        # A state file from before the cause was recorded: the reason text
+        # is the only witness. A staleness reason may be cleared; anything
+        # else (a blackout, a forced run) stays.
+        cause = ("state_stale"
+                 if str(state.get("emergency_reason") or "").startswith("State stale by")
+                 else "unknown")
+    if cause != "state_stale":
+        print(f"[*] The emergency state is kept: its cause is «{cause}», "
+              f"not staleness.")
+        return False
+    stamp, source = fleet_state_stamp(state)
+    if stamp is None:
+        print("[*] The emergency state is kept: the fleet is still unmeasured.")
+        return False
+    age_hours = (datetime.now(timezone.utc) - stamp).total_seconds() / 3600.0
+    if age_hours >= STATE_STALE_AFTER_H:
+        print(f"[*] The emergency state is kept: the fleet is still stale "
+              f"({age_hours:.1f}h).")
+        return False
+
+    state["emergency_mode"] = False
+    state["emergency_cause"] = ""
+    state["emergency_reason"] = ""
+    state["local_arbiter"] = _measured_arbiter(state)
+    state["emergency_cleared_at"] = datetime.now(timezone.utc).isoformat()
+    state["emergency_cleared_because"] = (
+        f"the fleet was measured again ({stamp.isoformat()}, {source})")
+    state_mgr.save_local_state(state)
+    state_mgr.append_history_log(
+        "АВАРИЙНЫЙ РЕЖИМ СНЯТ | флот измерен заново, причина исчезла "
+        f"(замер {stamp.isoformat()})")
+    print(f"[+] Emergency mode cleared: the fleet was measured at "
+          f"{stamp.isoformat()} ({source}).")
+    return True
 
 
 def _ensure_git_identity() -> None:
@@ -166,11 +278,24 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
 
     if not should_run:
         print("[+] Emergency run skipped. Primary TPU system is operating normally.")
-        return {"status": "SKIPPED", "reason": reason}
+        cleared = clear_stale_emergency(reason)
+        return {"status": "SKIPPED", "reason": reason, "emergency_cleared": cleared}
 
     nvidia_key = os.getenv("NVIDIA_API_KEY", "")
     keenable_key = os.getenv("KEENABLE_API_KEY", "")
     state_mgr = StateManager()
+
+    # The state BEFORE this cycle touches anything. The record of the
+    # measurement inside it (`fleet_decision`) must survive this cycle: the
+    # ladder answers «when was the fleet measured?» from it, and a cycle
+    # that erases it leaves the next cycle with nothing honest to read.
+    previous_state: Dict[str, Any] = {}
+    try:
+        loaded_state = state_mgr.load_local_state()
+        if isinstance(loaded_state, dict):
+            previous_state = loaded_state
+    except Exception as e:
+        print(f"[!] Warning reading the previous state: {e}")
 
     # Step 0: Storage & Disk Quota Guard
     from harness.disk_guard import DiskGuard
@@ -224,12 +349,24 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
                 "sovereign_zero_api_mode": True,
                 "last_emergency_run": now_iso,
                 "emergency_reason": "Total external API blackout (NVIDIA NIM unavailable). Autonomous migration to CPU SLM.",
+                # The cause is NAMED, so the next cycle knows what this flag
+                # means: a blackout survives the arrival of a fresh
+                # measurement (the API is still down there), while a stale
+                # measurement does not.
+                "emergency_cause": "zero_api_blackout",
                 "local_arbiter": f"{target_model} (GitHub Actions CPU Sovereign)",
                 "local_arbiter_feedback": f"Autonomous mission completed via {sovereign_mission.get('engine')}. Zero external API dependencies. Operating on GitHub Actions 4 vCPU / 16GB RAM.",
                 "catalog_diff": {"new_count": 0, "removed_count": 0, "status": "EXTERNAL_APIS_OFFLINE"},
                 "active_fleet": sovereign_mission.get("approved_fleet", [
                     {"id": target_model, "tier": "Sovereign-CPU-SLM", "quality_score": None, "status": "UNVERIFIED", "engine": "cpu_local", "source": "deterministic_kernel", "score_verified": False}
                 ]),
+                # The last MEASURED record survives even a blackout: the
+                # complex cannot measure right now, but what it measured
+                # yesterday is still a fact — and «I cannot read it» must
+                # not become «it never happened».
+                "fleet_decision": previous_state.get("fleet_decision"),
+                "fleet_measurements": previous_state.get("fleet_measurements"),
+                "fleet_drift": previous_state.get("fleet_drift"),
                 "last_updated": now_iso
             }
             state_mgr.save_local_state(sovereign_state)
@@ -290,7 +427,6 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
     # back to the seed registry, which says so on every entry.
     measured_fleet: List[Dict[str, Any]] = []
     previous_fleet: List[Dict[str, Any]] = []
-    previous_state: Dict[str, Any] = {}
     try:
         from harness.fleet_tuner import FleetTuner
         report_path = PROJECT_ROOT / "data" / "fleet_report.json"
@@ -298,9 +434,6 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         if report_path.exists():
             age_hours = (time.time() - report_path.stat().st_mtime) / 3600.0
             fresh = age_hours < 24.0
-        current_state = state_mgr.load_local_state()
-        if isinstance(current_state, dict):
-            previous_state = current_state
         previous_fleet = previous_state.get("active_fleet") or []
         if fresh and previous_state.get("fleet_source") == "live_probe" and previous_fleet:
             measured_fleet = previous_fleet
@@ -310,6 +443,17 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
             tune_report = FleetTuner(api_key=nvidia_key, quick=True).run()
             measured_fleet = tune_report.get("fleet") or []
             print(f"[+] Quick re-tune produced {len(measured_fleet)} measured duty model(s).")
+            # The quick re-tune WROTE a fresh measurement into the state
+            # file — and this cycle is about to rewrite that same file.
+            # The fresh stamp is read back, or the ladder would call its
+            # own re-measurement stale (measured 2026-11-06: the emergency
+            # run overwrote a measurement taken minutes earlier with the
+            # old one, and the next cycle fired again on a fresh fleet).
+            refreshed_state = state_mgr.load_local_state()
+            if isinstance(refreshed_state, dict) and refreshed_state.get("fleet_decision"):
+                previous_state = refreshed_state
+                previous_fleet = previous_state.get("active_fleet") or previous_fleet
+                print("[+] Fresh measurement stamp kept from the quick re-tune.")
     except Exception as e:
         print(f"[!] Fleet tuner unavailable in this cycle: {e}")
 
@@ -384,6 +528,9 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         "emergency_mode": True,
         "last_emergency_run": now_iso,
         "emergency_reason": reason,
+        # WHY the emergency is on — so the next cycle can tell whether the
+        # cause is still there. A flag without a cause outlives its reason.
+        "emergency_cause": "state_stale" if str(reason).startswith("State stale by") else "forced",
         "key_health": key_status,
         "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
         "local_arbiter_feedback": synthesis_content[:500] + "..." if len(synthesis_content) > 500 else synthesis_content,
@@ -398,6 +545,15 @@ def run_emergency_orchestration(force: bool = False, dry_run: bool = False) -> D
         # WHY this roster — the operator and the next cycle must be able to
         # tell a measured team from a seeded one without reading the code.
         "fleet_note": fleet_note,
+        # The tuner's own record of the measurement is KEPT: measured
+        # 2026-11-06, the emergency run rebuilt the state from scratch and
+        # dropped `fleet_decision` — the very field that says WHEN the
+        # fleet was measured. The ladder then had nothing honest to read
+        # and fell back to its own timestamp. A record of the measurement
+        # must survive the cycle that reacts to it.
+        "fleet_decision": previous_state.get("fleet_decision"),
+        "fleet_measurements": previous_state.get("fleet_measurements"),
+        "fleet_drift": previous_state.get("fleet_drift"),
         # Full catalogue snapshot: the next cycle diffs against this, so
         # "new models" means "appeared since the last scan" rather than
         # "not part of the selected fleet".
