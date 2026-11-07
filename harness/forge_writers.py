@@ -75,6 +75,14 @@ def duty_writer(ask: str, executor: Any) -> Dict[str, Any]:
     content = str(res.get("content") or "")
     elapsed = res.get("elapsed_sec")
     ok = res.get("status") == "SUCCESS" and bool(content.strip())
+    status = str(res.get("status") or "")
+    if status == "SUCCESS" and not content.strip():
+        # A SUCCESS with nothing in it is not a success — and it must not
+        # read like one in the verdict (measured 2026-11-07 03:02 UTC: the
+        # verdict said «сетевая дежурная: SUCCESS» although the model had
+        # answered with nothing at all, and the operator would have read a
+        # success into an empty answer).
+        status = "SUCCESS_EMPTY_ANSWER"
     duty_shift.note_outcome(
         model_id, elapsed, ok,
         measured_latency=(entry.get("measured") or {}).get("latency_sec")
@@ -84,7 +92,7 @@ def duty_writer(ask: str, executor: Any) -> Dict[str, Any]:
         "ok": ok, "model": model_id, "role": "duty_primary",
         "score": entry.get("score"), "verified": entry.get("verified"),
         "elapsed": elapsed, "content": content,
-        "status": res.get("status"), "shift": shift,
+        "status": status, "shift": shift,
     }
 
 
@@ -254,7 +262,7 @@ def propose_patch(
     verdict["duty_status"] = picked.get("duty_status")
     verdict["local_status"] = (picked.get("local") or {}).get("status")
     if not picked.get("ok"):
-        verdict.update(
+        update = dict(
             stage="no_writer",
             error=(
                 "сетевая дежурная: "
@@ -264,6 +272,12 @@ def propose_patch(
             ),
             summary="Ни одна модель не выбрала файл — улучшать нечего.",
         )
+        # Whatever the writer DID say is kept: «у меня нет ответа» и «я
+        # ответил, но не выбрал файл» — разные факты (measured 2026-11-07).
+        dropped = str(((picked.get("writer") or {}).get("content")) or "").strip()
+        if dropped:
+            update["answer_preview"] = _preview(dropped)
+        verdict.update(**update)
         return verdict
 
     chooser = picked.get("writer") or {}
@@ -307,7 +321,7 @@ def propose_patch(
     verdict["duty_status"] = picked.get("duty_status")
     verdict["local_status"] = (picked.get("local") or {}).get("status")
     if not picked.get("ok"):
-        verdict.update(
+        update = dict(
             stage="no_writer",
             error=(
                 "сетевая дежурная: "
@@ -317,6 +331,10 @@ def propose_patch(
             ),
             summary="Ни одна модель не написала патч — улучшать нечего.",
         )
+        dropped = str(((picked.get("writer") or {}).get("content")) or "").strip()
+        if dropped:
+            update["answer_preview"] = _preview(dropped)
+        verdict.update(**update)
         return verdict
 
     writer = picked.get("writer") or {}

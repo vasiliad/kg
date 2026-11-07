@@ -3670,6 +3670,43 @@ def test_53_the_complex_improves_itself_without_being_told():
         assert "NO_PATCH" in str(verdict.get("answer_preview") or ""), \
             f"the model's answer must be kept next to the verdict ({verdict})"
 
+        # --- SUCCESS with an empty answer is NOT a success ------------------
+        # Measured 2026-11-07 03:02 UTC in the cloud: the duty model returned
+        # SUCCESS with NOTHING in it, and the verdict said «сетевая дежурная:
+        # SUCCESS» — a success where there was an empty answer. The empty
+        # answer is named, counts as a failure for the shift, and whatever
+        # the writer did say is kept in the verdict.
+        import harness.duty_team as _duty_team_mod
+        import harness.duty_shift as _duty_shift_mod
+        saved_load = _duty_team_mod.DutyTeam.load_roster
+        saved_cur = _duty_shift_mod.current_duty
+        saved_note = _duty_shift_mod.note_outcome
+        noted = []
+        # The previous block replaced duty_writer with a fake — the REAL
+        # classification under test lives in the original.
+        real_duty = forge_writers.duty_writer
+        forge_writers.duty_writer = saved_duty
+        try:
+            _duty_team_mod.DutyTeam.load_roster = lambda self: {
+                "duty": [{"id": "m/x", "score": 90.0}]}
+            _duty_shift_mod.current_duty = lambda roster, **kw: ({"model_id": "m/x"}, {})
+            _duty_shift_mod.note_outcome = (
+                lambda *a, **k: noted.append(a) or {})
+            class _EmptyExecutor:
+                def execute_task(self, **kw):
+                    return {"status": "SUCCESS", "content": "", "elapsed_sec": 1.0}
+            res = forge_writers.duty_writer("напиши патч", _EmptyExecutor())
+            assert res.get("status") == "SUCCESS_EMPTY_ANSWER", \
+                f"an empty SUCCESS must be named, not called a success: {res.get('status')}"
+            assert res.get("ok") is False, "an empty answer must not pass the bench"
+            assert noted and noted[0][2] is False, \
+                "an empty answer must count as a failure for the shift"
+        finally:
+            forge_writers.duty_writer = real_duty
+            _duty_team_mod.DutyTeam.load_roster = saved_load
+            _duty_shift_mod.current_duty = saved_cur
+            _duty_shift_mod.note_outcome = saved_note
+
         # --- the ration: ONE attempt a day ---------------------------------
         forge_autopilot.ARTEFACT = workdir / "forge_autopilot.json"
         forge_autopilot.PATCH_DIR = workdir / "patches"
