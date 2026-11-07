@@ -8563,6 +8563,85 @@ def test_91_the_duty_shift_must_never_look_alive_after_it_expired():
           "cycle rotates it — no traffic needed.")
 
 
+def test_92_the_forges_verdict_must_not_look_fresher_than_it_is():
+    """
+    Measured 2026-11-06: the forge's artefact carried a fresh `checked_at`
+    next to an eight-hour-old `attempted_at`, and the whole record read like
+    the result of the noon cycle although nothing had been tried since
+    04:09. The ration itself (one attempt a day) is right; the lie is in
+    the stamp — a heartbeat must never look like a result.
+
+    Three contracts are proved here:
+      (a) the check-only pass says plainly that it tried nothing;
+      (b) the attempt's own time and age stay next to the heartbeat, and
+          the verdict's own summary survives the check;
+      (c) the operator's push shows the age of the ATTEMPT, not the age of
+          the file.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 92: the forge's verdict must not look fresher than it is")
+    print("=" * 60)
+    from harness import forge_autopilot
+    from harness.telegram_bot import HarnessTelegramBot
+
+    now = datetime.now(timezone.utc)
+    tmp = Path(tempfile.mkdtemp(prefix="forge-fresh-"))
+    saved_artefact = forge_autopilot.ARTEFACT
+    forge_autopilot.ARTEFACT = tmp / "forge_autopilot.json"
+    try:
+        old_attempt = now - timedelta(hours=8)
+        summary_text = "Улучшения нет — конституция отклонила патч."
+        forge_autopilot.ARTEFACT.write_text(json.dumps({
+            "verdict_id": "20261107T040000Z",
+            "attempt_day": now.strftime("%Y-%m-%d"),
+            "attempted_at": old_attempt.isoformat(),
+            "checked_at": old_attempt.isoformat(),
+            "ok": False,
+            "stage": "gate",
+            "summary": summary_text,
+            "writer": {"model": "n/a", "score": 90.0},
+        }, ensure_ascii=False), encoding="utf-8")
+
+        result = forge_autopilot.run_daily()
+        assert result.get("skipped"), "the ration must hold: one attempt a day"
+        returned_summary = str(result.get("summary") or "")
+        assert "только проверка" in returned_summary, \
+            f"the pass must say that it tried nothing: {returned_summary}"
+        assert "новой попытки не было" in returned_summary, returned_summary
+
+        stored = json.loads(forge_autopilot.ARTEFACT.read_text(encoding="utf-8"))
+        assert stored.get("attempted_at") == old_attempt.isoformat(), \
+            "the check must not fake a new attempt"
+        assert stored.get("checked_kind") == "check_only", stored.get("checked_kind")
+        assert stored.get("last_attempt_at") == old_attempt.isoformat(), \
+            "the attempt's own time must stay next to the heartbeat"
+        age = stored.get("attempt_age_hours")
+        assert age is not None and abs(float(age) - 8.0) < 0.2, \
+            f"the age of the ATTEMPT must be written down: {age}"
+        assert "ч назад" in str(stored.get("freshness") or ""), \
+            stored.get("freshness")
+        assert stored.get("summary") == summary_text, \
+            "the verdict's own summary must survive the check"
+
+        # --- (c) the operator's push names the age of the attempt ----------
+        bot = HarnessTelegramBot()
+        bot.sessions_file = tmp / "sessions.json"
+        pushed = []
+        bot.send_message = lambda chat_id, text, **kw: pushed.append((chat_id, text)) or True
+        bot.edit_message = lambda chat_id, message_id, text, **kw: pushed.append((chat_id, text)) or True
+        bot.health["last_chat_id"] = 424242
+        bot.maybe_push_forge_verdict()
+        assert pushed, "the operator must learn what the complex decided"
+        reply = "\n".join(t for _, t in pushed)
+        assert "ч назад" in reply, \
+            f"the push must show the age of the attempt: {reply[-400:]}"
+    finally:
+        forge_autopilot.ARTEFACT = saved_artefact
+
+    print("[+] Test 92 Passed: a heartbeat is a heartbeat — the verdict keeps "
+          "its own time, and the operator sees how old the attempt is.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -8664,6 +8743,7 @@ if __name__ == "__main__":
         test_89_the_forges_own_patch_must_be_a_valid_patch,
         test_90_the_ladder_must_measure_the_measurement,
         test_91_the_duty_shift_must_never_look_alive_after_it_expired,
+        test_92_the_forges_verdict_must_not_look_fresher_than_it_is,
     ]
     failed = []
     for t in tests:

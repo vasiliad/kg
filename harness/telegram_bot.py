@@ -1783,6 +1783,12 @@ class HarnessTelegramBot:
             f"Когда: {html.escape(str(verdict.get('attempted_at') or '?'))}",
             f"✍️ Автор: {html.escape(model)}{html.escape(score_txt)}",
         ]
+        # The age of the ATTEMPT, not the age of the file. A verdict pushed
+        # hours after the attempt must not look like the result of the
+        # current cycle (measured 2026-11-06).
+        freshness = str(verdict.get("freshness") or "")
+        if freshness:
+            lines.append(f"⏳ {html.escape(freshness)}")
         if verdict.get("branch"):
             lines.append(f"🌿 Ветка: {html.escape(str(verdict.get('branch')))}")
         if verdict.get("patch_file"):

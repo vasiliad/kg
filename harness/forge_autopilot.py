@@ -60,6 +60,41 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _hours_since(text: Any) -> Optional[float]:
+    """How many hours ago a stamp was (None when it cannot be read)."""
+    from harness.state_clock import parse_ts
+
+    stamp = parse_ts(text)
+    if stamp is None:
+        return None
+    delta = (_now() - stamp).total_seconds() / 3600.0
+    return round(max(0.0, delta), 2)
+
+
+def attempt_freshness(verdict: Dict[str, Any], now: Optional[datetime] = None) -> str:
+    """
+    When the ATTEMPT happened — in one honest Russian line.
+
+    Measured 2026-11-06: the artefact carried a fresh `checked_at` next to
+    an eight-hour-old `attempted_at`, and the whole record then read like
+    the result of the noon cycle although nothing had been tried since
+    04:09. A heartbeat stamp must never look like a result, so the attempt's
+    own time and age are always named.
+    """
+    moment = now or _now()
+    attempted = str(verdict.get("attempted_at") or "")
+    from harness.state_clock import parse_ts
+
+    stamp = parse_ts(attempted)
+    if stamp is None:
+        return "Последняя попытка: время неизвестно (отметка не читается)."
+    age_h = round(max(0.0, (moment - stamp).total_seconds() / 3600.0), 1)
+    when = stamp.strftime("%d.%m %H:%M UTC")
+    if age_h < 1:
+        return f"Последняя попытка: {when} ({round(age_h * 60)} мин назад)."
+    return f"Последняя попытка: {when} ({age_h} ч назад)."
+
+
 def _read_json(path: Path) -> Dict[str, Any]:
     try:
         if path.exists():
@@ -108,12 +143,22 @@ def build_facts() -> str:
             f"задержка {measured.get('latency_sec')}с, ok_rate {measured.get('ok_rate')}{weakest}"
         )
 
+    # The duty shift is a FACT with a life of its own, and the facts digest
+    # must say whether that life is still running. Measured 2026-11-06: the
+    # digest called a shift that had expired four days earlier «Текущая
+    # смена» — and the complex wrote its self-improvement from that dead
+    # fact. The shift now speaks for itself: live, broken or expired.
     shift = _read_json(PROJECT_ROOT / "data" / "duty_shift.json")
     if shift.get("model_id"):
-        lines.append(
-            f"Текущая смена: {shift.get('model_id')}, задержка {shift.get('last_latency_sec')}с, "
-            f"выбрана: {shift.get('chosen_by')}"
-        )
+        try:
+            from harness import duty_shift as _duty_shift
+            lines.append(_duty_shift.shift_status_line(shift))
+        except Exception:
+            lines.append(
+                f"Дежурная смена: {shift.get('model_id')}, "
+                f"задержка {shift.get('last_latency_sec')}с, "
+                f"выбрана: {shift.get('chosen_by')}"
+            )
 
     sessions = _read_json(PROJECT_ROOT / "data" / ".bot_sessions.json")
     health = sessions.get("health") or {}
@@ -214,8 +259,19 @@ def run_daily(force: bool = False) -> Dict[str, Any]:
         # The cycle still CHECKS every day — only the attempt is rationed.
         # The check stamps the artefact so the supervisor sees a live cycle
         # and does not dispatch a no-op every six hours.
+        #
+        # But the heartbeat stamp must NOT look like a result (measured
+        # 2026-11-06: a fresh `checked_at` sat next to an eight-hour-old
+        # `attempted_at`, and the record read like the noon cycle even
+        # though nothing had been tried since 04:09). So the attempt's own
+        # time and age are written next to it, and the verdict says plainly
+        # that THIS pass tried nothing.
         previous["checked_at"] = now.isoformat()
+        previous["checked_kind"] = "check_only"
         previous["skipped_today"] = True
+        previous["last_attempt_at"] = str(previous.get("attempted_at") or "")
+        previous["attempt_age_hours"] = _hours_since(previous.get("attempted_at"))
+        previous["freshness"] = attempt_freshness(previous, now=now)
         ARTEFACT.parent.mkdir(parents=True, exist_ok=True)
         ARTEFACT.write_text(json.dumps(previous, ensure_ascii=False, indent=2),
                             encoding="utf-8")
@@ -224,14 +280,28 @@ def run_daily(force: bool = False) -> Dict[str, Any]:
             "attempt_day": day,
             "verdict_id": previous.get("verdict_id"),
             "checked_at": now.isoformat(),
-            "summary": "Сегодня попытка уже была — одна в сутки, без бесконечного цикла.",
+            "checked_kind": "check_only",
+            "last_attempt_at": previous.get("last_attempt_at"),
+            "attempt_age_hours": previous.get("attempt_age_hours"),
+            "summary": (
+                "Сегодня попытка уже была — одна в сутки, без бесконечного "
+                f"цикла. {previous['freshness']} Этот проход — только проверка: "
+                "новой попытки не было."
+            ),
         }
 
     verdict = attempt()
     verdict["attempt_day"] = day
     verdict["checked_at"] = now.isoformat()
+    verdict["checked_kind"] = "attempt"
     verdict["verdict_id"] = now.strftime("%Y%m%dT%H%M%SZ")
     verdict.setdefault("summary", "Попытка без вывода.")
+    # The attempt's own time and age are recorded from the first second of
+    # the attempt — the artefact then always says WHEN the work happened,
+    # not only when the file was last touched.
+    verdict["last_attempt_at"] = str(verdict.get("attempted_at") or now.isoformat())
+    verdict["attempt_age_hours"] = _hours_since(verdict.get("attempted_at"))
+    verdict["freshness"] = attempt_freshness(verdict, now=now)
 
     # The patch itself is kept next to the verdict: the operator must be
     # able to read WHAT the complex proposed, not only that it proposed.
