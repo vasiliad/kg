@@ -8465,6 +8465,104 @@ def test_90_the_ladder_must_measure_the_measurement():
           "not an hour later.")
 
 
+def test_91_the_duty_shift_must_never_look_alive_after_it_expired():
+    """
+    Measured 2026-11-06: `data/duty_shift.json` had not changed since
+    2026-11-02. The shift was rotated ONLY when a task arrived, so a complex
+    with no traffic kept a dead shift for days — and the letter, the bot's
+    status and the forge's own facts called it «текущая смена»: a fact that
+    had expired four days earlier, repeated as if it were alive.
+
+    Three contracts are proved here:
+      (a) an expired shift says ИСТЕКЛА, a broken one says ПРЕРВАНА (with
+          the reason), and a live one says neither;
+      (b) the status line for the complex's own reports says the same;
+      (c) the measuring cycle ROTATES an expired shift — and leaves a live
+          one untouched.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 91: the duty shift must never look alive after it expired")
+    print("=" * 60)
+    from harness import duty_shift
+
+    now = datetime.now(timezone.utc)
+    tmp = Path(tempfile.mkdtemp(prefix="duty-shift-"))
+    path = tmp / "duty_shift.json"
+
+    roster = {
+        "duty": [
+            {"id": "model-a", "score": 99.0, "verified": True,
+             "latency_sec": 1.0, "roles": ["duty_primary"]},
+            {"id": "model-b", "score": 97.0, "verified": True,
+             "latency_sec": 2.0, "roles": ["duty_backup"]},
+        ]
+    }
+
+    class _Keeper:
+        def execute_sovereign_mission(self, task_description, context=None):
+            return {"output": "model-b", "engine": "test_keeper"}
+
+    expired = {
+        "model_id": "model-a",
+        "started_at": duty_shift._iso(now - timedelta(hours=8)),
+        "until": duty_shift._iso(now - timedelta(hours=2)),
+        "chosen_by": "тест",
+        "calls": 3, "failures": 0, "last_latency_sec": 1.2,
+        "broken_at": "", "broken_reason": "",
+    }
+    line = duty_shift.describe_shift(expired, now=now)
+    assert "ИСТЕКЛА" in line, f"an expired shift must say so: {line}"
+    assert "2.0 ч" in line, f"the expired shift must say for how long: {line}"
+    assert "ПРЕРВАНА" not in line, line
+
+    status = duty_shift.shift_status_line(expired, now=now)
+    assert "ИСТЕКЛА" in status, f"the report line must say so too: {status}"
+
+    broken = dict(expired)
+    broken["broken_at"] = duty_shift._iso(now - timedelta(hours=1))
+    broken["broken_reason"] = "модель не ответила"
+    line = duty_shift.describe_shift(broken, now=now)
+    assert "ПРЕРВАНА" in line, f"a broken shift must say why: {line}"
+    assert "не ответила" in line, line
+    assert "ИСТЕКЛА" not in duty_shift.describe_shift(
+        broken, now=now), "a broken shift is not an expired one"
+
+    live = {
+        "model_id": "model-a",
+        "started_at": duty_shift._iso(now - timedelta(hours=1)),
+        "until": duty_shift._iso(now + timedelta(hours=5)),
+        "chosen_by": "тест",
+        "calls": 1, "failures": 0, "last_latency_sec": 0.9,
+        "broken_at": "", "broken_reason": "",
+    }
+    line = duty_shift.describe_shift(live, now=now)
+    assert "ИСТЕКЛА" not in line and "ПРЕРВАНА" not in line, \
+        f"a live shift must not be called dead: {line}"
+    assert "смена живая" in duty_shift.shift_status_line(live, now=now)
+
+    # --- (c) the measuring cycle rotates an expired shift ----------------
+    duty_shift.save_shift(expired, path)
+    shift, rotated = duty_shift.rotate_if_expired(
+        roster, keeper=_Keeper(), now=now, path=path)
+    assert rotated, "an expired shift must be rotated by the measuring cycle"
+    assert shift.get("model_id") == "model-b", \
+        f"the new holder must come from the measured roster: {shift}"
+    assert shift.get("started_at") != expired["started_at"]
+    assert duty_shift.load_shift(path).get("model_id") == "model-b", \
+        "the rotation must survive the cycle that made it"
+
+    duty_shift.save_shift(live, path)
+    shift, rotated = duty_shift.rotate_if_expired(
+        roster, keeper=_Keeper(), now=now, path=path)
+    assert not rotated, "a live shift must not be rotated"
+    assert shift.get("model_id") == "model-a"
+    assert shift.get("started_at") == live["started_at"], \
+        "a live shift must keep its start"
+
+    print("[+] Test 91 Passed: a dead shift says it is dead, and the measuring "
+          "cycle rotates it — no traffic needed.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -8565,6 +8663,7 @@ if __name__ == "__main__":
         test_88_a_stale_copy_verdict_is_not_a_green_one,
         test_89_the_forges_own_patch_must_be_a_valid_patch,
         test_90_the_ladder_must_measure_the_measurement,
+        test_91_the_duty_shift_must_never_look_alive_after_it_expired,
     ]
     failed = []
     for t in tests:

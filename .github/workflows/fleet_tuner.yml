@@ -71,6 +71,11 @@ jobs:
           git add data/fleet_report.json 2>/dev/null || true
           git add data/fleet_history.json 2>/dev/null || true
           git add data/model_sizes.json 2>/dev/null || true
+          # The duty shift rotates in this cycle (measured 2026-11-06: it had
+          # not changed since 2026-11-02 — the shift only rotated when a
+          # task arrived). Without this line the rotation stays in the
+          # runner and dies with it.
+          git add data/duty_shift.json 2>/dev/null || true
           git add nim_history.log 2>/dev/null || true
 
           if ! git diff --staged --quiet; then

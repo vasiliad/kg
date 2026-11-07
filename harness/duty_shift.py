@@ -365,16 +365,102 @@ def note_outcome(
     return shift
 
 
-def describe_shift(shift: Dict[str, Any]) -> str:
-    """One human-readable line about the duty shift."""
+def describe_shift(shift: Dict[str, Any], now: Optional[datetime] = None) -> str:
+    """
+    One human-readable line about the duty shift — and the TRUTH about it.
+
+    Measured 2026-11-06: the shift file had not changed since 2026-11-02.
+    The shift was rotated only when a task arrived, so a complex with no
+    traffic kept a dead shift for days, and everything that read it called
+    it «Текущая смена» — a fact that had expired four days earlier,
+    repeated as if it were alive. An expired shift says so; a broken one
+    says why.
+    """
     if not shift or not shift.get("model_id"):
         return "Дежурная модель не назначена: измеренного состава нет."
+    moment = now or _now()
     until = _parse_iso(shift.get("until", ""))
     until_txt = until.strftime("%d.%m %H:%M UTC") if until else "—"
     who = shift.get("chosen_by", "")
+    if shift_broken(shift):
+        reason = shift.get("broken_reason") or "без причины"
+        return (
+            f"Дежурная модель: {shift['model_id']} — смена ПРЕРВАНА "
+            f"({reason}; была до {until_txt}; {who})."
+        )
+    if shift_expired(shift, moment):
+        hours = _hours_since(until, moment)
+        age = f"ей {hours} ч" if hours is not None else "неизвестно сколько"
+        return (
+            f"Дежурная модель: {shift['model_id']} — смена ИСТЕКЛА "
+            f"(была до {until_txt}, {age}; {who})."
+        )
     return (
         f"Дежурная модель: {shift['model_id']} (смена до {until_txt}; {who})."
     )
+
+
+def shift_status_line(shift: Dict[str, Any], now: Optional[datetime] = None) -> str:
+    """
+    The shift as a FACT for the complex's own reports: who, how fast, and
+    whether the shift is still alive. Used by the forge's facts digest, so
+    the self-improvement reads a live fact instead of an expired one.
+    """
+    if not shift or not shift.get("model_id"):
+        return "Дежурная смена не назначена."
+    moment = now or _now()
+    latency = shift.get("last_latency_sec")
+    latency_txt = f"{latency}с" if isinstance(latency, (int, float)) else "замеров нет"
+    who = shift.get("chosen_by", "")
+    until = _parse_iso(shift.get("until", ""))
+    if shift_broken(shift):
+        state = f"смена прервана: {shift.get('broken_reason') or 'без причины'}"
+    elif shift_expired(shift, moment):
+        hours = _hours_since(until, moment)
+        state = (f"смена ИСТЕКЛА ({hours} ч назад)" if hours is not None
+                 else "смена ИСТЕКЛА")
+    else:
+        state = "смена живая"
+    return (
+        f"Дежурная смена: {shift['model_id']}, задержка {latency_txt}, "
+        f"{state}; выбрана: {who}"
+    )
+
+
+def _hours_since(moment: Optional[datetime], now: Optional[datetime] = None) -> Optional[float]:
+    """How many hours ago that moment was (None when it is unknown)."""
+    if moment is None:
+        return None
+    delta = (now or _now()) - moment
+    return round(max(0.0, delta.total_seconds()) / 3600.0, 1)
+
+
+def rotate_if_expired(
+    roster: Dict[str, Any],
+    keeper: Any = None,
+    now: Optional[datetime] = None,
+    path: Path = SHIFT_FILE,
+) -> Tuple[Dict[str, Any], bool]:
+    """
+    Rotates the shift when it is no longer alive, and says whether it did.
+
+    Measured 2026-11-06: the shift was rotated ONLY when a task arrived
+    (the bot's message handler called current_duty). A complex with no
+    traffic therefore kept an expired shift for days — and the letter, the
+    bot's status and the forge's own facts repeated it as «текущая смена».
+    The cycle that MEASURES the roster now rotates the shift: the roster it
+    just measured is the evidence for the next shift, and a shift that has
+    run out is not a shift any more.
+    """
+    moment = now or _now()
+    before = load_shift(path)
+    shift, _info = current_duty(roster, keeper=keeper, now=moment, path=path)
+    rotated = bool(shift.get("model_id")) and (
+        not before
+        or str(before.get("started_at")) != str(shift.get("started_at"))
+        or str(before.get("model_id")) != str(shift.get("model_id"))
+    )
+    return shift, rotated
 
 
 if __name__ == "__main__":

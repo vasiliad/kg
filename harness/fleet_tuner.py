@@ -863,6 +863,30 @@ class FleetTuner:
         state["fleet_drift"] = report["drift"]
         self.state_mgr.save_local_state(state)
 
+        # The duty shift rotates HERE, not only when a task arrives.
+        # Measured 2026-11-06: the shift file had not changed since
+        # 2026-11-02 — a shift that ran out four days earlier was still
+        # being called «текущая смена» by everything that read it. The
+        # cycle that just MEASURED the roster is the one with the evidence
+        # for the next shift, so it rotates an expired shift instead of
+        # leaving a dead one on the record.
+        try:
+            from harness import duty_shift
+            from harness.duty_team import DutyTeam
+            roster = DutyTeam().load_roster()
+            shift, rotated = duty_shift.rotate_if_expired(roster)
+            if rotated:
+                self.say(f"  duty shift rotated: {shift.get('model_id')} "
+                         f"(until {shift.get('until')})")
+                self.state_mgr.append_history_log(
+                    f"СМЕНА РОТИРОВАНА | модель={shift.get('model_id')} | "
+                    f"до={shift.get('until')} | причина={shift.get('started_because') or 'смена истекла'}"
+                )
+        except Exception as e:
+            # A failed rotation must not blank a measured fleet: the roster
+            # is the promise, the shift is the schedule.
+            self.say(f"  duty shift not rotated: {type(e).__name__}: {e}")
+
         summary = ", ".join(f"{e['id']} ({e['tier']}, {e['quality_score']})" for e in fleet_entries)
         self.state_mgr.append_history_log(
             f"ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов={len(candidates)} | "
