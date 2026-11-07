@@ -5554,7 +5554,8 @@ def test_68_the_credential_heartbeat_shows_decay_before_the_channel_dies():
             assert leak not in written, f"a credential fragment reached the heartbeat: {leak}"
         assert set(json.loads(written)) == {
             "NVIDIA_API_KEY", "TINYFISH_API_KEYS", "LANGSEARCH_API_KEY",
-            "KEENABLE_API_KEY", "TELEGRAM_BOT_TOKEN", "GMAIL_APP_PASSWORD"}, \
+            "KEENABLE_API_KEY", "FIRECRAWL_API_KEY", "TELEGRAM_BOT_TOKEN",
+            "GMAIL_APP_PASSWORD"}, \
             "the heartbeat must cover exactly the probed credentials plus mail"
     finally:
         diagnostics.HEARTBEAT_PATH = saved_path
