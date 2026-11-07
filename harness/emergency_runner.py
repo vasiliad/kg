@@ -126,9 +126,14 @@ def clear_stale_emergency(reason: str = "") -> bool:
     the fleet had been measured again (14:33). A flag with a reason that no
     longer exists is a lie with a timestamp.
 
-    The flag is cleared ONLY when its cause was staleness and the fleet has
-    been measured since. A sovereign (zero-API) migration has a different
-    cause and survives: the API is still down there.
+    The flag is cleared when its cause is gone AND the fleet has been
+    measured since. A staleness cause is gone by definition (the fleet is
+    fresh). A FORCED run is a trigger, not a state of the world — once the
+    fleet is measured again, the forced test is over (measured 2026-11-07:
+    a forced dispatch left cause=forced standing, and the old rule would
+    have kept that flag until the end of time). A sovereign (zero-API)
+    migration IS a state of the world — the API is still down — and
+    survives a fresh measurement.
     """
     state_mgr = StateManager()
     try:
@@ -146,9 +151,9 @@ def clear_stale_emergency(reason: str = "") -> bool:
         cause = ("state_stale"
                  if str(state.get("emergency_reason") or "").startswith("State stale by")
                  else "unknown")
-    if cause != "state_stale":
+    if cause not in ("state_stale", "forced"):
         print(f"[*] The emergency state is kept: its cause is «{cause}», "
-              f"not staleness.")
+              f"not staleness or a finished forced run.")
         return False
     stamp, source = fleet_state_stamp(state)
     if stamp is None:

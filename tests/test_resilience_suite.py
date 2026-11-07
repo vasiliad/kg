@@ -8442,6 +8442,20 @@ def test_90_the_ladder_must_measure_the_measurement():
             verdict = json.loads(state_file.read_text(encoding="utf-8"))
             assert verdict.get("emergency_mode") is True, \
                 "the blackout flag must stay"
+
+            # A FORCED run is a trigger, not a state of the world: measured
+            # 2026-11-07, a forced dispatch left cause=forced standing, and
+            # the flag would have outlived its cause until the end of time.
+            payload["emergency_mode"] = True
+            payload["emergency_cause"] = "forced"
+            payload["emergency_reason"] = "Trigger forced by user / CLI flag --force"
+            state_file.write_text(json.dumps(payload), encoding="utf-8")
+            cleared = emergency_runner.clear_stale_emergency("флот измерен заново")
+            assert cleared, \
+                "a forced emergency must be cleared once the fleet is measured again"
+            verdict = json.loads(state_file.read_text(encoding="utf-8"))
+            assert verdict.get("emergency_mode") is False, \
+                "the forced flag must go once its trigger is over"
         finally:
             emergency_runner.load_config = saved_cfg
             emergency_runner.APIHealthChecker = saved_health
