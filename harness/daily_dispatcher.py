@@ -1389,9 +1389,17 @@ def run_daily_dispatch(
     # already delivered today is not sent again. The supervisor may be
     # wrong (it lost the delivery record on 2026-11-02 and sent the letter
     # four times) — the operator's inbox is not a place for retries.
+    #
+    # A DRY-RUN is not bound by the guard: the guard protects the inbox,
+    # and a dry-run never writes there (measured 2026-11-07: the acceptance
+    # run of the new reader had to build today's ALREADY-DELIVERED digest,
+    # and the guard would have prevented the check that sends nothing).
     already: Dict[str, bool] = {}
     if force:
         print("[*] --force: today's letters will be sent again on purpose.")
+    elif dry_run:
+        print("[*] --dry-run: the letters will be built but NOT sent; "
+              "the daily guard is not consulted.")
     else:
         try:
             already = delivered_today()
