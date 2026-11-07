@@ -1,48 +1,39 @@
 {
-  "attempted_at": "2026-11-06T04:09:12.359112+00:00",
+  "attempted_at": "2026-11-07T03:02:34.153825+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
-  "stage": "apply_check",
-  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -8.26, худший: mistralai/mistral-large-4-1t-a52b (дельта -20.59)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.54с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 80.46, задержка 5.47с, ok_rate 1.0, слабейшая задача code=0.3\n- mistralai/mistral-large-4-1t-a52b: балл 75.0, задержка 58.07с, ok_rate 1.0, слабейшая задача instruction=1.0\nТекущая смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 144, ошибок 7, ответов 195",
-  "branch": null,
-  "error": "error: corrupt patch at /tmp/forge-patch-c1v1lvm3/proposed.patch:11\n",
-  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: corrupt patch at /tmp/forge-patch-c1v1lvm3/proposed.patch:11\n",
-  "writer": {
-    "model": "nvidia/nemotron-3-ultra-550b-a55b",
-    "role": "duty_primary",
-    "score": 96.75,
-    "verified": true,
-    "elapsed": 150.29,
-    "status": "SUCCESS"
-  },
+  "stage": "no_writer",
+  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 9.97, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -3.08)\n- stepfun-ai/step-5-preview: балл 99.72, задержка 2.33с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 93.4, задержка 6.02с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- mistralai/mistral-large-4-1t-a52b: балл 91.44, задержка 7.23с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- minimaxai/minimax-m3.1-flash: балл 89.17, задержка 5.1с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, смена ИСТЕКЛА (109.9 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 171, ошибок 8, ответов 251",
+  "error": "сетевая дежурная: SUCCESS; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "summary": "Ни одна модель не написала патч — улучшать нечего.",
+  "writer": {},
   "chooser": {
-    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "model": "stepfun-ai/step-5-preview",
     "role": "duty_primary",
-    "elapsed": 20.67,
+    "elapsed": 18.07,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
-  "local_status": null,
-  "target": "harness/fleet_tuner.py",
-  "normalised": true,
-  "notes": [
-    "заголовок @@ -300,7 +300,7 @@ исправлен на измеренные -300,6 +300,6"
-  ],
+  "local_status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "target": "harness/duty_shift.py",
+  "normalised": false,
+  "notes": [],
   "repair": {
-    "attempted": true,
-    "ok": false,
-    "status": "SUCCESS"
+    "attempted": false,
+    "ok": false
   },
   "gate": {
-    "ok": false,
-    "stage": "apply_check",
+    "ok": null,
+    "stage": null,
     "branch": null,
-    "error": "error: corrupt patch at /tmp/forge-patch-c1v1lvm3/proposed.patch:11\n"
+    "error": null
   },
-  "patch_bytes": 640,
-  "attempt_day": "2026-11-06",
-  "checked_at": "2026-11-06T12:02:25.149013+00:00",
-  "verdict_id": "20261106T040912Z",
-  "patch_file": "data/forge_autopilot/20261106T040912Z.patch",
-  "skipped_today": true
+  "patch_bytes": 0,
+  "attempt_day": "2026-11-07",
+  "checked_at": "2026-11-07T03:02:34.153718+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261107T030234Z",
+  "last_attempt_at": "2026-11-07T03:02:34.153825+00:00",
+  "attempt_age_hours": 0.07,
+  "freshness": "Последняя попытка: 07.11 03:02 UTC (0 мин назад)."
 }
