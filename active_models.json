@@ -1,14 +1,14 @@
 {
   "timestamp": "2026-11-06T22:41:56.759944+00:00",
-  "emergency_mode": true,
+  "emergency_mode": false,
   "last_emergency_run": "2026-11-06T22:41:56.759944+00:00",
-  "emergency_reason": "State stale by 9.0h (threshold: 6h)",
+  "emergency_reason": "",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter": "mistralai/mistral-large-4-1t-a52b (дежурная команда по живому замеру)",
   "local_arbiter_feedback": "# Executive Summary — DeepSeek‑TPU‑NIM Emergency CPU Fallback\n\n**Snapshot timestamp:** `2026-11-06T22:37:52.001474+00:00`\n**Emergency mode:** ACTIVE — trigger reason: *\"State stale by 9.0h (threshold: 6h)\"*\n**Primary TPU orchestrator:** offline or queued (per directive)\n**Fallback execution substrate:** SovereignCPUEngine (local CPU), Supreme Arbiter `Qwen/Qwen2.5-1.5B-Instruct`\n\n**Status in one line:** The CPU fallback is serving with **4 live‑verified models and zero failed probes**, the catal...",
   "catalog_diff": {
     "new_count": 0,
@@ -325,7 +325,7 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-11-07T03:14:39.652314+00:00Z",
+  "last_updated": "2026-11-07T03:16:43.697899+00:00Z",
   "fleet_decision": {
     "tuned_at": "2026-11-07 02:55:45 UTC",
     "method": "live_probe",
@@ -623,5 +623,8 @@
       "canary_news"
     ],
     "note": "основной дежурный заменён"
-  }
+  },
+  "emergency_cause": "",
+  "emergency_cleared_at": "2026-11-07T03:16:43.697895+00:00",
+  "emergency_cleared_because": "the fleet was measured again (2026-11-07T02:55:45+00:00, fleet_decision.tuned_at)"
 }
