@@ -26,6 +26,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      dry_run:
+        description: 'Build the letters (pages read, models called) but send nothing — the acceptance run that cannot duplicate mail'
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
   contents: write
@@ -148,6 +153,14 @@ jobs:
           # the trigger) may repeat it.
           if [ "${{ inputs.force }}" = "true" ]; then
             FLAGS="$FLAGS --force"
+          fi
+          # The acceptance run that cannot duplicate mail: the letters are
+          # BUILT (pages read, models called, dry_run counts as a kept
+          # promise) but nothing is sent — measured 2026-11-07, when the
+          # only cloud way to exercise the digest pipeline was to burn the
+          # operator's inbox with a duplicate.
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
           fi
 
           python harness/daily_dispatcher.py $FLAGS
