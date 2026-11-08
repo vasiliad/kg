@@ -1,7 +1,7 @@
 {
-  "model_id": "nvidia/nemotron-3-ultra-550b-a55b",
-  "started_at": "2026-11-07T21:12:22Z",
-  "until": "2026-11-08T03:12:22Z",
+  "model_id": "mistralai/mistral-large-4-1t-a52b",
+  "started_at": "2026-11-08T05:49:36Z",
+  "until": "2026-11-08T11:49:36Z",
   "chosen_by": "Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру",
   "calls": 0,
   "failures": 0,
