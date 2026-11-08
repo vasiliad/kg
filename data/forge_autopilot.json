@@ -1,19 +1,19 @@
 {
-  "attempted_at": "2026-11-07T03:02:34.153825+00:00",
+  "attempted_at": "2026-11-08T04:36:46.664209+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
   "stage": "no_writer",
-  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 9.97, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -3.08)\n- stepfun-ai/step-5-preview: балл 99.72, задержка 2.33с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 93.4, задержка 6.02с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- mistralai/mistral-large-4-1t-a52b: балл 91.44, задержка 7.23с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- minimaxai/minimax-m3.1-flash: балл 89.17, задержка 5.1с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: mistralai/mistral-large-4-1t-a52b, задержка 59.01с, смена ИСТЕКЛА (109.9 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 171, ошибок 8, ответов 251",
-  "error": "сетевая дежурная: SUCCESS; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 21.66, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта 0.0)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.78с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- mistralai/mistral-large-4-1t-a52b: балл 94.98, задержка 2.98с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- stepfun-ai/step-5-preview: балл 91.48, задержка 7.19с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- minimaxai/minimax-m3.1-flash: балл 90.1, задержка 3.98с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (1.4 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 200, ошибок 10, ответов 311",
+  "error": "сетевая дежурная: SUCCESS_EMPTY_ANSWER; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
   "summary": "Ни одна модель не написала патч — улучшать нечего.",
   "writer": {},
   "chooser": {
-    "model": "stepfun-ai/step-5-preview",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "elapsed": 18.07,
+    "elapsed": 16.99,
     "status": "SUCCESS"
   },
-  "duty_status": "SUCCESS",
+  "duty_status": "SUCCESS_EMPTY_ANSWER",
   "local_status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
   "target": "harness/duty_shift.py",
   "normalised": false,
@@ -29,12 +29,11 @@
     "error": null
   },
   "patch_bytes": 0,
-  "attempt_day": "2026-11-07",
-  "checked_at": "2026-11-07T11:00:42.337102+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261107T030234Z",
-  "last_attempt_at": "2026-11-07T03:02:34.153825+00:00",
-  "attempt_age_hours": 7.97,
-  "freshness": "Последняя попытка: 07.11 03:02 UTC (8.0 ч назад).",
-  "skipped_today": true
+  "attempt_day": "2026-11-08",
+  "checked_at": "2026-11-08T04:36:46.664081+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261108T043646Z",
+  "last_attempt_at": "2026-11-08T04:36:46.664209+00:00",
+  "attempt_age_hours": 0.03,
+  "freshness": "Последняя попытка: 08.11 04:36 UTC (0 мин назад)."
 }
