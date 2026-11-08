@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-11-08T05:46:41Z",
+  "subject": "Ежедневный дайджест ИИ: 08.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 37,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 6,
+  "items": [
+    {
+      "title": "Moonshot AI выпустила Kimi K3 с открытыми весами",
+      "summary": "Июльский релиз Kimi K3 с открытыми весами стал поводом для острой дискуссии в индустрии: обсуждаются преимущества open-weight подхода и его последствия для рынка.",
+      "url": "https://www.kommersant.ru/doc/8907150",
+      "source": "kommersant.ru",
+      "date": "июль 2026",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "OpenAI представила open-weight reasoning-модели",
+      "summary": "На странице open models OpenAI предлагает усовершенствованные модели рассуждений с открытым весом: их можно настраивать под любой сценарий, запускать где угодно и скачивать с Hugging Face.",
+      "url": "https://openai.com/ru-RU/open-models/",
+      "source": "openai.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "OpenAI переходит на Google TPU, подрывая монополию Nvidia",
+      "summary": "OpenAI переходит на тензорные процессоры Google TPU, что создаёт угрозу доминированию Nvidia и меняет структуру рынка ИИ-вычислений.",
+      "url": "https://www.pravda.ru/news/technolgies/2433972-openai-google-tpu-shift/",
+      "source": "pravda.ru",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Дорожная карта Google TPU как противовес доминированию Nvidia",
+      "summary": "По оценке Data Center Frontier, линейка Tensor Processing Units Google постепенно превращается в значимый противовес доминированию Nvidia в облачной AI-инфраструктуре.",
+      "url": "https://www.datacenterfrontier.com/machine-learning/article/55336429/googles-tpu-roadmap-challenging-nvidias-dominance-in-ai-infrastructure",
+      "source": "datacenterfrontier.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Google разместит TPU у небольших облачных провайдеров",
+      "summary": "Google планирует предоставлять свои TPU небольшим облачным провайдерам: специализированные ASIC-чипы эффективнее универсальных GPU для ML-задач, но менее гибки.",
+      "url": "https://www.linkedin.com/posts/analytics-india-magazine_google-is-taking-a-bold-step-in-the-ai-hardware-activity-7370703739088797696-QYb0",
+      "source": "linkedin.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Эскалация борьбы за AI-чипы между Nvidia и Google",
+      "summary": "Сравнение архитектур: GPU Blackwell и Hopper гибче и универсальнее, TPU — специализированные ASIC. Материал датирован 27 ноября 2025 года.",
+      "url": "https://lilys.ai/notes/ru/google-tpu-20251127/nvidia-google-ai-chip-battle",
+      "source": "lilys.ai",
+      "date": "2025-11-27",
+      "category": "Инфраструктура",
+      "detail": ""
+    }
+  ]
+}
