@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-07T09:36:16Z",
-  "subject": "Ежедневный дайджест ИИ: 07.11.2026",
+  "generated_at": "2026-11-08T05:46:41Z",
+  "subject": "Ежедневный дайджест ИИ: 08.11.2026",
   "tier": "TinyFish",
   "queries": [
     "новые модели ИИ релиз открытые веса",
@@ -12,50 +12,41 @@
     "исследования ИИ reasoning бенчмарки модели",
     "AI research reasoning benchmark LLM paper"
   ],
-  "sources_count": 39,
+  "sources_count": 37,
   "selection_mode": "модель отобрала",
   "full_news_count": 0,
   "items_count": 6,
   "items": [
     {
-      "title": "Mistral открыла веса Mistral Large 4 «Le Chonk» — около триллиона параметров",
-      "summary": "Mistral открыла веса улучшенной версии своей мультимодальной модели Mistral Large 4, неофициально прозванной «Le Chonk»; заявленный объём — около триллиона параметров.",
-      "url": "https://www.ixbt.com/news/2026/11/01/mistral-otkryla-vesa-ii-modeli-s-trillionom-parametrov.html",
-      "source": "ixbt.com",
-      "date": "2026-11-01",
+      "title": "Moonshot AI выпустила Kimi K3 с открытыми весами",
+      "summary": "Июльский релиз Kimi K3 с открытыми весами стал поводом для острой дискуссии в индустрии: обсуждаются преимущества open-weight подхода и его последствия для рынка.",
+      "url": "https://www.kommersant.ru/doc/8907150",
+      "source": "kommersant.ru",
+      "date": "июль 2026",
       "category": "Модели",
       "detail": ""
     },
     {
-      "title": "Meta выпустила Muse Spark Open — самую мощную открытую модель США",
-      "summary": "15 октября Meta выложила в открытый доступ веса Muse Spark Open — открытой версии модели Muse Spark; по данным источника, это самая мощная на сегодня американская модель с открытыми весами.",
-      "url": "https://habr.com/ru/articles/1094982/",
-      "source": "habr.com",
-      "date": "2026-10-15",
-      "category": "Модели",
-      "detail": ""
-    },
-    {
-      "title": "Moonshot AI открыла Kimi K3 — 2,8 трлн параметров",
-      "summary": "16 июля 2026 года пекинский стартап Moonshot AI представил Kimi K3 и пообещал выложить веса в открытый доступ; заявленный масштаб модели — 2,8 трлн параметров.",
-      "url": "https://www.ai-stat.ru/news/2026-07-18-kimi-k3-2-8t-open-weight-release",
-      "source": "ai-stat.ru",
-      "date": "2026-07-16",
-      "category": "Модели",
-      "detail": ""
-    },
-    {
-      "title": "Открытые модели Китая отстают от закрытых моделей США всего на 7 месяцев",
-      "summary": "В обсуждении r/LocalLLaMA отмечается, что разрыв между китайскими open-weight моделями и американскими закрытыми моделями сократился примерно до семи месяцев.",
-      "url": "https://www.reddit.com/r/LocalLLaMA/comments/1x5pjv7/the_ai_race_chinas_openweight_models_trail_us/",
-      "source": "reddit.com",
+      "title": "OpenAI представила open-weight reasoning-модели",
+      "summary": "На странице open models OpenAI предлагает усовершенствованные модели рассуждений с открытым весом: их можно настраивать под любой сценарий, запускать где угодно и скачивать с Hugging Face.",
+      "url": "https://openai.com/ru-RU/open-models/",
+      "source": "openai.com",
       "date": "",
       "category": "Модели",
       "detail": ""
     },
     {
-      "title": "Дорожная карта Google TPU: Trillium и Ironwood бросают вызов лидерству NVIDIA",
-      "summary": "Новые поколения TPU от Google, включая Trillium и Ironwood, рассматриваются как наиболее серьёзный вызов доминированию GPU NVIDIA в инфраструктуре для ИИ.",
+      "title": "OpenAI переходит на Google TPU, подрывая монополию Nvidia",
+      "summary": "OpenAI переходит на тензорные процессоры Google TPU, что создаёт угрозу доминированию Nvidia и меняет структуру рынка ИИ-вычислений.",
+      "url": "https://www.pravda.ru/news/technolgies/2433972-openai-google-tpu-shift/",
+      "source": "pravda.ru",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Дорожная карта Google TPU как противовес доминированию Nvidia",
+      "summary": "По оценке Data Center Frontier, линейка Tensor Processing Units Google постепенно превращается в значимый противовес доминированию Nvidia в облачной AI-инфраструктуре.",
       "url": "https://www.datacenterfrontier.com/machine-learning/article/55336429/googles-tpu-roadmap-challenging-nvidias-dominance-in-ai-infrastructure",
       "source": "datacenterfrontier.com",
       "date": "",
@@ -63,11 +54,20 @@
       "detail": ""
     },
     {
-      "title": "Google TPU v8 против NVIDIA: инференс переписывает рынок ИИ",
-      "summary": "Материал разбирает влияние TPU v8 на рынок инференса; в кластере из 1 152 чипов суммарная ёмкость SRAM составляет 432 ГБ.",
-      "url": "https://io-fund.com/ai-stocks/google-tpu-v8-vs-nvidia-inference-rewrites-ai-market",
-      "source": "io-fund.com",
+      "title": "Google разместит TPU у небольших облачных провайдеров",
+      "summary": "Google планирует предоставлять свои TPU небольшим облачным провайдерам: специализированные ASIC-чипы эффективнее универсальных GPU для ML-задач, но менее гибки.",
+      "url": "https://www.linkedin.com/posts/analytics-india-magazine_google-is-taking-a-bold-step-in-the-ai-hardware-activity-7370703739088797696-QYb0",
+      "source": "linkedin.com",
       "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Эскалация борьбы за AI-чипы между Nvidia и Google",
+      "summary": "Сравнение архитектур: GPU Blackwell и Hopper гибче и универсальнее, TPU — специализированные ASIC. Материал датирован 27 ноября 2025 года.",
+      "url": "https://lilys.ai/notes/ru/google-tpu-20251127/nvidia-google-ai-chip-battle",
+      "source": "lilys.ai",
+      "date": "2025-11-27",
       "category": "Инфраструктура",
       "detail": ""
     }
