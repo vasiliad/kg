@@ -815,6 +815,23 @@ def test_93_a_daily_digest_must_not_carry_year_old_pages_as_news():
     kept, dropped = drop_stale_items(_map_items(raw, candidates))
     assert dropped == 0 and kept, "a fresh date must keep the pick"
 
+    # --- (f) the THIRD witness: the writer's page-text date re-stamps the item
+    # Measured 2026-11-09: _apply_descriptions copies the WRITER's date over
+    # the item's, and the writer had read «July 24, 2025» and «May 9, 2026»
+    # from the pages themselves — after both earlier gates.
+    from harness.daily_dispatcher import write_full_news
+    stamped = [{
+        "title": "старая страница", "summary": "текст со страницы",
+        "url": "https://rocm.blogs.amd.com/x/", "date": "July 24, 2025",
+        "source": "rocm.blogs.amd.com", "category": "Модели", "tier": "TinyFish",
+    }]
+    kept, dropped = drop_stale_items(stamped)
+    assert dropped == 1 and not kept, \
+        f"a page that proves itself old is not today's news: {kept}"
+    day_first = parse_source_date("", "14 February 2026", "")
+    assert day_first == datetime(2026, 2, 14, tzinfo=timezone.utc), \
+        f"day-first English must parse: {day_first}"
+
     # --- (d) the soft rule is the second layer ----------------------------
     assert "свеж" in SELECTION_PROMPT.lower(), \
         "the prompt must tell the model what a daily digest means"

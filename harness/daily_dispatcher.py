@@ -515,6 +515,9 @@ _RU_DATE_RE = re.compile(
 _EN_DATE_RE = re.compile(
     r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{1,2}),?\s*(20\d{2})",
     re.IGNORECASE)
+_EN_DATE_DAY_FIRST_RE = re.compile(
+    r"\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s*(20\d{2})",
+    re.IGNORECASE)
 _RELATIVE_RE = re.compile(
     r"\b(\d{1,2}|несколько)\s*(минут\w*|час\w*|дн\w+|день|недел\w+)\s*назад", re.IGNORECASE)
 _EN_RELATIVE_RE = re.compile(r"\b(\d{1,2})\s*(minute|hour|day|week)s?\s+ago", re.IGNORECASE)
@@ -575,6 +578,16 @@ def parse_source_date(url: str, snippet: str = "", title: str = "",
             month = _month_from_name(m.group(1))
             if month:
                 parsed = _valid(int(m.group(3)), month, int(m.group(2)))
+                if parsed:
+                    return parsed
+        # Day-first English («14 February 2026») — the writer reads page
+        # text and it often names dates exactly like this (measured
+        # 2026-11-09 in the digest artefact).
+        m = _EN_DATE_DAY_FIRST_RE.search(text)
+        if m:
+            month = _month_from_name(m.group(2))
+            if month:
+                parsed = _valid(int(m.group(3)), month, int(m.group(1)))
                 if parsed:
                     return parsed
 
@@ -1180,6 +1193,20 @@ def write_full_news(
     described = _apply_descriptions(raw_items, items)
     if not described:
         return items, "описания не привязались к источникам"
+    # The THIRD freshness witness: the writer READ the pages and often names
+    # the page's own date — the strongest witness of all (measured
+    # 2026-11-09 in the digest artefact: the writer re-stamped «July 24,
+    # 2025» and «May 9, 2026» onto items that had passed both earlier
+    # gates, because _apply_descriptions copies the writer's date over the
+    # item's). A page that proves itself old is not today's news, whoever
+    # dated it first.
+    described, stale_dropped = drop_stale_items(described)
+    if stale_dropped:
+        print(f"[!] {stale_dropped} written item(s) proved stale by the dates "
+              "in their own pages.")
+    if not described:
+        return [], ("все отобранные источники оказались старше окна свежести "
+                    f"({DIGEST_FRESH_DAYS:.0f} дней) по датам их страниц")
     return described, ""
 
 
