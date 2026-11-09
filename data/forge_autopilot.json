@@ -1,16 +1,16 @@
 {
-  "attempted_at": "2026-11-08T04:36:46.664209+00:00",
+  "attempted_at": "2026-11-09T04:08:37.048395+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
   "stage": "no_writer",
-  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 21.66, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта 0.0)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.78с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- mistralai/mistral-large-4-1t-a52b: балл 94.98, задержка 2.98с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- stepfun-ai/step-5-preview: балл 91.48, задержка 7.19с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- minimaxai/minimax-m3.1-flash: балл 90.1, задержка 3.98с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (1.4 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 200, ошибок 10, ответов 311",
+  "facts_digest": "Дрейф флота: REPLACED, средняя дельта 2.63, худший: minimaxai/minimax-m3.1-flash (дельта -5.96)\n- stepfun-ai/step-5-preview: балл 97.81, задержка 4.63с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.44с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 83.42, задержка 6.0с, ok_rate 0.875, слабейшая задача prose=0.0\n- z-ai/glm-5.3-flash: балл 67.5, задержка 36.13с, ok_rate 1.0, слабейшая задача instruction=0.0\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (0.7 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 228, ошибок 12, ответов 369",
   "error": "сетевая дежурная: SUCCESS_EMPTY_ANSWER; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
   "summary": "Ни одна модель не написала патч — улучшать нечего.",
   "writer": {},
   "chooser": {
-    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "model": "stepfun-ai/step-5-preview",
     "role": "duty_primary",
-    "elapsed": 16.99,
+    "elapsed": 65.05,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS_EMPTY_ANSWER",
@@ -29,12 +29,11 @@
     "error": null
   },
   "patch_bytes": 0,
-  "attempt_day": "2026-11-08",
-  "checked_at": "2026-11-08T11:14:27.945039+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261108T043646Z",
-  "last_attempt_at": "2026-11-08T04:36:46.664209+00:00",
-  "attempt_age_hours": 6.63,
-  "freshness": "Последняя попытка: 08.11 04:36 UTC (6.6 ч назад).",
-  "skipped_today": true
+  "attempt_day": "2026-11-09",
+  "checked_at": "2026-11-09T04:08:37.048295+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261109T040837Z",
+  "last_attempt_at": "2026-11-09T04:08:37.048395+00:00",
+  "attempt_age_hours": 0.06,
+  "freshness": "Последняя попытка: 09.11 04:08 UTC (0 мин назад)."
 }
