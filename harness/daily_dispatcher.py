@@ -483,6 +483,126 @@ DIGEST_QUERIES: List[Tuple[str, str, str]] = [
 MAX_ITEMS = 6
 PER_QUERY_RESULTS = 5
 
+# A DAILY digest is about the last days, not about «what once happened».
+# Measured 2026-11-09/10 in the operator's own letter: the digest carried
+# «OpenAI впервые за пять лет выпустила языковые модели» dated 2025-08-07 —
+# a year-old page standing in a fresh issue as news. Dates ARE measured at
+# collection time (from the URL and the snippet); a candidate whose measured
+# date is older than this window is dropped BEFORE the model ever sees it —
+# the list is the guarantee: the model picks by number, so what is dropped
+# pre-selection can never be chosen. An UNKNOWN date is kept (an accusation
+# without evidence is not measurement) — the soft freshness rule in
+# SELECTION_PROMPT is the second layer, the same pattern as the
+# reference-host filter.
+DIGEST_FRESH_DAYS = 7.0
+
+_MONTHS_RU = {
+    "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
+    "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12,
+}
+_MONTHS_EN = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+_URL_DATE_RE = re.compile(r"/(20\d{2})[/-](\d{1,2})(?:[/-](\d{1,2}))?/")
+_ISO_DATE_RE = re.compile(r"\b(20\d{2})-(\d{2})-(\d{2})\b")
+_DOT_DATE_RE = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b")
+_RU_DATE_RE = re.compile(
+    r"(\d{1,2})?\s*(январ\w*|феврал\w*|март\w*|апрел\w*|ма[йея]\w*|июн\w*|июл\w*|"
+    r"август\w*|сентябр\w*|октябр\w*|ноябр\w*|декабр\w*)\s*(20\d{2})",
+    re.IGNORECASE)
+_EN_DATE_RE = re.compile(
+    r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{1,2}),?\s*(20\d{2})",
+    re.IGNORECASE)
+_RELATIVE_RE = re.compile(
+    r"\b(\d{1,2}|несколько)\s*(минут\w*|час\w*|дн\w+|день|недел\w+)\s*назад", re.IGNORECASE)
+_EN_RELATIVE_RE = re.compile(r"\b(\d{1,2})\s*(minute|hour|day|week)s?\s+ago", re.IGNORECASE)
+
+
+def _month_from_name(name: str) -> Optional[int]:
+    lowered = str(name).lower()
+    for stem, month in _MONTHS_RU.items():
+        if lowered.startswith(stem):
+            return month
+    for stem, month in _MONTHS_EN.items():
+        if lowered.startswith(stem):
+            return month
+    return None
+
+
+def parse_source_date(url: str, snippet: str = "", title: str = "",
+                      now: Optional[datetime] = None) -> Optional[datetime]:
+    """
+    The page's own date, measured from the URL and the snippet — or None.
+
+    Many news URLs carry their date (nplus1.ru/news/2025/08/07/...) and
+    search snippets name it («7 августа 2025», «07.08.2025», «2 часа
+    назад»). A date that cannot be measured is None — and None is NEVER
+    treated as stale: «I cannot read it» is not «it is old».
+    """
+    moment = now or datetime.now(timezone.utc)
+    haystacks = (str(url or ""), str(snippet or ""), str(title or ""))
+
+    def _valid(year: int, month: int, day: int) -> Optional[datetime]:
+        try:
+            return datetime(year, month, day, tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    for text in haystacks:
+        # Full dates first — the most precise witness wins.
+        m = _ISO_DATE_RE.search(text)
+        if m:
+            parsed = _valid(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if parsed:
+                return parsed
+        m = _DOT_DATE_RE.search(text)
+        if m:
+            parsed = _valid(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+            if parsed:
+                return parsed
+        m = _RU_DATE_RE.search(text)
+        if m:
+            month = _month_from_name(m.group(2))
+            day = int(m.group(1) or 1)
+            if month:
+                parsed = _valid(int(m.group(3)), month, day)
+                if parsed:
+                    return parsed
+        m = _EN_DATE_RE.search(text)
+        if m:
+            month = _month_from_name(m.group(1))
+            if month:
+                parsed = _valid(int(m.group(3)), month, int(m.group(2)))
+                if parsed:
+                    return parsed
+
+    for text in haystacks:
+        m = _URL_DATE_RE.search(text)
+        if m and int(m.group(2)) <= 12:
+            day = int(m.group(3)) if m.group(3) else 1
+            parsed = _valid(int(m.group(1)), int(m.group(2)), day)
+            if parsed:
+                return parsed
+
+    # Relative dates are the freshest witness of all.
+    for text in (str(snippet or ""), str(title or "")):
+        m = _RELATIVE_RE.search(text) or _EN_RELATIVE_RE.search(text)
+        if m:
+            count_text = m.group(1).strip().lower()
+            count = 2 if not count_text.isdigit() else int(count_text)
+            unit = m.group(2).lower()
+            if unit.startswith("мин") or unit.startswith("minute"):
+                return moment - timedelta(minutes=count)
+            if unit.startswith("час") or unit.startswith("hour"):
+                return moment - timedelta(hours=count)
+            if unit.startswith("дн") or unit.startswith("day"):
+                return moment - timedelta(days=count)
+            if unit.startswith("недел") or unit.startswith("week"):
+                return moment - timedelta(weeks=count)
+    return None
+
 
 # Pages that DEFINE a term, not pages that REPORT a news event. The letter's
 # link exists so the operator can confirm the source — measured 2026-11-03,
@@ -541,6 +661,7 @@ def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, An
                 tiers.append(tier)
             queries.append(query)
             dropped = 0
+            stale = 0
             for result in results:
                 url = str(result.get("url") or "").strip()
                 title = str(result.get("title") or "").strip()
@@ -550,6 +671,18 @@ def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, An
                 if is_reference_host(url):
                     dropped += 1
                     continue
+                # The freshness gate: a DAILY digest is about the last days.
+                # The date is measured from the URL and the snippet; a KNOWN
+                # date older than DIGEST_FRESH_DAYS never reaches the model's
+                # list (the list is the guarantee). An unknown date is kept —
+                # «I cannot read it» is not «it is old».
+                measured = parse_source_date(url, snippet, title)
+                if measured is not None:
+                    age_days = (datetime.now(timezone.utc) - measured).total_seconds() / 86400.0
+                    if age_days > DIGEST_FRESH_DAYS:
+                        stale += 1
+                        seen_urls.add(url)   # a dropped URL must not return in another query
+                        continue
                 seen_urls.add(url)
                 candidates.append({
                     "title": title,
@@ -557,9 +690,15 @@ def collect_digest_sources(executor: MiniMaxExecutor) -> Tuple[List[Dict[str, An
                     "snippet": snippet,
                     "category": category,
                     "tier": tier,
+                    "date_measured": measured.strftime("%d.%m.%Y") if measured else "",
                 })
+            notes = []
+            if dropped:
+                notes.append(f"{dropped} справочных отброшено")
+            if stale:
+                notes.append(f"{stale} устаревших отброшено (> {DIGEST_FRESH_DAYS:.0f} дней)")
             print(f"    -> {len(results)} results (tier: {tier or 'none'})"
-                  + (f", {dropped} справочных отброшено" if dropped else ""))
+                  + (", " + ", ".join(notes) if notes else ""))
 
     return candidates, tiers, queries
 
@@ -578,8 +717,14 @@ SELECTION_PROMPT = (
     "4. Предпочитай ПЕРВОИСТОЧНИК новости — пресс-релиз, СМИ, блог компании, отчёт; "
     "избегай энциклопедий, словарей, форумов и агрегаторов: ссылка в письме должна "
     "подтверждать источник, а не определять термин.\n"
-    "5. Если существенных новостей нет — верни {{\"items\": []}}.\n"
-    "6. Ответ — ТОЛЬКО JSON: начни с {{ и закончи }}. Никаких слов, пояснений, "
+    "5. НОВОСТЬ ДОЛЖНА БЫТЬ СВЕЖЕЙ: это ежедневный дайджест. Если в тексте или дате "
+    "источника виден год, который не текущий, «обзор релизов за прошлый год» или "
+    "старая дата — это не новость, не бери её, даже если текст интересный. "
+    "Дату в поле date переноси из источника; у источников с пометкой «дата источника» "
+    "она измерена харнессом — доверься ей.\n"
+    "6. Если существенных новостей нет — верни {{\"items\": []}}. Честный пустой выпуск "
+    "лучше выдуманного.\n"
+    "7. Ответ — ТОЛЬКО JSON: начни с {{ и закончи }}. Никаких слов, пояснений, "
     "markdown-заборов и нумерации перед JSON."
 )
 
@@ -591,10 +736,15 @@ def _sources_block(candidates: List[Dict[str, Any]]) -> str:
     lines = []
     for index, candidate in enumerate(candidates, 1):
         snippet = candidate["snippet"][:600].replace("\n", " ")
+        measured = str(candidate.get("date_measured") or "")
+        # The MEASURED date travels with the source: the model then judges
+        # freshness from evidence, not from memory, and the letter's date
+        # line has a witness even when the model forgets to fill its field.
+        date_line = f"\n    дата источника: {measured}" if measured else ""
         lines.append(
             f"[{index}] {candidate['title']}\n"
             f"    url: {candidate['url']}\n"
-            f"    раздел: {candidate['category']}\n"
+            f"    раздел: {candidate['category']}" + date_line + f"\n"
             f"    текст: {snippet}"
         )
     return "\n\n".join(lines)
@@ -679,6 +829,10 @@ def _map_items(raw_items: List[Dict[str, Any]], candidates: List[Dict[str, Any]]
         summary = str(raw.get("summary") or "").strip()
         if not summary:
             continue
+        # The MEASURED date outranks the model's guess: the harness read it
+        # from the URL and the snippet, and a measurement beats a recall.
+        date = str(source.get("date_measured") or "").strip() \
+            or str(raw.get("date") or "").strip()
         items.append({
             "title": title,
             "summary": summary,
@@ -688,7 +842,7 @@ def _map_items(raw_items: List[Dict[str, Any]], candidates: List[Dict[str, Any]]
             # с триллионом ... · 29 октября», which repeated the news in
             # a truncated form instead of naming where it came from.
             "source": _source_name(source),
-            "date": str(raw.get("date") or "").strip(),
+            "date": date,
             "category": str(raw.get("category") or "").strip() or source["category"],
             "tier": source["tier"],
         })
@@ -715,6 +869,14 @@ def _ask_model(
     One model call, with ONE extra try after a rate limit.
 
     Returns (result, note). The note is empty when the model answered.
+
+    The tool catalogue is NOT offered here: the dispatcher's model calls
+    (selection, the full-news writer) receive COMPLETE context — the source
+    list and the page text the harness already found and read. Measured
+    2026-11-09 in the cloud: the selection model saw `live_search`, burned
+    its rounds on EMPTY tool calls instead of picking by number, and the
+    digest went out with «отбор не выполнен». A task that does not need the
+    web must not be offered the web.
     """
     res: Dict[str, Any] = {}
     for attempt in range(2):
@@ -726,6 +888,7 @@ def _ask_model(
                 max_tokens=max_tokens,
                 temperature=temperature,
                 model_id=model_id,
+                offer_tools=False,
             )
         except Exception as e:
             return {}, f"модель недоступна ({type(e).__name__})"

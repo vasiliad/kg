@@ -610,6 +610,7 @@ class MiniMaxExecutor:
         model_id: Optional[str] = None,
         search_query: str = "",
         num_results: int = 3,
+        offer_tools: bool = True,
     ) -> Dict[str, Any]:
         """
         Executes delegated task via streaming to prevent timeouts.
@@ -624,6 +625,15 @@ class MiniMaxExecutor:
         `search_query` overrides the formulated query — the bot may have
         inherited the topic of the previous turn, and this executor must not
         re-formulate the prompt and lose it again.
+
+        `offer_tools=False` is for calls whose CONTEXT IS ALREADY COMPLETE
+        (the digest's selection and writer): the harness did the searching
+        and the reading, the model's only job is to pick by number or to
+        write. Measured 2026-11-09 in the cloud: the selection model saw the
+        tool catalogue, burned its rounds on EMPTY `live_search` calls
+        («live_searchlive_search… по запросу «») instead of picking by
+        number, and the digest went out with «отбор не выполнен». A task
+        that does not need the web must not be offered the web.
 
         A duty model may answer with a TOOL CALL instead of an answer.
         Measured on 2026-11-01: «Найди на озон» came back as a raw JSON call
@@ -674,6 +684,16 @@ class MiniMaxExecutor:
             if target_model != self.model_id
             else "You are MiniMax M3.1 Flash, the high-speed tactical execution agent in the Autonomous Complex.\n"
         )
+        tools_rules = (
+            "- Tools: the harness offers you `live_search` (search the live web) and `fetch_webpage` "
+            "(read one page). Call them when the answer needs the live web — the harness executes the "
+            "call and puts the facts into your context. If you do not need the live web, answer "
+            "directly. Your FINAL message must be prose for the operator: never leave a raw tool "
+            "call as the answer.\n"
+            if offer_tools else
+            "- In THIS call you have NO tools: the harness already searched and read everything you "
+            "need — it is all in the context. Pick from what is given and answer directly.\n"
+        )
         system_prompt = (
             identity_block +
             "\nOPERATIONAL RUNTIME SPECIFICATIONS & SYSTEM MANIFEST:\n"
@@ -693,11 +713,7 @@ class MiniMaxExecutor:
             "snapshot, quoting timestamps. If a fact is absent, say so plainly and offer the concrete "
             "action you can take right now.\n"
             "- Never claim an action was performed unless the snapshot or your own output shows it.\n"
-            "- Tools: the harness offers you `live_search` (search the live web) and `fetch_webpage` "
-            "(read one page). Call them when the answer needs the live web — the harness executes the "
-            "call and puts the facts into your context. If you do not need the live web, answer "
-            "directly. Your FINAL message must be prose for the operator: never leave a raw tool "
-            "call as the answer.\n\n"
+            + tools_rules +
             "When asked about your context window, environment limits, or supervisor/arbiter, cite these exact technical specifications without hesitation. "
             "Execute assigned tasks with rigorous logical reasoning and deliver complete, actionable responses."
         )
@@ -725,8 +741,12 @@ class MiniMaxExecutor:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
-                # The same catalogue for every model on duty.
-                tools=tool_call.TOOL_SCHEMAS,
+                # The same catalogue for every model on duty — unless this
+                # call's context is already complete (the digest's selection
+                # and writer): then no catalogue at all, and the system
+                # prompt says so, so the model does not burn its rounds on
+                # empty live_search calls (measured 2026-11-09).
+                tools=tool_call.TOOL_SCHEMAS if offer_tools else None,
             )
             if not call_result.get("ok"):
                 return {

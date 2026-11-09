@@ -706,6 +706,170 @@ def test_14g_the_reader_burns_reserve_credits_only_on_thin_pages():
           "is burned only where it is needed, and silence never replaces a read.")
 
 
+def test_93_a_daily_digest_must_not_carry_year_old_pages_as_news():
+    """
+    The operator pointed at the date (2026-11-10): the digest carried
+    «OpenAI впервые за пять лет выпустила языковые модели» dated 2025-08-07 —
+    a YEAR-old page standing in a fresh issue as news. The dates were there
+    all along (in the URLs and the snippets); nobody measured them.
+
+    The gate is the same pattern as the reference-host filter: the harness
+    MEASURES the date at collection time (URL, snippet, relative «2 часа
+    назад»), drops what is KNOWN to be older than DIGEST_FRESH_DAYS, and
+    keeps what it cannot read («I cannot read it» is not «it is old»). The
+    soft freshness rule lives in SELECTION_PROMPT as the second layer, and
+    the MEASURED date outranks the model's guess in the letter.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 93: the digest measures dates and drops the stale ones")
+    print("=" * 60)
+    from harness.daily_dispatcher import (
+        parse_source_date, collect_digest_sources, SELECTION_PROMPT,
+        _map_items, DIGEST_FRESH_DAYS,
+    )
+
+    now = datetime.now(timezone.utc)
+
+    # --- (a) dates are measured from the URL and the snippet --------------
+    expected_cases = [
+        ("https://nplus1.ru/news/2025/08/07/gpt-oss", "", "OpenAI",
+         datetime(2025, 8, 7, tzinfo=timezone.utc)),
+        ("https://example.com/a", "опубликовано 2025-08-07 в журнале", "",
+         datetime(2025, 8, 7, tzinfo=timezone.utc)),
+        ("https://example.com/b", "новость от 07.08.2025", "",
+         datetime(2025, 8, 7, tzinfo=timezone.utc)),
+        ("https://example.com/c", "7 августа 2025 года компания сообщила", "",
+         datetime(2025, 8, 7, tzinfo=timezone.utc)),
+        ("https://example.com/d", "August 7, 2025 — the release", "",
+         datetime(2025, 8, 7, tzinfo=timezone.utc)),
+        ("https://example.com/e", "разбор术语 июнь 2025 года", "",
+         datetime(2025, 6, 1, tzinfo=timezone.utc)),
+        ("https://example.com/f/2026/11/09/", "текст", "",
+         datetime(2026, 11, 9, tzinfo=timezone.utc)),
+    ]
+    for url, snippet, title, expected in expected_cases:
+        got = parse_source_date(url, snippet, title, now=now)
+        assert got == expected, f"{url}: measured {got}, expected {expected}"
+
+    fresh = parse_source_date("https://example.com/g", "опубликовано 2 часа назад", now=now)
+    assert fresh is not None and (now - fresh) < timedelta(hours=3), \
+        f"a relative date must measure as fresh: {fresh}"
+
+    unknown = parse_source_date("https://example.com/h", "текст вовсе без дат")
+    assert unknown is None, "an undated source is not a stale one"
+
+    # --- (b) the gate: a year-old page never reaches the model's list -----
+    class _FakeExecutor:
+        last_search_tier = "LangSearch"
+
+        def search_web(self, query, num_results=3):
+            return [
+                {"title": "старая новость",
+                 "url": "https://nplus1.ru/news/2025/08/07/gpt-oss",
+                 "snippet": "OpenAI выпустила две модели с открытыми весами"},
+                {"title": "свежая новость",
+                 "url": "https://example.com/2026/11/09/ai",
+                 "snippet": "вышла новая модель"},
+                {"title": "без даты",
+                 "url": "https://example.org/abc",
+                 "snippet": "нечто без даты"},
+            ]
+
+    candidates, tiers, queries = collect_digest_sources(_FakeExecutor())
+    urls = [c["url"] for c in candidates]
+    assert "https://nplus1.ru/news/2025/08/07/gpt-oss" not in urls, \
+        f"a year-old page must be dropped before the model sees it: {urls}"
+    assert "https://example.org/abc" in urls, \
+        "an undated source must survive: «I cannot read it» is not «it is old»"
+    fresh_c = next(c for c in candidates if c["url"].startswith("https://example.com/2026"))
+    assert fresh_c.get("date_measured"), \
+        "the measured date must travel with the candidate"
+    assert tiers == ["LangSearch"], "the tier must survive the gate"
+
+    # --- (c) the measured date outranks the model's guess -----------------
+    number = urls.index("https://example.com/2026/11/09/ai") + 1
+    raw = [{"n": number, "title": "т", "summary": "с",
+            "date": "домысел модели", "category": "Модели"}]
+    items = _map_items(raw, candidates)
+    assert items and items[0]["date"] == fresh_c["date_measured"], \
+        f"a measurement beats a recall: {items[0]['date']}"
+
+    # --- (d) the soft rule is the second layer ----------------------------
+    assert "свеж" in SELECTION_PROMPT.lower(), \
+        "the prompt must tell the model what a daily digest means"
+    assert DIGEST_FRESH_DAYS >= 1.0
+
+    print("[+] Test 93 Passed: dates are measured, the stale are dropped "
+          "before the model, the unknown are kept and the soft rule backs them up.")
+
+
+def test_94_the_digests_model_calls_must_not_offer_the_web():
+    """
+    The digest of 2026-11-09 came out with «Отбор новостей не выполнен»:
+    the selection model saw the tool catalogue, burned its rounds on EMPTY
+    live_search calls («live_searchlive_searchlive_search… по запросу «»)
+    instead of picking by number, and the executor honestly reported the
+    unresolved tool call — which the parser could not read.
+
+    `enable_search=False` only skips the PRE-fetch; the catalogue still went
+    out with every call. Now the dispatcher's calls (selection, the
+    full-news writer) go out with offer_tools=False: no catalogue in the
+    API call AND a system prompt that says NO tools are available — their
+    context is already complete (the source list, the page text).
+    """
+    print("\n" + "=" * 60)
+    print("TEST 94: the digest's model calls must not offer the web")
+    print("=" * 60)
+    import harness.minimax_executor as ex_mod
+    from harness import daily_dispatcher as dd
+
+    # --- (a) the dispatcher's calls carry offer_tools=False ----------------
+    captured: Dict[str, Any] = {}
+
+    class _Recorder:
+        def execute_task(self, **kw):
+            captured.update(kw)
+            return {"status": "SUCCESS", "content": "{\"items\": []}"}
+
+    res, note = dd._ask_model(_Recorder(), task_prompt="выбери новости")
+    assert note == "", f"the call must succeed: {note}"
+    assert captured.get("offer_tools") is False, \
+        f"the digest's model call must not offer the web: {captured}"
+    assert captured.get("enable_search") is False, \
+        "the digest's model call must not pre-fetch the web either"
+
+    # --- (b) execute_task honours the flag ---------------------------------
+    executor = ex_mod.MiniMaxExecutor.__new__(ex_mod.MiniMaxExecutor)
+    executor.model_id = "minimaxai/minimax-m3.1-flash"
+    saved_call = ex_mod.MiniMaxExecutor._call_model
+    calls: Dict[str, Any] = {}
+
+    def _fake_call(self, **kw):
+        calls.update(kw)
+        return {"ok": True, "content": "готово", "reasoning": ""}
+
+    try:
+        ex_mod.MiniMaxExecutor._call_model = _fake_call
+        executor.execute_task("задача", context="контекст",
+                              enable_search=False, offer_tools=False)
+        assert calls.get("tools") is None, \
+            "a no-tools call must not carry the catalogue in the API request"
+        prompt = str(calls.get("system_prompt") or "")
+        assert "NO tools" in prompt, "the prompt must SAY that tools are absent"
+        assert "Call them" not in prompt, \
+            "the prompt must not invite tool calls it cannot serve"
+
+        # the default is unchanged: the bot's calls still offer the catalogue
+        executor.execute_task("задача", context="контекст", enable_search=False)
+        assert calls.get("tools") == ex_mod.tool_call.TOOL_SCHEMAS, \
+            "the bot's calls must keep the catalogue"
+    finally:
+        ex_mod.MiniMaxExecutor._call_model = saved_call
+
+    print("[+] Test 94 Passed: a task that does not need the web is not "
+          "offered the web — the selection picks by number, not searches.")
+
+
 def test_15_telegram_cursor_survives_restart():
     print("\n" + "=" * 60)
     print("TEST 15: Telegram cursor — survives a restart, never replays, never skips")
@@ -8891,6 +9055,8 @@ if __name__ == "__main__":
         test_14e_langsearch_parses_standard_shape,
         test_14f_firecrawl_is_a_reserve_tier_that_tells_the_truth,
         test_14g_the_reader_burns_reserve_credits_only_on_thin_pages,
+        test_93_a_daily_digest_must_not_carry_year_old_pages_as_news,
+        test_94_the_digests_model_calls_must_not_offer_the_web,
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,
