@@ -30,10 +30,11 @@
   },
   "patch_bytes": 0,
   "attempt_day": "2026-11-09",
-  "checked_at": "2026-11-09T04:08:37.048295+00:00",
-  "checked_kind": "attempt",
+  "checked_at": "2026-11-09T12:47:23.971020+00:00",
+  "checked_kind": "check_only",
   "verdict_id": "20261109T040837Z",
   "last_attempt_at": "2026-11-09T04:08:37.048395+00:00",
-  "attempt_age_hours": 0.06,
-  "freshness": "Последняя попытка: 09.11 04:08 UTC (0 мин назад)."
+  "attempt_age_hours": 8.65,
+  "freshness": "Последняя попытка: 09.11 04:08 UTC (8.6 ч назад).",
+  "skipped_today": true
 }
