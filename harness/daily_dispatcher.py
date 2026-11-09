@@ -887,6 +887,13 @@ def _map_items(raw_items: List[Dict[str, Any]], candidates: List[Dict[str, Any]]
             # a truncated form instead of naming where it came from.
             "source": _source_name(source),
             "date": date,
+            # The MEASURED date travels with the item: the full-news writer
+            # later names dates it READ IN THE PAGE TEXT — which may be a
+            # date the page merely mentions, not the publication date — and
+            # must not overwrite a systematic URL/snippet measurement
+            # (measured 2026-11-10: the writer re-stamped «July 24, 2025»
+            # onto items that had passed both gates).
+            "date_measured": str(source.get("date_measured") or ""),
             "category": str(raw.get("category") or "").strip() or source["category"],
             "tier": source["tier"],
         })
@@ -1138,7 +1145,12 @@ def _apply_descriptions(
         if title:
             item["title"] = title
         date = str(raw.get("date") or "").strip()
-        if date:
+        # The writer's date comes from the PAGE TEXT — it may be a date the
+        # page merely mentions. A date MEASURED at collection (from the URL
+        # and the snippet) is the systematic publication witness and is not
+        # overwritten; the writer's date fills only the unmeasured ones,
+        # and the third freshness gate judges it either way.
+        if date and not str(item.get("date_measured") or "").strip():
             item["date"] = date
         item["detail"] = "full" if len(str(item.get("summary") or "")) >= MIN_FULL_CHARS else "brief"
         by_number[number] = item

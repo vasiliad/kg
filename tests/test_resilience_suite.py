@@ -2846,12 +2846,17 @@ def test_41_the_news_is_written_out_in_full():
             return "Полный текст источника. " * 200
 
         def execute_task(self, **kwargs):
+            # The writer names the page's own date. It must be FRESH relative
+            # to the wall clock — the third freshness gate judges the date,
+            # and a hardcoded «01.11.2026» would age into the drop window
+            # (measured 2026-11-10: exactly that happened to this fixture).
+            fresh_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%d.%m.%Y")
             answer = json.dumps({"items": [
                 {
                     "n": 1,
                     "title": "Развёрнутый заголовок",
                     "summary": "Подробное описание новости со всеми деталями. " * 12,
-                    "date": "01.11.2026",
+                    "date": fresh_date,
                 },
                 {"n": 2, "title": "Короткий заголовок", "summary": "Коротко."},
             ]}, ensure_ascii=False)
