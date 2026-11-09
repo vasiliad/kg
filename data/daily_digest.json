@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-08T05:46:41Z",
-  "subject": "Ежедневный дайджест ИИ: 08.11.2026",
+  "generated_at": "2026-11-09T09:32:12Z",
+  "subject": "Ежедневный дайджест ИИ: 09.11.2026",
   "tier": "TinyFish",
   "queries": [
     "новые модели ИИ релиз открытые веса",
@@ -12,23 +12,23 @@
     "исследования ИИ reasoning бенчмарки модели",
     "AI research reasoning benchmark LLM paper"
   ],
-  "sources_count": 37,
+  "sources_count": 35,
   "selection_mode": "модель отобрала",
   "full_news_count": 0,
   "items_count": 6,
   "items": [
     {
-      "title": "Moonshot AI выпустила Kimi K3 с открытыми весами",
-      "summary": "Июльский релиз Kimi K3 с открытыми весами стал поводом для острой дискуссии в индустрии: обсуждаются преимущества open-weight подхода и его последствия для рынка.",
-      "url": "https://www.kommersant.ru/doc/8907150",
-      "source": "kommersant.ru",
-      "date": "июль 2026",
+      "title": "OpenAI впервые за пять лет выпустила языковые модели с открытыми весами",
+      "summary": "OpenAI выпустила две текстовые большие языковые модели с открытыми весами под лицензией Apache 2.0: gpt-oss-120b (117 млрд параметров) и gpt-oss-20b. Это первое за пять лет открытие весов языковых моделей компании.",
+      "url": "https://nplus1.ru/news/2025/08/07/gpt-oss",
+      "source": "nplus1.ru",
+      "date": "2025-08-07",
       "category": "Модели",
       "detail": ""
     },
     {
-      "title": "OpenAI представила open-weight reasoning-модели",
-      "summary": "На странице open models OpenAI предлагает усовершенствованные модели рассуждений с открытым весом: их можно настраивать под любой сценарий, запускать где угодно и скачивать с Hugging Face.",
+      "title": "Открытые модели от OpenAI",
+      "summary": "Официальная страница OpenAI: усовершенствованные модели рассуждений с открытым весом, которые можно настроить под любой сценарий использования и запускать откуда угодно.",
       "url": "https://openai.com/ru-RU/open-models/",
       "source": "openai.com",
       "date": "",
@@ -36,38 +36,38 @@
       "detail": ""
     },
     {
-      "title": "OpenAI переходит на Google TPU, подрывая монополию Nvidia",
-      "summary": "OpenAI переходит на тензорные процессоры Google TPU, что создаёт угрозу доминированию Nvidia и меняет структуру рынка ИИ-вычислений.",
-      "url": "https://www.pravda.ru/news/technolgies/2433972-openai-google-tpu-shift/",
-      "source": "pravda.ru",
+      "title": "What Are Open-Weight Models? The Latest Releases, and ...",
+      "summary": "Разбор терминологии: большинство так называемых open source LLM на деле являются open-weight моделями. Обзор релизов за июль–октябрь 2026 года, включая Kimi K3.",
+      "url": "https://www.deepset.ai/blog/open-source-llm-open-weight-models",
+      "source": "deepset.ai",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Open Weight ИИ-модели: риски китайских нейросетей",
+      "summary": "Как устроены модели с открытыми весами, куда уходят пользовательские данные и какие риски несут DeepSeek, Qwen, Kimi и GLM.",
+      "url": "https://coursehunter.net/news/chto-takoe-ii-modeli-s-otkrytymi-vesami-open-weight-i-bezopasny-li-kitayskie-neyroseti",
+      "source": "coursehunter.net",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Google's New TPU Quietly Ends the GPU Era?",
+      "summary": "Google анонсировала восьмое поколение TPU и вместо одного чипа представила сразу два, включая TPU 8t для обучения. Авторы ставят вопрос, способны ли специализированные TPU потеснить GPU.",
+      "url": "https://www.youtube.com/watch?v=iseM_Sb-ruo&vl=en",
+      "source": "youtube.com",
       "date": "",
       "category": "Инфраструктура",
       "detail": ""
     },
     {
-      "title": "Дорожная карта Google TPU как противовес доминированию Nvidia",
-      "summary": "По оценке Data Center Frontier, линейка Tensor Processing Units Google постепенно превращается в значимый противовес доминированию Nvidia в облачной AI-инфраструктуре.",
-      "url": "https://www.datacenterfrontier.com/machine-learning/article/55336429/googles-tpu-roadmap-challenging-nvidias-dominance-in-ai-infrastructure",
-      "source": "datacenterfrontier.com",
+      "title": "Google TPU v8 vs Nvidia: How Inference Is Rewriting the AI Market",
+      "summary": "Анализ влияния TPU v8 на рынок AI-инфраструктуры и инференса. Приводятся параметры pod-масштаба: 1 152 чипа и суммарная ёмкость SRAM 432 ГБ.",
+      "url": "https://io-fund.com/ai-stocks/google-tpu-v8-vs-nvidia-inference-rewrites-ai-market",
+      "source": "io-fund.com",
       "date": "",
-      "category": "Инфраструктура",
-      "detail": ""
-    },
-    {
-      "title": "Google разместит TPU у небольших облачных провайдеров",
-      "summary": "Google планирует предоставлять свои TPU небольшим облачным провайдерам: специализированные ASIC-чипы эффективнее универсальных GPU для ML-задач, но менее гибки.",
-      "url": "https://www.linkedin.com/posts/analytics-india-magazine_google-is-taking-a-bold-step-in-the-ai-hardware-activity-7370703739088797696-QYb0",
-      "source": "linkedin.com",
-      "date": "",
-      "category": "Инфраструктура",
-      "detail": ""
-    },
-    {
-      "title": "Эскалация борьбы за AI-чипы между Nvidia и Google",
-      "summary": "Сравнение архитектур: GPU Blackwell и Hopper гибче и универсальнее, TPU — специализированные ASIC. Материал датирован 27 ноября 2025 года.",
-      "url": "https://lilys.ai/notes/ru/google-tpu-20251127/nvidia-google-ai-chip-battle",
-      "source": "lilys.ai",
-      "date": "2025-11-27",
       "category": "Инфраструктура",
       "detail": ""
     }
