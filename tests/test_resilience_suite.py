@@ -794,6 +794,27 @@ def test_93_a_daily_digest_must_not_carry_year_old_pages_as_news():
     assert items and items[0]["date"] == fresh_c["date_measured"], \
         f"a measurement beats a recall: {items[0]['date']}"
 
+    # --- (e) the SECOND gate: the model's own date field is a witness -----
+    # Measured 2026-11-09 (dry-run): the collection gate dropped one stale
+    # page, but the model still picked pages it itself dated «9 мая 2026»
+    # and «9 декабря 2025». A date that reads as months-old kills the pick,
+    # whoever read it first.
+    from harness.daily_dispatcher import drop_stale_items
+    number_undated = urls.index("https://example.org/abc") + 1
+    raw = [{"n": number_undated, "title": "т", "summary": "с",
+            "date": "9 декабря 2025", "category": "Модели"}]
+    items = _map_items(raw, candidates)
+    assert items and items[0]["date"] == "9 декабря 2025", \
+        "the model's date must survive mapping while no measurement exists"
+    kept, dropped = drop_stale_items(items)
+    assert dropped == 1 and not kept, \
+        f"a pick the model itself dated months back must be dropped: {kept}"
+    # a fresh or unparsable date keeps the item
+    raw = [{"n": number_undated, "title": "т", "summary": "с",
+            "date": "вчера", "category": "Модели"}]
+    kept, dropped = drop_stale_items(_map_items(raw, candidates))
+    assert dropped == 0 and kept, "a fresh date must keep the pick"
+
     # --- (d) the soft rule is the second layer ----------------------------
     assert "свеж" in SELECTION_PROMPT.lower(), \
         "the prompt must tell the model what a daily digest means"

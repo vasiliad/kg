@@ -807,6 +807,37 @@ RETRY_PROMPT = (
 )
 
 
+def drop_stale_items(items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    """
+    The SECOND freshness gate: after the model picked, its own date field
+    is a witness.
+
+    Measured 2026-11-09 (dry-run): the collection gate dropped one stale
+    page, but the model still picked pages it itself dated «9 мая 2026»
+    and «9 декабря 2025» — months-old pages standing in a daily digest as
+    news. The collection gate could not read those dates (the snippets at
+    collection time carried none), and the prompt's soft rule did not stop
+    the model. So the model's date is Parsed like any other: a date that
+    reads as older than DIGEST_FRESH_DAYS kills the pick, whoever read it
+    first. An unparsable or empty date keeps the item — no evidence, no
+    verdict.
+    """
+    kept: List[Dict[str, Any]] = []
+    dropped = 0
+    for item in items:
+        date_text = str(item.get("date") or "").strip()
+        measured = parse_source_date("", date_text, date_text) if date_text else None
+        if measured is not None:
+            age_days = (datetime.now(timezone.utc) - measured).total_seconds() / 86400.0
+            if age_days > DIGEST_FRESH_DAYS:
+                dropped += 1
+                print(f"[!] The pick is stale ({measured.strftime('%d.%m.%Y')}, "
+                      f"> {DIGEST_FRESH_DAYS:.0f} days): {str(item.get('url') or '')[:70]}")
+                continue
+        kept.append(item)
+    return kept, dropped
+
+
 def _map_items(raw_items: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     The model's picks, bound to the sources we actually found.
@@ -957,7 +988,15 @@ def select_digest_items(
             if items:
                 if attempt_index:
                     print("[*] The strict retry produced a readable answer.")
-                return items, ""
+                # The second freshness gate: the model's own date field is a
+                # witness too (measured 2026-11-09: the model picked pages it
+                # itself dated months back).
+                items, stale_dropped = drop_stale_items(items)
+                if items:
+                    return items, ""
+                last_note = ("модель отобрала источники, но все они оказались "
+                             f"старше окна свежести ({DIGEST_FRESH_DAYS:.0f} дней)")
+                break
             last_note = "ни один выбранный источник не подтвердился"
             break
 
