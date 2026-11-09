@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-11-09T20:06:51Z",
+  "subject": "Ежедневный дайджест ИИ: 10.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 33,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 6,
+  "items": [
+    {
+      "title": "Почему важны новые модели OpenAI с открытым весом",
+      "summary": "Обзор значения новых open-weight-моделей OpenAI для разработчиков и рынка; в тексте также отмечается, что новые модели мира Genie 3 от Google могут привести к появлению новых форм игр и развлечений.",
+      "url": "https://ru.linkedin.com/pulse/why-openais-new-open-weight-models-matter-fast-company-sdple?tl=ru",
+      "source": "ru.linkedin.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "OpenAI представила open-weight модели рассуждений",
+      "summary": "OpenAI публикует усовершенствованные модели рассуждений с открытым весом: их можно настраивать под конкретный сценарий использования и запускать на собственной инфраструктуре.",
+      "url": "https://openai.com/ru-RU/open-models/",
+      "source": "openai.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Гонка open-weight: крупные шаги Mistral, Reflection AI и Moonshot",
+      "summary": "Еженедельный обзор open-weight-гонки: Mistral, Reflection AI и Moonshot сделали заметные шаги; в фокусе — open-weight-модель с $6,3 млрд, которая не оправдала ожиданий.",
+      "url": "https://www.youtube.com/watch?v=WrCjAAl9okA",
+      "source": "youtube.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Google анонсировала восьмое поколение TPU",
+      "summary": "Google представила сразу два ускорителя восьмого поколения TPU, включая TPU 8t для обучения, расширяя собственную альтернативу GPU NVIDIA.",
+      "url": "https://www.youtube.com/watch?v=iseM_Sb-ruo&vl=en",
+      "source": "youtube.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Дорожная карта Google TPU как противовес доминированию NVIDIA",
+      "summary": "По оценке Data Center Frontier, стратегия Google по тензорным процессорам постепенно превратилась в заметный противовес доминированию NVIDIA в облачной AI-инфраструктуре.",
+      "url": "https://www.datacenterfrontier.com/machine-learning/article/55336429/googles-tpu-roadmap-challenging-nvidias-dominance-in-ai-infrastructure",
+      "source": "datacenterfrontier.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Google разместит TPU в дата-центрах небольших облачных провайдеров",
+      "summary": "Google расширяет доступ к своим тензорным процессорам, размещая их в дата-центрах небольших облачных операторов — заметный шаг в аппаратной гонке с NVIDIA.",
+      "url": "https://www.linkedin.com/posts/analytics-india-magazine_google-is-taking-a-bold-step-in-the-ai-hardware-activity-7370703739088797696-QYb0",
+      "source": "linkedin.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    }
+  ]
+}
