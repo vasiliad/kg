@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-11-09T09:32:12Z",
+  "subject": "Ежедневный дайджест ИИ: 09.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 35,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 6,
+  "items": [
+    {
+      "title": "OpenAI впервые за пять лет выпустила языковые модели с открытыми весами",
+      "summary": "OpenAI выпустила две текстовые большие языковые модели с открытыми весами под лицензией Apache 2.0: gpt-oss-120b (117 млрд параметров) и gpt-oss-20b. Это первое за пять лет открытие весов языковых моделей компании.",
+      "url": "https://nplus1.ru/news/2025/08/07/gpt-oss",
+      "source": "nplus1.ru",
+      "date": "2025-08-07",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Открытые модели от OpenAI",
+      "summary": "Официальная страница OpenAI: усовершенствованные модели рассуждений с открытым весом, которые можно настроить под любой сценарий использования и запускать откуда угодно.",
+      "url": "https://openai.com/ru-RU/open-models/",
+      "source": "openai.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "What Are Open-Weight Models? The Latest Releases, and ...",
+      "summary": "Разбор терминологии: большинство так называемых open source LLM на деле являются open-weight моделями. Обзор релизов за июль–октябрь 2026 года, включая Kimi K3.",
+      "url": "https://www.deepset.ai/blog/open-source-llm-open-weight-models",
+      "source": "deepset.ai",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Open Weight ИИ-модели: риски китайских нейросетей",
+      "summary": "Как устроены модели с открытыми весами, куда уходят пользовательские данные и какие риски несут DeepSeek, Qwen, Kimi и GLM.",
+      "url": "https://coursehunter.net/news/chto-takoe-ii-modeli-s-otkrytymi-vesami-open-weight-i-bezopasny-li-kitayskie-neyroseti",
+      "source": "coursehunter.net",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Google's New TPU Quietly Ends the GPU Era?",
+      "summary": "Google анонсировала восьмое поколение TPU и вместо одного чипа представила сразу два, включая TPU 8t для обучения. Авторы ставят вопрос, способны ли специализированные TPU потеснить GPU.",
+      "url": "https://www.youtube.com/watch?v=iseM_Sb-ruo&vl=en",
+      "source": "youtube.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Google TPU v8 vs Nvidia: How Inference Is Rewriting the AI Market",
+      "summary": "Анализ влияния TPU v8 на рынок AI-инфраструктуры и инференса. Приводятся параметры pod-масштаба: 1 152 чипа и суммарная ёмкость SRAM 432 ГБ.",
+      "url": "https://io-fund.com/ai-stocks/google-tpu-v8-vs-nvidia-inference-rewrites-ai-market",
+      "source": "io-fund.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    }
+  ]
+}
