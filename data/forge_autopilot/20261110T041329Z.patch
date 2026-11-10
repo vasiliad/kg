@@ -1,0 +1,15 @@
+diff --git a/harness/fleet_tuner.py b/harness/fleet_tuner.py
+--- a/harness/fleet_tuner.py
++++ b/harness/fleet_tuner.py
+@@ -430,6 +430,10 @@
+     def composite(self, quality: float, latency: float, ok_rate: float) -> Tuple[float, float, float]:
+         p = self.policy["weights"]
+-        fast_cap = 30.0
++        # Measured weak spot: minimax-m3.1-flash at 16.88s latency still scored
++        # speed≈0.50 because the cap was hardcoded at 30s while the policy
++        # declares fast_latency_cap_sec=12.0. The measured cap must be the one
++        # actually used, otherwise slow models keep a phantom speed bonus.
++        fast_cap = float(self.policy.get("fast_latency_cap_sec") or 30.0)
+         speed = max(0.0, min(1.0, 1.0 - (max(latency, 0.5) - 2.0) / fast_cap))
+         total = p["quality"] * quality + p["speed"] * speed + p["reliability"] * ok_rate
+         return round(100.0 * total, 2), round(speed, 3), round(quality, 3)

@@ -1,40 +1,50 @@
 {
-  "attempted_at": "2026-11-09T04:08:37.048395+00:00",
+  "attempted_at": "2026-11-10T04:13:29.401658+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
-  "stage": "no_writer",
-  "facts_digest": "Дрейф флота: REPLACED, средняя дельта 2.63, худший: minimaxai/minimax-m3.1-flash (дельта -5.96)\n- stepfun-ai/step-5-preview: балл 97.81, задержка 4.63с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.44с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 83.42, задержка 6.0с, ok_rate 0.875, слабейшая задача prose=0.0\n- z-ai/glm-5.3-flash: балл 67.5, задержка 36.13с, ok_rate 1.0, слабейшая задача instruction=0.0\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (0.7 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 228, ошибок 12, ответов 369",
-  "error": "сетевая дежурная: SUCCESS_EMPTY_ANSWER; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
-  "summary": "Ни одна модель не написала патч — улучшать нечего.",
-  "writer": {},
+  "stage": "suite",
+  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 12.05, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта 0.0)\n- stepfun-ai/step-5-preview: балл 97.3, задержка 5.24с, ok_rate 1.0, слабейшая задача instruction=1.0\n- mistralai/mistral-large-4-1t-a52b: балл 96.93, задержка 5.68с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.14с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 79.35, задержка 16.88с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: stepfun-ai/step-5-preview, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 255, ошибок 19, ответов 425",
+  "branch": null,
+  "error": "suite упал в песочнице",
+  "summary": "Патч отклонён конституцией на этапе «suite»: suite упал в песочнице",
+  "writer": {
+    "model": "mistralai/mistral-large-4-1t-a52b",
+    "role": "duty_primary",
+    "score": 96.93,
+    "verified": true,
+    "elapsed": 193.46,
+    "status": "SUCCESS"
+  },
   "chooser": {
     "model": "stepfun-ai/step-5-preview",
     "role": "duty_primary",
-    "elapsed": 65.05,
+    "elapsed": 32.98,
     "status": "SUCCESS"
   },
-  "duty_status": "SUCCESS_EMPTY_ANSWER",
-  "local_status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
-  "target": "harness/duty_shift.py",
-  "normalised": false,
-  "notes": [],
+  "duty_status": "SUCCESS",
+  "local_status": null,
+  "target": "harness/fleet_tuner.py",
+  "normalised": true,
+  "notes": [
+    "заголовок @@ -430,6 +430,9 @@ исправлен на измеренные -430,6 +430,10"
+  ],
   "repair": {
     "attempted": false,
     "ok": false
   },
   "gate": {
-    "ok": null,
-    "stage": null,
+    "ok": false,
+    "stage": "suite",
     "branch": null,
-    "error": null
+    "error": "suite упал в песочнице"
   },
-  "patch_bytes": 0,
-  "attempt_day": "2026-11-09",
-  "checked_at": "2026-11-09T12:47:23.971020+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261109T040837Z",
-  "last_attempt_at": "2026-11-09T04:08:37.048395+00:00",
-  "attempt_age_hours": 8.65,
-  "freshness": "Последняя попытка: 09.11 04:08 UTC (8.6 ч назад).",
-  "skipped_today": true
+  "patch_bytes": 941,
+  "attempt_day": "2026-11-10",
+  "checked_at": "2026-11-10T04:13:29.401542+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261110T041329Z",
+  "last_attempt_at": "2026-11-10T04:13:29.401658+00:00",
+  "attempt_age_hours": 0.07,
+  "freshness": "Последняя попытка: 10.11 04:13 UTC (0 мин назад).",
+  "patch_file": "data/forge_autopilot/20261110T041329Z.patch"
 }
