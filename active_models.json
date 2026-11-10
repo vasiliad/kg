@@ -1,16 +1,16 @@
 {
-  "timestamp": "2026-11-08T12:42:26.162153+00:00",
-  "emergency_mode": false,
-  "last_emergency_run": "2026-11-08T12:42:26.162153+00:00",
-  "emergency_reason": "",
-  "emergency_cause": "",
+  "timestamp": "2026-11-10T14:19:39.206685+00:00",
+  "emergency_mode": true,
+  "last_emergency_run": "2026-11-10T14:19:39.206685+00:00",
+  "emergency_reason": "State stale by 6.7h (threshold: 6.0h; measured 2026-11-10T07:29:04+00:00)",
+  "emergency_cause": "state_stale",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "nvidia/nemotron-3-ultra-550b-a55b (дежурная команда по живому замеру)",
-  "local_arbiter_feedback": "# Emergency Architecture Assessment — DeepSeek-TPU-NIM Ecosystem\n**Operating mode:** Emergency CPU fallback · **Trigger:** state stale by 6.3 h (threshold 6.0 h), measured `2026-11-08T06:17:17+00:00` · **Report timestamp:** `2026-11-08T12:37:27.062589+00:00`\n\n**Method constraint honored:** the duty roster below is reproduced exactly as measured. No models were invented, no re-ranking was performed, and no scores were assigned by me. All scores cited are the ones supplied in the measured-fleet an...",
+  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter_feedback": "# Emergency Systems Architecture Brief — DeepSeek‑TPU‑NIM Ecosystem\n**Operating mode:** Emergency CPU fallback · **Report timestamp:** 2026‑11‑10T14:08:41.571950+00:00 · **Trigger:** state stale by 6.7 h (threshold 6.0 h), measured 2026‑11‑10T07:29:04+00:00\n\n> **Scope discipline:** I have not re-ranked the roster, assigned any model scores of my own, or introduced any model id that is not present in the supplied `measured_fleet` / `candidate_models` data. All scores below are quoted as measured....",
   "catalog_diff": {
     "new_count": 0,
     "removed_count": 0,
@@ -624,7 +624,5 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-11-10T07:45:13.619256+00:00Z",
-  "emergency_cleared_at": "2026-11-08T21:34:49.344416+00:00",
-  "emergency_cleared_because": "the fleet was measured again (2026-11-08T21:02:01+00:00, fleet_decision.tuned_at)"
+  "last_updated": "2026-11-10T14:19:39.206740+00:00Z"
 }
