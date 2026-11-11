@@ -706,6 +706,48 @@ def test_14g_the_reader_burns_reserve_credits_only_on_thin_pages():
           "is burned only where it is needed, and silence never replaces a read.")
 
 
+def test_95_no_python313_only_stdlib_calls_in_the_tree():
+    """
+    The same judge/runner mismatch as test_61, one layer lower: an API that
+    EXISTS only in a newer stdlib.
+
+    Measured 2026-11-11, cloud run 42954046383: the suite was green on the
+    local Python 3.14 and RED on the cloud's 3.11 — test_89 died with
+    "Path.read_text() got an unexpected keyword argument 'newline'":
+    Path.read_text/write_text accept `newline` only from Python 3.13, and
+    the cloud runners are 3.11. So the whole tree is scanned for those
+    calls, and the scanner is checked against a synthetic offender so a
+    guard that stopped looking cannot pass silently.
+    """
+    print("\n" + "=" * 60)
+    print("TEST 95: no 3.13+-only stdlib calls in the tree")
+    print("=" * 60)
+    import re
+
+    offenders = re.compile(
+        r"\.(?:read_text|write_text)\([^)]*newline\s*=", re.DOTALL)
+    bad = []
+    for py in sorted(list((PROJECT_ROOT / "harness").glob("*.py"))
+                     + list((PROJECT_ROOT / "tests").glob("*.py"))
+                     + list((PROJECT_ROOT / "scripts").glob("*.py"))):
+        text = py.read_text(encoding="utf-8")
+        for m in offenders.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            bad.append(f"{py.relative_to(PROJECT_ROOT)}:{line}")
+    assert not bad, \
+        f"3.13+-only Path kwarg(s) — the cloud runs 3.11: {bad}"
+
+    # the scanner must find a synthetic offender (the word is split so the
+    # fixture itself does not trip the scan)
+    synthetic = "p.read_text(encoding='utf-8', new" + "line='')"
+    assert offenders.search(synthetic), "the scanner itself must catch the shape"
+    assert not offenders.search("with open(p, newline='') as f: f.read()"), \
+        "the builtin open() accepts newline on every version — it is the fix"
+
+    print("[+] Test 95 Passed: no Path.read_text/write_text(newline=...) "
+          "anywhere — the suite cannot go green on 3.14 and red on 3.11 this way.")
+
+
 def test_93_a_daily_digest_must_not_carry_year_old_pages_as_news():
     """
     The operator pointed at the date (2026-11-10): the digest carried
@@ -6277,7 +6319,11 @@ def test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies():
     bot_wf = PROJECT_ROOT / ".github" / "workflows" / "telegram_bot.yml"
 
     def _exec(path: Path, text: str) -> Path:
-        path.write_text(text, encoding="utf-8", newline="\n")
+        # the newline kwarg of Path.write_text exists only from Python 3.13;
+        # the cloud runners are 3.11 (measured 2026-11-11: the suite was
+        # green locally and red in the cloud) — the builtin open() is safe.
+        with open(path, "w", encoding="utf-8", newline="\n") as _f:
+            _f.write(text)
         try:
             os.chmod(path, 0o755)
         except OSError:
@@ -6376,7 +6422,7 @@ def test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies():
         work = tmp / "work"
         (work / "harness").mkdir(parents=True, exist_ok=True)
         (work / "harness" / "telegram_bot.py").write_text(
-            "import sys\nsys.exit(7)\n", encoding="utf-8", newline="\n")
+            "import sys\nsys.exit(7)\n", encoding="utf-8")
         home = tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
         denv = dict(os.environ)
@@ -6393,7 +6439,7 @@ def test_72_the_watchdog_and_the_daemon_say_it_when_the_bot_dies():
 
         # A bot that is still alive when the window ends is the NORMAL end.
         (work / "harness" / "telegram_bot.py").write_text(
-            "import time\ntime.sleep(20)\n", encoding="utf-8", newline="\n")
+            "import time\ntime.sleep(20)\n", encoding="utf-8")
         result = subprocess.run([bash, str(daemon)], cwd=str(work), capture_output=True,
                                 text=True, timeout=180, env=denv)
         assert result.returncode == 0, (
@@ -7684,6 +7730,13 @@ def test_82_the_mailbox_record_says_which_mailboxes_survive_a_restart():
     saved_vault_path = sealed_vault.VAULT_PATH
     saved_salt = os.environ.get("VAULT_SALT")
     os.environ["VAULT_SALT"] = "salt-for-the-mailbox-test"
+    # Hermetic on any host: `measured` in mailbox_tiers() comes from the
+    # operator-mailbox addresses in the ENVIRONMENT — present when the local
+    # .env exists, ABSENT on the cloud runner (gitignored, measured
+    # 2026-11-11: the suite was green locally and red in the cloud with the
+    # letter saying «не измерено в этом цикле»). The test sets its own.
+    saved_mailtm = os.environ.get("MAILTM_ADDRESS")
+    os.environ["MAILTM_ADDRESS"] = "test@fldubai.com"
     ma.SELF_PROVISIONED_FILE = local
     sealed_vault.VAULT_PATH = tmp / "vault.json"
     try:
@@ -7771,6 +7824,10 @@ def test_82_the_mailbox_record_says_which_mailboxes_survive_a_restart():
             os.environ.pop("VAULT_SALT", None)
         else:
             os.environ["VAULT_SALT"] = saved_salt
+        if saved_mailtm is None:
+            os.environ.pop("MAILTM_ADDRESS", None)
+        else:
+            os.environ["MAILTM_ADDRESS"] = saved_mailtm
 
     print("[+] Test 82 Passed: the mailboxes carry tiers — a session-only "
           "mailbox is never an asset, sealing makes a registration durable, "
@@ -8099,6 +8156,11 @@ def test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes():
     saved_file = ma.SELF_PROVISIONED_FILE
     saved_salt = os.environ.get("VAULT_SALT")
     os.environ["VAULT_SALT"] = salt
+    # Hermetic on any host: `measured` comes from the env addresses — the
+    # local .env is gitignored, so on the cloud runner they are absent
+    # (measured 2026-11-11: green locally, red in the cloud).
+    saved_mailtm = os.environ.get("MAILTM_ADDRESS")
+    os.environ["MAILTM_ADDRESS"] = "test@fldubai.com"
     sealed_vault.VAULT_PATH = vpath
     ma.SELF_PROVISIONED_FILE = tmp / "no-local-file.json"
     try:
@@ -8158,6 +8220,10 @@ def test_86_the_inventory_counts_both_layouts_of_our_own_mailboxes():
             os.environ.pop("VAULT_SALT", None)
         else:
             os.environ["VAULT_SALT"] = saved_salt
+        if saved_mailtm is None:
+            os.environ.pop("MAILTM_ADDRESS", None)
+        else:
+            os.environ["MAILTM_ADDRESS"] = saved_mailtm
 
     print("[+] Test 86 Passed: both layouts of the complex's own mailboxes "
           "are counted from the vault's names — the false zero is gone, and "
@@ -8601,7 +8667,8 @@ def test_89_the_forges_own_patch_must_be_a_valid_patch():
     real = Path(__file__).resolve().parent.parent / "data" / "forge_autopilot" \
         / "20261106T040912Z.patch"
     if real.exists():
-        raw_real = real.read_text(encoding="utf-8", newline="")
+        with open(real, "r", encoding="utf-8", newline="") as _f:
+            raw_real = _f.read()
         fixed_real, _notes_real = code_forge.normalize_diff(
             code_forge.extract_diff(raw_real))
         assert fixed_real.endswith("\n"), \
@@ -9100,6 +9167,7 @@ if __name__ == "__main__":
         test_14g_the_reader_burns_reserve_credits_only_on_thin_pages,
         test_93_a_daily_digest_must_not_carry_year_old_pages_as_news,
         test_94_the_digests_model_calls_must_not_offer_the_web,
+        test_95_no_python313_only_stdlib_calls_in_the_tree,
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,
