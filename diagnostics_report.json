@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-11T16:52:50.807728+00:00",
+  "timestamp": "2026-11-11T19:34:54.723335+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -143,12 +143,12 @@
   },
   "bot_health": {
     "ok": true,
-    "last_poll_at": "2026-11-11T16:49:31Z",
-    "age_min": 3.4,
-    "last_send_at": "2026-11-11T16:38:57Z",
+    "last_poll_at": "2026-11-11T19:32:50Z",
+    "age_min": 2.2,
+    "last_send_at": "2026-11-11T19:15:55Z",
     "updates_seen": 17,
-    "messages_sent": 514,
-    "errors": 30,
+    "messages_sent": 520,
+    "errors": 36,
     "last_chat_id": "чат#c03145cb",
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
   },
@@ -196,55 +196,55 @@
   "heartbeat": {
     "NVIDIA_API_KEY": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-11T16:52:53.561034+00:00",
+      "last_ok_at": "2026-11-11T19:35:00.441023+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "TINYFISH_API_KEYS": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-11T16:52:53.561034+00:00",
+      "last_ok_at": "2026-11-11T19:35:00.441023+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "LANGSEARCH_API_KEY": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-11T16:52:53.561034+00:00",
+      "last_ok_at": "2026-11-11T19:35:00.441023+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "KEENABLE_API_KEY": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-11T16:52:53.561034+00:00",
+      "last_ok_at": "2026-11-11T19:35:00.441023+00:00",
       "last_fail_at": "2026-11-07T03:35:03.693394+00:00",
       "dead_since": null
     },
     "FIRECRAWL_API_KEY": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-11T16:52:53.561034+00:00",
+      "last_ok_at": "2026-11-11T19:35:00.441023+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "TELEGRAM_BOT_TOKEN": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-11T16:52:53.561034+00:00",
+      "last_ok_at": "2026-11-11T19:35:00.441023+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "GMAIL_APP_PASSWORD": {
       "ok": true,
-      "at": "2026-11-11T16:52:53.561034+00:00",
+      "at": "2026-11-11T19:35:00.441023+00:00",
       "reason": "",
       "last_ok_at": "2026-11-11 05:48:49",
       "last_fail_at": null,
@@ -263,18 +263,23 @@
     "sealed_in_vault": 2,
     "sealed_self_provisioned": 2,
     "sealed_selfprov_layout": 0,
-    "checked_at": "2026-11-11T16:52:53.565295+00:00"
+    "checked_at": "2026-11-11T19:35:00.447679+00:00"
   },
   "governance": {
-    "measured_at": "2026-11-11T16:52:53Z",
+    "measured_at": "2026-11-11T19:35:00Z",
     "founder_last_seen": {
       "measured": true,
       "at": "2026-11-01T15:30:07Z",
-      "age_days": 10.06
+      "age_days": 10.17
     },
     "silence_days": 14.0,
-    "steward_mode": false,
-    "steward_since": null,
+    "steward_mode": true,
+    "steward_since": "2026-11-11T19:05:00Z",
+    "drill": {
+      "declared": "2026-11-11T19:05:00Z",
+      "ends": "2026-11-21T19:00:00Z",
+      "active": true
+    },
     "orders_armed": false,
     "orders_file": "STANDING_ORDERS.md"
   }
