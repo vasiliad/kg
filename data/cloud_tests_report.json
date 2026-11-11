@@ -1,8 +1,8 @@
 {
-  "checked_at": "2026-11-11T04:33:46.512972+00:00",
-  "offline_suite": "PASS",
+  "checked_at": "2026-11-11T07:16:10.159920+00:00",
+  "offline_suite": "FAIL",
   "memory_suite": "PASS",
-  "ok": true,
+  "ok": false,
   "suites": {
     "offline": "tests/test_resilience_suite.py",
     "memory": "tests/test_eternal_memory_suite.py"
