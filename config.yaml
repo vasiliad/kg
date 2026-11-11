@@ -50,6 +50,13 @@ fleet_tuner:
   max_fleet_size: 5
   param_sweep: true         # sampling parameters chosen by measurement
 
+succession:
+  # «Разработчик умер — продукт живёт» (founder's axiom, 2026-11-11):
+  # the complex measures the founder's silence (the durable Telegram log)
+  # and switches to steward mode (STANDING_ORDERS.md) when it passes the
+  # threshold — naming the switch in every report.
+  silence_days: 14
+
 memory_engine:
   enabled: true
   model: nvidia/nemotron-3.5-embed-8b

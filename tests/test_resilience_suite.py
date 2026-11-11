@@ -9144,6 +9144,85 @@ def test_92_the_forges_verdict_must_not_look_fresher_than_it_is():
           "its own time, and the operator sees how old the attempt is.")
 
 
+def test_96_the_succession_protocol_measures_the_founders_silence():
+    print("\n" + "=" * 60)
+    print("TEST 96: «разработчик умер — продукт живёт» — measured governance")
+    print("=" * 60)
+    import harness.succession as succession
+
+    tmp = _tmp_dir()
+    hist = tmp / "history.txt"
+    orders = tmp / "STANDING_ORDERS.md"
+    state = tmp / "succession.json"
+    now = datetime(2026, 11, 11, 12, 0, 0, tzinfo=timezone.utc)
+
+    def measure(now_=now):
+        return succession.measure(silence_days=14, path=hist, state_path=state,
+                                  orders_path=orders, now=now_)
+
+    # a fresh founder word -> founder mode, no steward anywhere
+    hist.write_text(
+        "[2026-11-10 11:59:00 UTC] DUTY: [some/model] ответ комплекса\n"
+        "[2026-11-10 12:00:00 UTC] USER: статус системы\n",
+        encoding="utf-8")
+    rep = measure()
+    assert rep["founder_last_seen"]["measured"] is True
+    assert rep["founder_last_seen"]["at"] == "2026-11-10T12:00:00Z"
+    assert rep["founder_last_seen"]["age_days"] == 1.0
+    assert rep["steward_mode"] is False and rep["steward_since"] is None
+    assert "НАМЕСТНИКА" not in succession.describe(rep)
+    assert "на связи" in succession.describe(rep)
+
+    # 17 days of measured silence -> steward mode, stamped at first measure
+    hist.write_text("[2026-10-25 11:00:00 UTC] USER: работай\n", encoding="utf-8")
+    rep2 = measure()
+    assert rep2["steward_mode"] is True
+    assert rep2["steward_since"] == "2026-11-11T12:00:00Z"
+    line = succession.describe(rep2)
+    assert "РЕЖИМ НАМЕСТНИКА" in line and "молчит 17.04 сут" in line, line
+
+    # the switch moment survives later measures (a coup would reset it)
+    rep3 = measure(now_=now + timedelta(hours=1))
+    assert rep3["steward_mode"] is True
+    assert rep3["steward_since"] == "2026-11-11T12:00:00Z"
+    assert "молчит 17.08 сут" in succession.describe(rep3)
+
+    # a founder word returns the complex under the founder, clears the stamp
+    hist.write_text("[2026-11-11 12:30:00 UTC] USER: я тут\n", encoding="utf-8")
+    rep4 = measure(now_=now + timedelta(hours=1))
+    assert rep4["steward_mode"] is False and rep4["steward_since"] is None
+
+    # unknown is NOT dead: a missing log keeps founder mode and names why
+    rep5 = succession.measure(silence_days=14, path=tmp / "absent.txt",
+                              state_path=state, orders_path=orders, now=now)
+    assert rep5["steward_mode"] is False
+    assert rep5["founder_last_seen"]["measured"] is False
+    assert "недоступен" in rep5["founder_last_seen"]["reason"]
+
+    # a log with only the complex's own voice proves nothing about the founder
+    hist.write_text("[2026-11-10 11:00:00 UTC] DUTY: только комплекс говорит\n",
+                    encoding="utf-8")
+    rep6 = measure()
+    assert rep6["founder_last_seen"]["measured"] is False
+    assert "нет ни одного слова основателя" in rep6["founder_last_seen"]["reason"]
+
+    # the will is read, not amended: unsigned sleeps, SIGNED arms
+    orders.write_text("завещание без подписи", encoding="utf-8")
+    assert measure()["orders_armed"] is False
+    orders.write_text("полномочия...\nSIGNED: основатель, 2026-11-11\n", encoding="utf-8")
+    rep7 = measure()
+    assert rep7["orders_armed"] is True
+    assert "завещание на месте" in succession.describe(rep7)
+
+    # the artefact carries timestamps and verdicts ONLY — chat text never leaks
+    blob = json.dumps(rep2, ensure_ascii=False)
+    assert "работай" not in blob, "chat text must never leak into the artefact"
+
+    print("[+] Test 96 Passed: the silence is measured, the steward mode is "
+          "stamped and honest about being unsigned, unknown is never death, "
+          "and the artefact carries no chat text.")
+
+
 if __name__ == "__main__":
     print("================================================================")
     print("🛡️  RESILIENCE & HONESTY STRESS SUITE (offline)")
@@ -9173,6 +9252,7 @@ if __name__ == "__main__":
         test_93_a_daily_digest_must_not_carry_year_old_pages_as_news,
         test_94_the_digests_model_calls_must_not_offer_the_web,
         test_95_no_python313_only_stdlib_calls_in_the_tree,
+        test_96_the_succession_protocol_measures_the_founders_silence,
         test_15_telegram_cursor_survives_restart,
         test_16_bot_keeps_itself_alive,
         test_17_bot_has_two_independent_recovery_paths,

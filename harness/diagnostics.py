@@ -24,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from harness import atomic_io
 from harness import redaction
+from harness import succession
 
 NIM_BASE = "https://integrate.api.nvidia.com/v1"
 
@@ -475,6 +476,10 @@ def main() -> int:
     # does), so the letter cannot measure the inventory itself. It reads
     # this artefact instead — the same pattern as the credential heartbeat.
     report["mailboxes"] = record_mailbox_tiers()
+    # The succession protocol: who governs today — the founder or the
+    # steward (STANDING_ORDERS.md). A complex built for the day nobody
+    # comes must measure the silence, not assume the presence.
+    report["governance"] = succession.measure()
 
     _hdr("SUMMARY")
     nvidia = report["nvidia"]
@@ -495,6 +500,7 @@ def main() -> int:
     else:
         cred_line = "ALL SET (живость — см. пробы выше)"
     print(f"  Credentials: {cred_line}")
+    print(f"  Governance : {succession.describe(report['governance'])}")
 
     _hdr("CREDENTIAL HEARTBEAT (last success / first failure since)")
     for name, entry in (report.get("heartbeat") or {}).items():
