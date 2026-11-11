@@ -68,6 +68,10 @@ DEFAULT_POLICY = {
     "param_sweep": True,         # tune sampling parameters by measurement
     "min_score": 55.0,           # below this a model is not duty-eligible
     "min_params_b": 150.0,       # hard floor: models under 150B never enter the pool
+    # Founder's ban (2026-11-11): a vendor prefix or an exact id that never
+    # enters the pool, for cause — no measurement can overrule this.
+    "banned_vendors": [],
+    "banned_models": [],
     "fast_latency_cap_sec": 12.0,
     "max_fleet_size": 5,
     "probe_timeout_sec": 45,
@@ -95,7 +99,7 @@ CAPABILITY_PRIOR = {
 }
 HEAVY_MARKERS = ("ultra", "550b", "253b", "340b", "-super-", "1t-")
 
-# Parameter-count bonus: a trillion-parameter newcomer ("mistral-large-4-1t")
+# Parameter-count bonus: a trillion-parameter newcomer ("flagship-4-1t-a52b")
 # must outrank a 3B legacy model in the probe queue, otherwise strong releases
 # wait behind incumbent names. Capped so it is a prior, not a verdict.
 SIZE_BONUS_RE = re.compile(r"(\d+(?:\.\d+)?)(tb|t|b)(?=$|[-_a-z])")
@@ -104,7 +108,7 @@ SIZE_BONUS_RE = re.compile(r"(\d+(?:\.\d+)?)(tb|t|b)(?=$|[-_a-z])")
 def parsed_params_b(model_id: str) -> Optional[float]:
     """
     Total parameter count encoded in the model id, in billions.
-    "mistral-large-4-1t-a52b" -> 1000 (the TOTAL, not the 52B active part),
+    "vendor/flagship-4-1t-a52b" -> 1000 (the TOTAL, not the 52B active part),
     "nemotron-3-ultra-550b-a55b" -> 550. None when the id carries no size.
     """
     best: Optional[float] = None
@@ -158,8 +162,21 @@ class FleetTuner:
         self.base_url = base_url.rstrip("/")
         self.quick = quick
         self.policy = dict(DEFAULT_POLICY)
-        if config and isinstance(config.get("fleet_tuner"), dict):
-            for k, v in config["fleet_tuner"].items():
+        # The repo's config.yaml is the policy of record. Measured 2026-11-11:
+        # every entry point (CLI, telegram bot, emergency runner) constructs
+        # FleetTuner WITHOUT config=, so the section was never read — the
+        # founder's knobs (and bans) were decorative. The tuner now reads the
+        # repo's own config when the caller does not pass one.
+        effective = config
+        if effective is None:
+            try:
+                import yaml
+                with open(PROJECT_ROOT / "config.yaml", "r", encoding="utf-8") as f:
+                    effective = yaml.safe_load(f)
+            except Exception:
+                effective = None
+        if effective and isinstance(effective.get("fleet_tuner"), dict):
+            for k, v in effective["fleet_tuner"].items():
                 if k in self.policy:
                     self.policy[k] = v
         if quick:
@@ -181,6 +198,7 @@ class FleetTuner:
         self.size_resolver = SizeResolver(overrides=load_overrides(), searcher=self._doc_searcher)
         self._skipped_small = 0
         self._skipped_unknown_size: List[str] = []
+        self._skipped_banned: List[str] = []
         self._offline = False
 
     def _doc_searcher(self, query: str) -> List[str]:
@@ -219,6 +237,20 @@ class FleetTuner:
         if is_seed:
             prior += 8.0    # the config seed is the starting point to verify
         return prior
+
+    def _banned(self, model_id: str) -> bool:
+        """The founder's ban list (config.yaml fleet_tuner): an exact id or a
+        whole vendor prefix. Checked BEFORE priors and probes — a banned
+        model is not a bad candidate, it is not a candidate at all."""
+        low = str(model_id or "").lower()
+        if not low:
+            return False
+        if low in {str(x).lower() for x in (self.policy.get("banned_models") or [])}:
+            return True
+        return any(
+            low == v or low.startswith(v + "/")
+            for v in (str(x).lower().rstrip("/") for x in (self.policy.get("banned_vendors") or []))
+        )
 
     def build_candidate_pool(
         self,
@@ -262,6 +294,10 @@ class FleetTuner:
                 return
             if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
                 return
+            if self._banned(mid):
+                if mid not in self._skipped_banned:
+                    self._skipped_banned.append(mid)
+                return
             floor = float(self.policy.get("min_params_b") or 0.0)
             size = _size_or_none(mid, entry)
             if size is not None and size < floor:
@@ -300,6 +336,10 @@ class FleetTuner:
                 if mid in LOCAL_ONLY_MODEL_IDS or low in {x.lower() for x in LOCAL_ONLY_MODEL_IDS}:
                     continue
                 if any(marker in low for marker in EXCLUDED_PURPOSE_MARKERS):
+                    continue
+                if self._banned(mid):
+                    if mid not in self._skipped_banned:
+                        self._skipped_banned.append(mid)
                     continue
                 size = _size_or_none(mid, m)
                 if size is not None and size < floor:
@@ -792,6 +832,11 @@ class FleetTuner:
             self.say(
                 f"Excluded, size unresolved (fail-closed): {self._skipped_unknown_size} "
                 "- pin a size in data/model_sizes.json to admit one of them."
+            )
+        if self._skipped_banned:
+            self.say(
+                f"Excluded by the founder's ban (config.yaml banned_vendors/banned_models): "
+                f"{self._skipped_banned}."
             )
 
         measurements = self.evaluate(candidates)

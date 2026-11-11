@@ -39,6 +39,13 @@ fleet_tuner:
   quality_candidates: 6     # get the full objective probe set
   min_score: 55.0           # below this a model is not duty-eligible
   min_params_b: 150.0       # hard floor: models under 150B never enter the pool
+  # Founder's order (2026-11-11): the mistralai vendor is OUT of the fleet
+  # for cause. The ban fires BEFORE priors and probes — no live measurement
+  # can re-admit it. banned_models bans exact ids; banned_vendors bans
+  # everything under a vendor prefix.
+  banned_vendors:
+    - mistralai
+  banned_models: []
   fast_latency_cap_sec: 12.0
   max_fleet_size: 5
   param_sweep: true         # sampling parameters chosen by measurement

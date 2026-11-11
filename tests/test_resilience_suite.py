@@ -400,7 +400,7 @@ def test_14b_size_floor_keeps_only_big_models():
     print("=" * 60)
     from harness.fleet_tuner import parsed_params_b
     # id parsing: total params, not the active MoE part
-    assert parsed_params_b("mistralai/mistral-large-4-1t-a52b") == 1000.0
+    assert parsed_params_b("vendor/flagship-4-1t-a52b") == 1000.0
     assert parsed_params_b("nvidia/nemotron-3-ultra-550b-a55b") == 550.0
     assert parsed_params_b("minimaxai/minimax-m3.1-flash") is None  # no size token
     tuner = FleetTuner(api_key="test-key")
@@ -411,22 +411,27 @@ def test_14b_size_floor_keeps_only_big_models():
                               cache_path=_tmp_dir() / "sizes.json")
     catalog = [
         {"id": "nvidia/nemotron-3-ultra-550b-a55b"},   # 550B -> in
-        {"id": "mistralai/mistral-large-4-1t-a52b"},   # 1T   -> in
+        {"id": "acme/titan-4-1t-a52b"},                # 1T   -> in
         {"id": "nvidia/nemotron-3.5-super-vl-120b-a12b"},  # 120B -> OUT (operator: too small)
         {"id": "google/gemma-2b"},                     # 2B   -> OUT
         # no size token in the id, but the catalogue metadata resolves it:
         {"id": "minimaxai/minimax-m3.1-flash", "description": "A 230 billion parameter MoE model."},
         {"id": "vendor/undocumented-instruct"},        # unresolvable -> OUT (fail-closed)
+        # the founder's ban (ADL-033): 1T and qualified, still never enters
+        {"id": "mistralai/mistral-large-4-1t-a52b"},   # banned vendor -> OUT
     ]
     pool_ids = [c["id"] for c in tuner.build_candidate_pool(catalog, previous_fleet_ids=[])]
     assert "nvidia/nemotron-3-ultra-550b-a55b" in pool_ids
-    assert "mistralai/mistral-large-4-1t-a52b" in pool_ids
+    assert "acme/titan-4-1t-a52b" in pool_ids
+    assert "mistralai/mistral-large-4-1t-a52b" not in pool_ids, \
+        "founder's ban 2026-11-11: mistralai never enters the pool, whatever it measures"
     assert "nvidia/nemotron-3.5-super-vl-120b-a12b" not in pool_ids, "120B must be below the floor"
     assert "google/gemma-2b" not in pool_ids, "2B must be below the floor"
     assert "minimaxai/minimax-m3.1-flash" in pool_ids, "size resolved from metadata -> eligible"
     assert "vendor/undocumented-instruct" not in pool_ids, "unresolvable size -> excluded"
     print(f"[+] Pool under a 150B floor: {pool_ids}")
-    print("[+] Test 14b Passed: only big models (or resolvable ones) enter the pool.")
+    print("[+] Test 14b Passed: only big models (or resolvable ones) enter the pool;")
+    print("    banned vendors (config.yaml banned_vendors) stay out for good.")
 
 
 def test_14c_unknown_size_is_resolved_or_excluded():
@@ -441,7 +446,7 @@ def test_14c_unknown_size_is_resolved_or_excluded():
     assert parse_size_from_text("1.2 trillion parameters") == 1200.0
     assert parse_size_from_text("70B params, 8B active") == 70.0
     assert parse_size_from_text("supports 4B token context") is None
-    assert parse_size_from_id("mistralai/mistral-large-4-1t-a52b") == 1000.0
+    assert parse_size_from_id("vendor/flagship-4-1t-a52b") == 1000.0
     # resolver precedence: id -> catalog metadata -> cache -> docs; unresolved = None
     overrides = {}
     cache = Path(tempfile.mkdtemp(prefix="kg-sizes-")) / "model_sizes.json"

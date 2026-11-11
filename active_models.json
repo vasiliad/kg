@@ -82,56 +82,6 @@
       }
     },
     {
-      "id": "mistralai/mistral-large-4-1t-a52b",
-      "owned_by": "mistralai",
-      "tier": "Дежурный быстрый",
-      "roles": [
-        "duty_fast"
-      ],
-      "quality_score": 91.45,
-      "score_source": "live_probe",
-      "score_verified": true,
-      "score_as_of": "2026-11-11T14:23:02+00:00",
-      "status": "APPROVED",
-      "measured": {
-        "latency_sec": 8.66,
-        "ok_rate": 1.0,
-        "speed_score": 0.778,
-        "task_scores": {
-          "instruction": 1.0,
-          "reasoning": 1.0,
-          "code": 1.0,
-          "json": 1.0,
-          "translation": 1.0,
-          "toolcall": 1.0,
-          "prose": 1.0,
-          "canary_news": 0.5
-        },
-        "task_verdicts": {
-          "instruction": "russian",
-          "reasoning": "correct",
-          "code": "compiles 5/5",
-          "json": "keys 4/4",
-          "translation": "correct",
-          "toolcall": "correct tool=get_weather",
-          "prose": "prose_ru",
-          "canary_news": "missing_facts:восемь"
-        }
-      },
-      "recommended_params": {
-        "temperature": 0.6,
-        "top_p": 0.9,
-        "max_tokens": 4096
-      },
-      "param_sweep": {
-        "task": "json",
-        "variant": "recommended",
-        "score": 1.0,
-        "latency_sec": 18.87
-      },
-      "seed_prior": null
-    },
-    {
       "id": "minimaxai/minimax-m3.1-flash",
       "owned_by": "minimaxai",
       "tier": "Дежурный кодер",
@@ -193,9 +143,6 @@
     "roles": {
       "stepfun-ai/step-5-preview": [
         "duty_primary"
-      ],
-      "mistralai/mistral-large-4-1t-a52b": [
-        "duty_fast"
       ],
       "minimaxai/minimax-m3.1-flash": [
         "duty_code"
