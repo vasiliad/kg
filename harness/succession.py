@@ -67,6 +67,28 @@ def _configured_silence_days() -> Optional[float]:
         return None
 
 
+def _parse_iso(text: Any) -> Optional[datetime]:
+    """A «2026-11-11T19:05:00Z» stamp, or None."""
+    try:
+        return datetime.strptime(str(text), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _configured_drill() -> Optional[Dict[str, str]]:
+    """The declared drill window from config.yaml, or None."""
+    try:
+        import yaml
+        with open(PROJECT_ROOT / "config.yaml", "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        drill = (cfg.get("succession") or {}).get("drill") or None
+        if isinstance(drill, dict) and drill.get("declared") and drill.get("ends"):
+            return {"declared": str(drill["declared"]), "ends": str(drill["ends"])}
+    except Exception:
+        pass
+    return None
+
+
 def founder_last_seen(path: Path = HISTORY_FILE,
                       now: Optional[datetime] = None) -> Dict[str, Any]:
     """The founder's last word in the durable log, measured.
@@ -107,19 +129,36 @@ def measure(silence_days: Optional[float] = None,
             path: Path = HISTORY_FILE,
             state_path: Path = STATE_FILE,
             orders_path: Path = ORDERS_FILE,
+            drill: Optional[Dict[str, str]] = None,
             now: Optional[datetime] = None) -> Dict[str, Any]:
     """Measure the governance: who may decide today, and on what evidence.
 
-    Steward mode = the founder's MEASURED silence is older than the
-    threshold (explicit argument, else config.yaml, else the default).
-    The switch moment survives in the artefact: the first steward measure
-    stamps `steward_since`, later measures keep it; a fresh founder word
-    returns the complex under the founder and clears the stamp."""
+    Steward mode = a DECLARED drill window covers now (the founder's own
+    exercise: «час икс настал») — OR the founder's MEASURED silence is
+    older than the threshold (explicit argument, else config.yaml, else
+    the default). The switch moment survives in the artefact: the first
+    steward measure stamps `steward_since`, later measures keep it; when
+    the stewardship ends (the founder is back, the drill over, the log
+    fresh), the stamp clears."""
     if silence_days is None:
         silence_days = _configured_silence_days()
     threshold = float(silence_days) if silence_days is not None else DEFAULT_SILENCE_DAYS
     seen = founder_last_seen(path, now)
-    steward = bool(seen.get("measured") and seen["age_days"] > threshold)
+
+    window = drill if drill is not None else _configured_drill()
+    drill_active = False
+    drill_report: Optional[Dict[str, Any]] = None
+    if window:
+        declared_at = _parse_iso(window.get("declared"))
+        ends_at = _parse_iso(window.get("ends"))
+        moment = now or _now()
+        drill_active = bool(declared_at and ends_at and declared_at <= moment < ends_at)
+        drill_report = {"declared": window.get("declared"), "ends": window.get("ends"),
+                        "active": drill_active}
+
+    measured_silent = bool(seen.get("measured") and seen["age_days"] > threshold)
+    steward = drill_active or measured_silent
+
     state: Dict[str, Any] = {}
     try:
         if Path(state_path).exists():
@@ -128,15 +167,19 @@ def measure(silence_days: Optional[float] = None,
         state = {}
     steward_since = state.get("steward_since")
     if steward and not steward_since:
-        steward_since = (now or _now()).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # The drill stamps the DECLARED moment, not the discovery moment:
+        # hour X is when the founder said it, not when the cycle noticed.
+        steward_since = window.get("declared") if drill_active else (now or _now()).strftime("%Y-%m-%dT%H:%M:%SZ")
     if not steward:
         steward_since = None
+
     report = {
         "measured_at": (now or _now()).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "founder_last_seen": seen,
         "silence_days": threshold,
         "steward_mode": steward,
         "steward_since": steward_since,
+        "drill": drill_report,
         "orders_armed": _orders_armed(orders_path),
         "orders_file": Path(orders_path).name,
     }
@@ -151,6 +194,12 @@ def describe(report: Dict[str, Any]) -> str:
     seen = report.get("founder_last_seen") or {}
     threshold = report.get("silence_days", DEFAULT_SILENCE_DAYS)
     will = "завещание на месте" if report.get("orders_armed") else "завещание не подписано"
+    drill = report.get("drill") or {}
+    if drill.get("active"):
+        return (f"УЧЕНИЕ (объявлено основателем {str(drill.get('declared', ''))[:10]}): "
+                f"режим наместника до {str(drill.get('ends', ''))[:10]}; "
+                f"измеренное молчание в журнале: "
+                f"{seen.get('age_days', '?')} сут — учение, не диагноз ({will})")
     if not seen.get("measured"):
         return (f"Правление: основатель (молчание не измерено: "
                 f"{seen.get('reason')}; {will})")

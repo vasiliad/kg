@@ -56,6 +56,15 @@ succession:
   # and switches to steward mode (STANDING_ORDERS.md) when it passes the
   # threshold — naming the switch in every report.
   silence_days: 14
+  # THE DRILL (declared by the founder at hour X): 10 days, no human
+  # intervention. During the declared window the complex lives in steward
+  # mode — and the artefact says it is a DRILL, never a diagnosis: the
+  # measured silence is reported alongside, so nobody confuses the
+  # exercise with the founder's actual death. After the window the
+  # measured rule takes over again.
+  drill:
+    declared: "2026-11-11T19:05:00Z"
+    ends: "2026-11-21T19:00:00Z"
 
 memory_engine:
   enabled: true

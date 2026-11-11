@@ -9215,12 +9215,49 @@ def test_96_the_succession_protocol_measures_the_founders_silence():
     assert rep7["orders_armed"] is True
     assert "завещание на месте" in succession.describe(rep7)
 
+    # a window in the future changes nothing yet; an expired window is over
+    hist.write_text("[2026-11-11 18:00:00 UTC] USER: я ещё тут\n", encoding="utf-8")
+    early = succession.measure(silence_days=14, path=hist, state_path=state,
+                               orders_path=orders,
+                               drill={"declared": "2026-12-01T00:00:00Z",
+                                      "ends": "2026-12-11T00:00:00Z"},
+                               now=datetime(2026, 11, 11, 12, 0, 0, tzinfo=timezone.utc))
+    assert early["drill"]["active"] is False and early["steward_mode"] is False
+    late = succession.measure(silence_days=14, path=hist, state_path=state,
+                              orders_path=orders,
+                              drill={"declared": "2026-10-01T00:00:00Z",
+                                     "ends": "2026-10-05T00:00:00Z"},
+                              now=datetime(2026, 11, 11, 12, 0, 0, tzinfo=timezone.utc))
+    assert late["drill"]["active"] is False and late["steward_mode"] is False
+
+    # THE DRILL: a declared window governs even against a fresh founder word —
+    # and the artefact says it is a drill, never a diagnosis
+    window = {"declared": "2026-11-11T19:05:00Z", "ends": "2026-11-21T19:00:00Z"}
+    rep8 = succession.measure(silence_days=14, path=hist, state_path=state,
+                              orders_path=orders, drill=window,
+                              now=datetime(2026, 11, 12, 6, 0, 0, tzinfo=timezone.utc))
+    assert rep8["steward_mode"] is True, "the declared drill governs at hour X"
+    assert rep8["steward_since"] == "2026-11-11T19:05:00Z", "hour X is when the founder declared it"
+    assert rep8["drill"]["active"] is True
+    dline = succession.describe(rep8)
+    assert "УЧЕНИЕ" in dline and "до 2026-11-21" in dline and "не диагноз" in dline, dline
+
+    # when the drill ends, the measured rule takes over — and the stewardship
+    # continues from the drill's stamp if the founder is still silent
+    hist.write_text("[2026-10-22 19:00:00 UTC] USER: до встречи\n", encoding="utf-8")
+    rep9 = succession.measure(silence_days=14, path=hist, state_path=state,
+                              orders_path=orders, drill=window,
+                              now=datetime(2026, 11, 21, 19, 0, 1, tzinfo=timezone.utc))
+    assert rep9["steward_mode"] is True and rep9["drill"]["active"] is False
+    assert rep9["steward_since"] == "2026-11-11T19:05:00Z", "no reset at the window's edge"
+
     # the artefact carries timestamps and verdicts ONLY — chat text never leaks
     blob = json.dumps(rep2, ensure_ascii=False)
     assert "работай" not in blob, "chat text must never leak into the artefact"
 
     print("[+] Test 96 Passed: the silence is measured, the steward mode is "
           "stamped and honest about being unsigned, unknown is never death, "
+          "the declared drill governs hour X without pretending a diagnosis, "
           "and the artefact carries no chat text.")
 
 
