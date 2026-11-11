@@ -1,7 +1,7 @@
 {
-  "model_id": "mistralai/mistral-large-4-1t-a52b",
-  "started_at": "2026-11-11T04:02:20Z",
-  "until": "2026-11-11T10:02:20Z",
+  "model_id": "stepfun-ai/step-5-preview",
+  "started_at": "2026-11-11T14:23:02Z",
+  "until": "2026-11-11T20:23:02Z",
   "chosen_by": "Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру",
   "calls": 0,
   "failures": 0,
