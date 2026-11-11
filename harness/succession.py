@@ -46,6 +46,10 @@ DEFAULT_SILENCE_DAYS = 14.0
 # lines are the complex talking to itself.
 _FOUNDER_LINE = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) UTC\]\s+USER\b", re.MULTILINE)
 
+# A signature is a DATE after the marker: the template's «SIGNED: (нет — …)»
+# placeholder must never count as a signed will.
+_SIGNED_LINE = re.compile(r"^SIGNED:\s*\d{4}-\d{2}-\d{2}", re.MULTILINE)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -91,9 +95,10 @@ def founder_last_seen(path: Path = HISTORY_FILE,
 
 
 def _orders_armed(path: Path = ORDERS_FILE) -> bool:
-    """Whether the founder signed the will (the SIGNED marker is present)."""
+    """Whether the founder signed the will: a DATED SIGNED line. The
+    template's own «SIGNED: (нет — …)» placeholder is not a signature."""
     try:
-        return "SIGNED:" in Path(path).read_text(encoding="utf-8", errors="replace")
+        return bool(_SIGNED_LINE.search(Path(path).read_text(encoding="utf-8", errors="replace")))
     except OSError:
         return False
 

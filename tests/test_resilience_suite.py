@@ -9206,10 +9206,11 @@ def test_96_the_succession_protocol_measures_the_founders_silence():
     assert rep6["founder_last_seen"]["measured"] is False
     assert "нет ни одного слова основателя" in rep6["founder_last_seen"]["reason"]
 
-    # the will is read, not amended: unsigned sleeps, SIGNED arms
-    orders.write_text("завещание без подписи", encoding="utf-8")
+    # the will is read, not amended: unsigned sleeps, a DATED SIGNED arms —
+    # and the template's own placeholder line is not a signature
+    orders.write_text("SIGNED: (нет — основатель вписывает дату)", encoding="utf-8")
     assert measure()["orders_armed"] is False
-    orders.write_text("полномочия...\nSIGNED: основатель, 2026-11-11\n", encoding="utf-8")
+    orders.write_text("полномочия...\nSIGNED: 2026-11-11, основатель\n", encoding="utf-8")
     rep7 = measure()
     assert rep7["orders_armed"] is True
     assert "завещание на месте" in succession.describe(rep7)
