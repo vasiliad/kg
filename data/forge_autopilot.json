@@ -1,34 +1,27 @@
 {
-  "attempted_at": "2026-11-11T04:13:03.562119+00:00",
+  "attempted_at": "2026-11-12T04:48:27.437017+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
-  "stage": "no_patch",
-  "facts_digest": "Дрейф флота: REPLACED, средняя дельта 1.73, худший: minimaxai/minimax-m3.1-flash (дельта -6.1)\n- mistralai/mistral-large-4-1t-a52b: балл 97.59, задержка 4.89с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.76с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 76.83, задержка 29.81с, ok_rate 1.0, слабейшая задача instruction=1.0\n- minimaxai/minimax-m3.1-flash: балл 74.98, задержка 7.72с, ok_rate 0.875, слабейшая задача code=0.0\nДежурная смена: mistralai/mistral-large-4-1t-a52b, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 283, ошибок 27, ответов 483",
-  "summary": "Модель ответила без патча — улучшать нечего.",
-  "writer": {
+  "stage": "no_writer",
+  "facts_digest": "Дрейф флота: IMPROVING, средняя дельта 11.09, худший: stepfun-ai/step-5-preview (дельта 0.91)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.7с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 93.21, задержка 10.15с, ok_rate 1.0, слабейшая задача instruction=1.0\n- minimaxai/minimax-m3.1-flash: балл 90.42, задержка 6.6с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 311, ошибок 36, ответов 541",
+  "error": "сетевая дежурная: SUCCESS_EMPTY_ANSWER; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "summary": "Ни одна модель не написала патч — улучшать нечего.",
+  "writer": {},
+  "chooser": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "score": 96.75,
-    "verified": true,
-    "elapsed": 101.19,
+    "elapsed": 17.66,
     "status": "SUCCESS"
   },
-  "chooser": {
-    "model": "mistralai/mistral-large-4-1t-a52b",
-    "role": "duty_primary",
-    "elapsed": 60.36,
-    "status": "SUCCESS"
-  },
-  "duty_status": "SUCCESS",
-  "local_status": null,
-  "target": "harness/fleet_drift.py",
+  "duty_status": "SUCCESS_EMPTY_ANSWER",
+  "local_status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "target": "harness/fleet_tuner.py",
   "normalised": false,
   "notes": [],
   "repair": {
     "attempted": false,
     "ok": false
   },
-  "answer_preview": "Модель nvidia/nemotron-3-ultra-550b-a55b вернула вызов инструмента (fetch_webpage для страницы file:///home/user/harness/fleet_drift.py), но ответ получить не удалось.\nЗапрос, который она хотела выполнить: file:///home/user/harness/fleet_drift.py",
   "gate": {
     "ok": null,
     "stage": null,
@@ -36,12 +29,11 @@
     "error": null
   },
   "patch_bytes": 0,
-  "attempt_day": "2026-11-11",
-  "checked_at": "2026-11-11T11:50:41.273558+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261111T041303Z",
-  "last_attempt_at": "2026-11-11T04:13:03.562119+00:00",
-  "attempt_age_hours": 7.63,
-  "freshness": "Последняя попытка: 11.11 04:13 UTC (7.6 ч назад).",
-  "skipped_today": true
+  "attempt_day": "2026-11-12",
+  "checked_at": "2026-11-12T04:48:27.436938+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261112T044827Z",
+  "last_attempt_at": "2026-11-12T04:48:27.437017+00:00",
+  "attempt_age_hours": 0.06,
+  "freshness": "Последняя попытка: 12.11 04:48 UTC (0 мин назад)."
 }
