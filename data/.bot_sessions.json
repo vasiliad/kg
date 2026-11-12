@@ -8,16 +8,16 @@
   "health": {
     "runs": 312,
     "started_at": "2026-11-12T04:48:15Z",
-    "last_poll_at": "2026-11-12T04:53:23Z",
+    "last_poll_at": "2026-11-12T04:56:46Z",
     "last_update_at": "2026-11-02T13:18:23Z",
-    "last_send_at": "2026-11-12T04:49:10Z",
+    "last_send_at": "2026-11-12T04:54:39Z",
     "updates_seen": 17,
-    "messages_sent": 543,
+    "messages_sent": 544,
     "errors": 36,
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
     "last_chat_id": "чат#c03145cb",
     "last_digest_push": "2026-11-12",
-    "last_forge_push": "20261111T041303Z",
+    "last_forge_push": "20261112T044827Z",
     "last_chat_tag": "чат#c03145cb"
   }
 }
