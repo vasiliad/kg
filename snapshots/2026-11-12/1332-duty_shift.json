@@ -1,0 +1,12 @@
+{
+  "model_id": "nvidia/nemotron-3-ultra-550b-a55b",
+  "started_at": "2026-11-12T03:20:23Z",
+  "until": "2026-11-12T09:20:23Z",
+  "chosen_by": "Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру",
+  "calls": 0,
+  "failures": 0,
+  "last_latency_sec": null,
+  "broken_at": "",
+  "broken_reason": "",
+  "started_because": "смена на 6 часов истекла"
+}
