@@ -1,21 +1,23 @@
 {
-  "timestamp": "2026-11-11T13:28:30.740577+00:00",
-  "emergency_mode": false,
-  "last_emergency_run": "2026-11-11T13:28:30.740577+00:00",
-  "emergency_reason": "",
-  "emergency_cause": "",
+  "timestamp": "2026-11-12T14:36:06.877170+00:00",
+  "emergency_mode": true,
+  "last_emergency_run": "2026-11-12T14:36:06.877170+00:00",
+  "emergency_reason": "State stale by 7.1h (threshold: 6.0h; measured 2026-11-12T07:24:12+00:00)",
+  "emergency_cause": "state_stale",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "stepfun-ai/step-5-preview (дежурная команда по живому замеру)",
-  "local_arbiter_feedback": "# Executive Summary — DeepSeek-TPU-NIM Emergency Status\n\n**System status: DEGRADED — emergency CPU fallback remains active.**\n\n- **Primary TPU orchestrator:** offline or queued as of the incident snapshot at **2026-11-11T13:24:48.819298+00:00**. The TPU execution path is therefore not confirmed operational.\n- **Trigger:** state staleness of **6.7 h** against a **6.0 h** threshold, measured at **2026-11-11T06:43:40+00:00** — i.e. emergency mode has been continuously in effect for roughly **6 h 41...",
+  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter_feedback": "# Executive Summary — DeepSeek‑TPU‑NIM Emergency Architecture Review\n\n**Emergency mode: ACTIVE** · Declared **2026‑11‑12T14:29:20.919564+00:00**\n**Trigger:** state stale by **7.1 h** against a **6.0 h** threshold; last successful state observation **2026‑11‑12T07:24:12+00:00** (gap = 7 h 05 m 08.9 s ≈ 7.085 h, internally consistent with the declared 7.1 h).\n\n**Bottom line:** The system is **operational but thin and single‑instance**. The duty roster is live and fully probe‑verified (3/3 `verifie...",
   "catalog_diff": {
     "new_count": 0,
-    "removed_count": 0,
+    "removed_count": 1,
     "new_ids": [],
-    "removed_ids": [],
+    "removed_ids": [
+      "google/diffusiongemma-26b-a4b-it"
+    ],
     "flagship_newcomers": []
   },
   "id_resolution": {
@@ -25,7 +27,7 @@
       "stepfun/step-5-preview": "stepfun-ai/step-5-preview"
     },
     "missing": [],
-    "live_count": 84
+    "live_count": 83
   },
   "active_fleet": [
     {
@@ -446,7 +448,6 @@
     "google/codegemma-1.1-7b",
     "google/codegemma-7b",
     "google/deplot",
-    "google/diffusiongemma-26b-a4b-it",
     "google/gemma-2b",
     "google/gemma-3-12b-it",
     "google/gemma-3-4b-it",
@@ -520,7 +521,5 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-11-12T07:34:23.848521+00:00Z",
-  "emergency_cleared_at": "2026-11-11T23:56:41.573219+00:00",
-  "emergency_cleared_because": "the fleet was measured again (2026-11-11T19:42:52+00:00, fleet_decision.tuned_at)"
+  "last_updated": "2026-11-12T14:36:06.877223+00:00Z"
 }
