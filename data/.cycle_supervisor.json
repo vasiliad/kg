@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-12T04:48:12.538527+00:00",
+  "checked_at": "2026-11-12T05:40:06.628016+00:00",
   "repo": "vasiliad/kg",
   "dry_run": false,
   "cycles": [
@@ -7,7 +7,7 @@
       "name": "fleet",
       "workflow": "fleet_tuner.yml",
       "artefact": "data/fleet_report.json",
-      "age_h": 1.73,
+      "age_h": 2.59,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -16,7 +16,7 @@
       "name": "diagnostics",
       "workflow": "diagnostics.yml",
       "artefact": "diagnostics_report.json",
-      "age_h": 4.24,
+      "age_h": 5.11,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -25,7 +25,7 @@
       "name": "selftest",
       "workflow": "bot_selftest.yml",
       "artefact": "data/bot_selftest_report.json",
-      "age_h": 11.25,
+      "age_h": 12.11,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh"
@@ -34,17 +34,21 @@
       "name": "daily_dispatch",
       "workflow": "daily_dispatch_novt.yml",
       "artefact": "nim_history.log",
-      "age_h": 22.99,
+      "age_h": 23.85,
       "max_age_h": 26.0,
-      "stale": false,
-      "action": "fresh",
-      "due_today": false
+      "stale": true,
+      "action": "dispatched",
+      "due_today": true,
+      "busy": false,
+      "last_run_age_h": 17.24,
+      "local_dispatch_age_h": 24.3,
+      "effective_age_h": 17.24
     },
     {
       "name": "cloud_tests",
       "workflow": "cloud_tests.yml",
       "artefact": "data/cloud_tests_report.json",
-      "age_h": 1.45,
+      "age_h": 2.32,
       "max_age_h": 7.0,
       "stale": false,
       "action": "fresh"
@@ -53,21 +57,17 @@
       "name": "forge_autopilot",
       "workflow": "forge_autopilot.yml",
       "artefact": "data/forge_autopilot.json",
-      "age_h": 16.96,
+      "age_h": 0.86,
       "max_age_h": 26.0,
-      "stale": true,
-      "action": "dispatched",
-      "due_today": true,
-      "busy": false,
-      "last_run_age_h": 16.96,
-      "local_dispatch_age_h": 24.59,
-      "effective_age_h": 16.96
+      "stale": false,
+      "action": "fresh",
+      "due_today": false
     },
     {
       "name": "survival_protocol",
       "workflow": "survival_protocol.yml",
       "artefact": "data/survival_report.json",
-      "age_h": 1.73,
+      "age_h": 2.59,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -77,17 +77,21 @@
       "name": "mega_archive",
       "workflow": "mega_archive.yml",
       "artefact": "data/mega_archive_report.json",
-      "age_h": 16.06,
+      "age_h": 16.92,
       "max_age_h": 26.0,
-      "stale": false,
-      "action": "fresh",
-      "due_today": false
+      "stale": true,
+      "action": "dispatched",
+      "due_today": true,
+      "busy": false,
+      "last_run_age_h": 16.93,
+      "local_dispatch_age_h": 24.3,
+      "effective_age_h": 16.93
     },
     {
       "name": "proton_drive",
       "workflow": "proton_drive_sync.yml",
       "artefact": "data/proton_drive_report.json",
-      "age_h": 15.85,
+      "age_h": 16.72,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -95,7 +99,8 @@
     }
   ],
   "dispatched": [
-    "forge_autopilot.yml"
+    "daily_dispatch_novt.yml",
+    "mega_archive.yml"
   ],
   "dispatch_log": {
     "fleet": "2026-11-12T03:04:12.517608+00:00",
@@ -103,8 +108,8 @@
     "diagnostics": "2026-11-11T13:09:34.283002+00:00",
     "cloud_tests": "2026-11-12T03:04:12.517608+00:00",
     "forge_autopilot": "2026-11-12T04:48:12.538527+00:00",
-    "daily_dispatch": "2026-11-11T05:21:51.803481+00:00",
-    "mega_archive": "2026-11-11T05:21:51.803481+00:00",
+    "daily_dispatch": "2026-11-12T05:40:06.628016+00:00",
+    "mega_archive": "2026-11-12T05:40:06.628016+00:00",
     "proton_drive": "2026-11-11T06:13:38.472108+00:00",
     "selftest": "2026-11-11T17:30:38.933098+00:00"
   }
