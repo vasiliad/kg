@@ -1,15 +1,15 @@
 {
   "timestamp": "2026-11-12T14:36:06.877170+00:00",
-  "emergency_mode": true,
+  "emergency_mode": false,
   "last_emergency_run": "2026-11-12T14:36:06.877170+00:00",
-  "emergency_reason": "State stale by 7.1h (threshold: 6.0h; measured 2026-11-12T07:24:12+00:00)",
-  "emergency_cause": "state_stale",
+  "emergency_reason": "",
+  "emergency_cause": "",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter": "nvidia/nemotron-3-ultra-550b-a55b (дежурная команда по живому замеру)",
   "local_arbiter_feedback": "# Executive Summary — DeepSeek‑TPU‑NIM Emergency Architecture Review\n\n**Emergency mode: ACTIVE** · Declared **2026‑11‑12T14:29:20.919564+00:00**\n**Trigger:** state stale by **7.1 h** against a **6.0 h** threshold; last successful state observation **2026‑11‑12T07:24:12+00:00** (gap = 7 h 05 m 08.9 s ≈ 7.085 h, internally consistent with the declared 7.1 h).\n\n**Bottom line:** The system is **operational but thin and single‑instance**. The duty roster is live and fully probe‑verified (3/3 `verifie...",
   "catalog_diff": {
     "new_count": 0,
@@ -530,5 +530,7 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-11-12T20:19:42.420472+00:00Z"
+  "last_updated": "2026-11-12T23:05:47.583302+00:00Z",
+  "emergency_cleared_at": "2026-11-12T23:05:47.583290+00:00",
+  "emergency_cleared_because": "the fleet was measured again (2026-11-12T20:06:02+00:00, fleet_decision.tuned_at)"
 }
