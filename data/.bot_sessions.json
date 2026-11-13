@@ -8,15 +8,15 @@
   "health": {
     "runs": 340,
     "started_at": "2026-11-13T05:04:36Z",
-    "last_poll_at": "2026-11-13T05:16:04Z",
+    "last_poll_at": "2026-11-13T05:19:01Z",
     "last_update_at": "2026-11-02T13:18:23Z",
-    "last_send_at": "2026-11-13T05:05:31Z",
+    "last_send_at": "2026-11-13T05:16:55Z",
     "updates_seen": 17,
-    "messages_sent": 574,
+    "messages_sent": 575,
     "errors": 41,
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
     "last_chat_id": "чат#c03145cb",
-    "last_digest_push": "2026-11-12",
+    "last_digest_push": "2026-11-13",
     "last_forge_push": "20261113T041240Z",
     "last_chat_tag": "чат#c03145cb"
   }
