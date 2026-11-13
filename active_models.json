@@ -1,15 +1,15 @@
 {
   "timestamp": "2026-11-13T13:51:40.252211+00:00",
-  "emergency_mode": true,
+  "emergency_mode": false,
   "last_emergency_run": "2026-11-13T13:51:40.252211+00:00",
-  "emergency_reason": "State stale by 6.8h (threshold: 6.0h; measured 2026-11-13T06:56:45+00:00)",
-  "emergency_cause": "state_stale",
+  "emergency_reason": "",
+  "emergency_cause": "",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter": "nvidia/nemotron-3-ultra-550b-a55b (дежурная команда по живому замеру)",
   "local_arbiter_feedback": "# Executive Summary — DeepSeek‑TPU‑NIM Emergency CPU Fallback\n\n**Status: DEGRADED / OPERATIONAL ON CPU FALLBACK**\n**Snapshot:** `2026-11-13T13:47:21.988860+00:00`\n**Emergency trigger:** control-plane state stale by **6.8 h** against a **6.0 h** threshold, measured at `2026-11-13T06:56:45+00:00`. The snapshot was taken **6 h 50 m 36.99 s** after that reference point, and emergency mode was still active at snapshot time. The primary TPU orchestrator is reported **offline or queued**; the snapshot ...",
   "catalog_diff": {
     "new_count": 0,
@@ -427,5 +427,7 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-11-13T19:57:23.460425+00:00Z"
+  "last_updated": "2026-11-13T23:08:44.787273+00:00Z",
+  "emergency_cleared_at": "2026-11-13T23:08:44.787270+00:00",
+  "emergency_cleared_because": "the fleet was measured again (2026-11-13T19:51:31+00:00, fleet_decision.tuned_at)"
 }
