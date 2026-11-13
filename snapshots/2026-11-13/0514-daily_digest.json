@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-11-13T05:14:56Z",
+  "subject": "Ежедневный дайджест ИИ: 13.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 35,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 6,
+  "items": [
+    {
+      "title": "Выпущены открытые веса модели FLUX 3 Image",
+      "summary": "Веса FLUX 3 Image опубликованы в открытом доступе. По сообщениям сообщества, поддержка уже добавлена в последнюю версию Git-репозитория, хотя номер версии в проекте пока не обновлён.",
+      "url": "https://www.reddit.com/r/StableDiffusion/comments/1x6oh9d/flux_3_image_open_weights_is_released/?tl=ru",
+      "source": "reddit.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "OpenAI представила open-weight reasoning-модели",
+      "summary": "OpenAI публикует продвинутые модели с открытыми весами, которые можно дообучать под конкретные сценарии и запускать локально на десктопах, ноутбуках и в дата-центрах.",
+      "url": "https://openai.com/open-models/",
+      "source": "openai.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Google представила TPU 8tx и 8i Max для агентной эпохи",
+      "summary": "Новое поколение TPU ориентировано на агентный ИИ: двухчиповая система 8i Max спроектирована для огромных контекстных окон и максимальной вычислительной плотности.",
+      "url": "https://blog.google/innovation-and-ai/infrastructure-and-cloud/global-network/tpu-8i-max-and-8tx/",
+      "source": "blog.google",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "NVIDIA представила платформу Vera Rubin для масштабируемого ИИ-рассуждения",
+      "summary": "Vera Rubin — платформа rack-scale третьего поколения: масштабирование внутри стойки обеспечивает коммутатор NVLink 6, а между стойками — InfiniBand Quantum-X800.",
+      "url": "https://www.nvidia.com/en-us/data-center/technologies/rubin/",
+      "source": "nvidia.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Google Cloud на Next '26 представила инфраструктуру для агентного ИИ",
+      "summary": "Анонсированы восьмое поколение TPU (8t и 8i) и bare-metal-инстансы A5X на базе NVIDIA Vera Rubin NVL72; главный акцент — переход к агентной интеллектуальности.",
+      "url": "https://cloud.google.com/blog/products/compute/ai-infrastructure-at-next26",
+      "source": "cloud.google.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "AMD описала подход к бенчмаркингу reasoning-моделей",
+      "summary": "Для оценки качества рассуждений, а не только скорости генерации, AMD использует Qwen3 и vLLM; тесты нацелены на реальную производительность reasoning-задач.",
+      "url": "https://rocm.blogs.amd.com/artificial-intelligence/benchmark-reasoning-models/README.html",
+      "source": "rocm.blogs.amd.com",
+      "date": "",
+      "category": "Исследования",
+      "detail": ""
+    }
+  ]
+}
