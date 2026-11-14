@@ -1,0 +1,13 @@
+diff --git a/harness/telegram_bot.py b/harness/telegram_bot.py
+--- a/harness/telegram_bot.py
++++ b/harness/telegram_bot.py
+@@ -200,8 +200,8 @@ class HarnessTelegramBot:
+         self._state_lock = threading.RLock()
+         self._stop = False
+         # Model calls (MiniMax streaming can take minutes) run in a worker pool so
+         # the polling loop keeps receiving and answering other messages meanwhile.
+-        self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tg-handler")
++        self._pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="tg-handler")
+ 
+         # Graceful shutdown so sessions/state survive a GitHub Actions job stop.
+         try:

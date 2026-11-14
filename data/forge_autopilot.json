@@ -1,47 +1,52 @@
 {
-  "attempted_at": "2026-11-13T04:12:40.488870+00:00",
+  "attempted_at": "2026-11-14T04:28:24.377218+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
-  "stage": "no_patch",
-  "facts_digest": "Дрейф флота: STABLE, средняя дельта -2.73, худший: minimaxai/minimax-m3.1-flash (дельта -6.07)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.54, задержка 2.25с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 91.08, задержка 3.76с, ok_rate 1.0, слабейшая задача canary_news=0.3\n- minimaxai/minimax-m3.1-flash: балл 83.3, задержка 15.14с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 338, ошибок 41, ответов 571",
-  "summary": "Модель ответила без патча — улучшать нечего.",
+  "stage": "suite",
+  "facts_digest": "Дрейф флота: REPLACED, средняя дельта 0.0, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта 0.0)\n- stepfun-ai/step-5-preview: балл 98.92, задержка 3.29с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.7с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 89.71, задержка 4.45с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: stepfun-ai/step-5-preview, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 366, ошибок 68, ответов 628",
+  "branch": null,
+  "error": "suite упал в песочнице",
+  "summary": "Патч отклонён конституцией на этапе «suite»: suite упал в песочнице",
   "writer": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "score": 96.54,
+    "score": 96.75,
     "verified": true,
-    "elapsed": 163.03,
+    "elapsed": 82.24,
     "status": "SUCCESS"
   },
   "chooser": {
-    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "model": "stepfun-ai/step-5-preview",
     "role": "duty_primary",
-    "elapsed": 12.68,
+    "elapsed": 235.65,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
   "local_status": null,
-  "target": "harness/fleet_tuner.py",
-  "normalised": false,
-  "notes": [],
+  "target": "harness/telegram_bot.py",
+  "normalised": true,
+  "notes": [
+    "заголовок @@ -200,7 +200,7 @@ исправлен на измеренные -200,8 +200,8"
+  ],
   "repair": {
-    "attempted": false,
-    "ok": false
+    "attempted": true,
+    "ok": false,
+    "status": "suite",
+    "model": "stepfun-ai/step-5-preview"
   },
-  "answer_preview": "Модель nvidia/nemotron-3-ultra-550b-a55b вернула вызов инструмента (fetch_webpage для страницы https://raw.githubusercontent.com/nvidia/nemotron-3-ultra/main/harness/fleet_tuner.py), но ответ получить не удалось.\nЗапрос, который она хотела выполнить: https://raw.githubusercontent.com/nvidia/nemotron-3-ultra/main/harness/fleet_tuner.py",
   "gate": {
-    "ok": null,
-    "stage": null,
+    "ok": false,
+    "stage": "suite",
     "branch": null,
-    "error": null
+    "error": "suite упал в песочнице"
   },
-  "patch_bytes": 0,
-  "attempt_day": "2026-11-13",
-  "checked_at": "2026-11-13T12:08:10.697018+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261113T041240Z",
-  "last_attempt_at": "2026-11-13T04:12:40.488870+00:00",
-  "attempt_age_hours": 7.93,
-  "freshness": "Последняя попытка: 13.11 04:12 UTC (7.9 ч назад).",
-  "skipped_today": true
+  "patch_bytes": 687,
+  "attempt_day": "2026-11-14",
+  "checked_at": "2026-11-14T04:28:24.377115+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261114T042824Z",
+  "last_attempt_at": "2026-11-14T04:28:24.377218+00:00",
+  "attempt_age_hours": 0.12,
+  "freshness": "Последняя попытка: 14.11 04:28 UTC (0 мин назад).",
+  "patch_file": "data/forge_autopilot/20261114T042824Z.patch"
 }
