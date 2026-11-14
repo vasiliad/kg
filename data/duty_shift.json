@@ -1,7 +1,7 @@
 {
-  "model_id": "nvidia/nemotron-3-ultra-550b-a55b",
-  "started_at": "2026-11-13T14:41:17Z",
-  "until": "2026-11-13T20:41:17Z",
+  "model_id": "stepfun-ai/step-5-preview",
+  "started_at": "2026-11-14T03:48:58Z",
+  "until": "2026-11-14T09:48:58Z",
   "chosen_by": "Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру",
   "calls": 0,
   "failures": 0,
