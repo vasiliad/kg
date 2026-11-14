@@ -1,0 +1,12 @@
+{
+  "model_id": "stepfun-ai/step-5-preview",
+  "started_at": "2026-11-14T03:48:58Z",
+  "until": "2026-11-14T09:48:58Z",
+  "chosen_by": "Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру",
+  "calls": 0,
+  "failures": 0,
+  "last_latency_sec": null,
+  "broken_at": "",
+  "broken_reason": "",
+  "started_because": "смена на 6 часов истекла"
+}
