@@ -1,0 +1,66 @@
+{
+  "generated_at": "2026-11-14T05:33:10Z",
+  "subject": "Ежедневный дайджест ИИ: 14.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 34,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 5,
+  "items": [
+    {
+      "title": "Mistral открыла веса модели Large 4 на 1 триллион параметров",
+      "summary": "Mistral выпустила открытые веса своей модели Large 4 с одним триллионом параметров. Модель ML4 доступна на Hugging Face, через API Mistral и некоторым пользователям Vibe.",
+      "url": "https://thenextweb.com/news/mistral-large-4-open-weights-release",
+      "source": "thenextweb.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Thinking Machines Lab открыла веса Inkling 2 Small на 594 млрд параметров под Apache 2.0",
+      "summary": "Thinking Machines Lab опубликовала на Hugging Face открытые веса модели Inkling 2 Small на 594 млрд параметров под лицензией Apache 2.0. Релиз состоялся после внешнего тестирования безопасности модели.",
+      "url": "https://huggingnews.com/ai/update-thinking-machines-releases-open-weights-for-inkling-2-small-model-ad1e886b",
+      "source": "huggingnews.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Дорожная карта Google по TPU бросает вызов доминированию Nvidia в облачном ИИ",
+      "summary": "Дорожная карта Google по Tensor Processing Units, по версии Data Center Frontier, постепенно превратилась в заметный противовес доминированию GPU Nvidia в облачном ИИ. Статья посвящена эволюции аппаратной стратегии Google в инфраструктуре для ИИ.",
+      "url": "https://www.datacenterfrontier.com/machine-learning/article/55336429/googles-tpu-roadmap-challenging-nvidias-dominance-in-ai-infrastructure",
+      "source": "datacenterfrontier.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "AMD описала подход к бенчмаркингу reasoning-моделей",
+      "summary": "В блоге AMD представлен способ тестирования моделей на задачах рассуждения. В примерах используются Qwen3 и vLLM, чтобы измерять качество рассуждений, а не только скорость генерации текста.",
+      "url": "https://rocm.blogs.amd.com/artificial-intelligence/benchmark-reasoning-models/README.html",
+      "source": "rocm.blogs.amd.com",
+      "date": "",
+      "category": "Исследования",
+      "detail": ""
+    },
+    {
+      "title": "AIMultiple протестировала 40 мультимодальных моделей на визуальном рассуждении",
+      "summary": "AIMultiple провела тестирование 40 ведущих мультимодальных ИИ-моделей на визуальном рассуждении с использованием 200 вопросов по изображениям. Оценка состояла из двух треков.",
+      "url": "https://aimultiple.com/visual-reasoning",
+      "source": "aimultiple.com",
+      "date": "",
+      "category": "Исследования",
+      "detail": ""
+    }
+  ]
+}
