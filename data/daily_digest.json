@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-14T05:33:10Z",
-  "subject": "Ежедневный дайджест ИИ: 14.11.2026",
+  "generated_at": "2026-11-15T05:51:39Z",
+  "subject": "Ежедневный дайджест ИИ: 15.11.2026",
   "tier": "TinyFish",
   "queries": [
     "новые модели ИИ релиз открытые веса",
@@ -12,52 +12,52 @@
     "исследования ИИ reasoning бенчмарки модели",
     "AI research reasoning benchmark LLM paper"
   ],
-  "sources_count": 34,
+  "sources_count": 40,
   "selection_mode": "модель отобрала",
   "full_news_count": 0,
   "items_count": 5,
   "items": [
     {
-      "title": "Mistral открыла веса модели Large 4 на 1 триллион параметров",
-      "summary": "Mistral выпустила открытые веса своей модели Large 4 с одним триллионом параметров. Модель ML4 доступна на Hugging Face, через API Mistral и некоторым пользователям Vibe.",
-      "url": "https://thenextweb.com/news/mistral-large-4-open-weights-release",
-      "source": "thenextweb.com",
+      "title": "Mistral открыла веса триллионной модели Large 4",
+      "summary": "Французская компания Mistral опубликовала открытые веса флагманской модели Large 4 (Le Chonk) с триллионом параметров. Компания также удешевила доступ к модели через API.",
+      "url": "https://3dnews.ru/1150622/mistral-otkrila-vesa-iimodeli-large-4-s-trillionom-parametrov-i-udeshevila-dostup-cherez-api",
+      "source": "3dnews.ru",
       "date": "",
       "category": "Модели",
       "detail": ""
     },
     {
-      "title": "Thinking Machines Lab открыла веса Inkling 2 Small на 594 млрд параметров под Apache 2.0",
-      "summary": "Thinking Machines Lab опубликовала на Hugging Face открытые веса модели Inkling 2 Small на 594 млрд параметров под лицензией Apache 2.0. Релиз состоялся после внешнего тестирования безопасности модели.",
-      "url": "https://huggingnews.com/ai/update-thinking-machines-releases-open-weights-for-inkling-2-small-model-ad1e886b",
-      "source": "huggingnews.com",
+      "title": "Aleph Alpha выпустила Kolibri 1 — двуязычную LLM с открытыми весами",
+      "summary": "Kolibri 1 — двуязычная модель Aleph Alpha с открытыми весами и лицензией Apache 2.0. Она обучена с нуля в Европе без зависимости от базовых моделей.",
+      "url": "https://www.datacamp.com/ru/blog/aleph-alpha-kolibri-1",
+      "source": "datacamp.com",
       "date": "",
       "category": "Модели",
       "detail": ""
     },
     {
-      "title": "Дорожная карта Google по TPU бросает вызов доминированию Nvidia в облачном ИИ",
-      "summary": "Дорожная карта Google по Tensor Processing Units, по версии Data Center Frontier, постепенно превратилась в заметный противовес доминированию GPU Nvidia в облачном ИИ. Статья посвящена эволюции аппаратной стратегии Google в инфраструктуре для ИИ.",
-      "url": "https://www.datacenterfrontier.com/machine-learning/article/55336429/googles-tpu-roadmap-challenging-nvidias-dominance-in-ai-infrastructure",
-      "source": "datacenterfrontier.com",
+      "title": "Google разделила TPU V8 на отдельные чипы для обучения и инференса",
+      "summary": "Впервые Google представила два варианта TPU: TPU 8t для обучения и TPU 8i для инференса. TPU 8t масштабируется до 9 600 чипов в суперподе, а TPU 8i получила новую топологию межсоединений Boardfly; заявленный масштаб сети достигает 1 млн TPU на кластер.",
+      "url": "https://tomshardware.com/tech-industry/semiconductors/google-splits-its-tpu-into-two-chips-for-the-first-time-with-training-and-inference-variants",
+      "source": "tomshardware.com",
       "date": "",
       "category": "Инфраструктура",
       "detail": ""
     },
     {
-      "title": "AMD описала подход к бенчмаркингу reasoning-моделей",
-      "summary": "В блоге AMD представлен способ тестирования моделей на задачах рассуждения. В примерах используются Qwen3 и vLLM, чтобы измерять качество рассуждений, а не только скорость генерации текста.",
-      "url": "https://rocm.blogs.amd.com/artificial-intelligence/benchmark-reasoning-models/README.html",
-      "source": "rocm.blogs.amd.com",
+      "title": "Oracle Cloud предложит Google TPU и новые ИИ-чипы",
+      "summary": "Oracle расширяет ИИ-инфраструктуру OCI за счёт Google TPU и других новых чипов. Одновременно компания углубляет партнёрство с Nvidia.",
+      "url": "https://www.datacenterknowledge.com/data-center-chips/oracle-cloud-to-offer-google-tpus-and-new-ai-chips",
+      "source": "datacenterknowledge.com",
       "date": "",
-      "category": "Исследования",
+      "category": "Инфраструктура",
       "detail": ""
     },
     {
-      "title": "AIMultiple протестировала 40 мультимодальных моделей на визуальном рассуждении",
-      "summary": "AIMultiple провела тестирование 40 ведущих мультимодальных ИИ-моделей на визуальном рассуждении с использованием 200 вопросов по изображениям. Оценка состояла из двух треков.",
-      "url": "https://aimultiple.com/visual-reasoning",
-      "source": "aimultiple.com",
+      "title": "Исследование сравнило длину цепочек рассуждений o1-mini и o3-mini",
+      "summary": "В работе систематически анализируется длина цепочек рассуждений вариантов o1-mini и o3-mini на бенчмарке Omni-MATH. Авторы обнаружили превосходство o3-mini (m) в рассмотренных сравнениях.",
+      "url": "https://nature.com/articles/s41598-026-50923-2.pdf",
+      "source": "nature.com",
       "date": "",
       "category": "Исследования",
       "detail": ""
