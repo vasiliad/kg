@@ -1,16 +1,16 @@
 {
-  "timestamp": "2026-11-14T12:57:28.688340+00:00",
-  "emergency_mode": false,
-  "last_emergency_run": "2026-11-14T12:57:28.688340+00:00",
-  "emergency_reason": "",
-  "emergency_cause": "",
+  "timestamp": "2026-11-15T13:30:03.274392+00:00",
+  "emergency_mode": true,
+  "last_emergency_run": "2026-11-15T13:30:03.274392+00:00",
+  "emergency_reason": "State stale by 6.5h (threshold: 6.0h; measured 2026-11-15T06:46:55+00:00)",
+  "emergency_cause": "state_stale",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "nvidia/nemotron-3-ultra-550b-a55b (дежурная команда по живому замеру)",
-  "local_arbiter_feedback": "# Executive Summary — DeepSeek-TPU-NIM Emergency Status\n\n**Status: DEGRADED — EMERGENCY CPU FALLBACK ACTIVE**\n**Report timestamp:** 2026-11-14T12:51:51.159640+00:00\n**Trigger:** state stale by 6.2h against a 6.0h threshold, measured at 2026-11-14T06:42:32+00:00\n**Trigger arithmetic check:** 06:42:32Z → 12:51:51Z = 6h 09m 19s ≈ 6.2h — the staleness is a genuine refresh gap, not a clock artifact.\n\n**Bottom line:** The measured roster is **healthy but shallow**. All four duty models are live-verifi...",
+  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter_feedback": "# Executive Summary — DeepSeek-TPU-NIM Ecosystem, Emergency CPU Fallback\n\n**Status: DEGRADED — EMERGENCY MODE ACTIVE (CPU FALLBACK)**\n**Report timestamp:** 2026-11-15T13:17:59.045830+00:00\n**Trigger:** state stale by 6.5 h (threshold 6.0 h; measured 2026-11-15T06:46:55+00:00)\n**Exact staleness:** 06:46:55 → 13:17:59.045830 = **6 h 31 m 04 s (6.518 h)**, i.e. **~31 minutes past the 6.0 h threshold**.\n\nThe duty roster was fixed by live measurement (ping latency + objective math/code/JSON probes). ...",
   "catalog_diff": {
     "new_count": 0,
     "removed_count": 0,
@@ -519,7 +519,5 @@
     "z-ai/glm-5.3-flash",
     "zyphra/zamba2-7b-instruct"
   ],
-  "last_updated": "2026-11-15T07:06:45.382070+00:00Z",
-  "emergency_cleared_at": "2026-11-14T21:53:32.427201+00:00",
-  "emergency_cleared_because": "the fleet was measured again (2026-11-14T18:16:21+00:00, fleet_decision.tuned_at)"
+  "last_updated": "2026-11-15T13:30:03.274454+00:00Z"
 }
