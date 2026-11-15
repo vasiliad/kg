@@ -1,0 +1,66 @@
+{
+  "generated_at": "2026-11-15T05:51:39Z",
+  "subject": "Ежедневный дайджест ИИ: 15.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 40,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 5,
+  "items": [
+    {
+      "title": "Mistral открыла веса триллионной модели Large 4",
+      "summary": "Французская компания Mistral опубликовала открытые веса флагманской модели Large 4 (Le Chonk) с триллионом параметров. Компания также удешевила доступ к модели через API.",
+      "url": "https://3dnews.ru/1150622/mistral-otkrila-vesa-iimodeli-large-4-s-trillionom-parametrov-i-udeshevila-dostup-cherez-api",
+      "source": "3dnews.ru",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Aleph Alpha выпустила Kolibri 1 — двуязычную LLM с открытыми весами",
+      "summary": "Kolibri 1 — двуязычная модель Aleph Alpha с открытыми весами и лицензией Apache 2.0. Она обучена с нуля в Европе без зависимости от базовых моделей.",
+      "url": "https://www.datacamp.com/ru/blog/aleph-alpha-kolibri-1",
+      "source": "datacamp.com",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Google разделила TPU V8 на отдельные чипы для обучения и инференса",
+      "summary": "Впервые Google представила два варианта TPU: TPU 8t для обучения и TPU 8i для инференса. TPU 8t масштабируется до 9 600 чипов в суперподе, а TPU 8i получила новую топологию межсоединений Boardfly; заявленный масштаб сети достигает 1 млн TPU на кластер.",
+      "url": "https://tomshardware.com/tech-industry/semiconductors/google-splits-its-tpu-into-two-chips-for-the-first-time-with-training-and-inference-variants",
+      "source": "tomshardware.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Oracle Cloud предложит Google TPU и новые ИИ-чипы",
+      "summary": "Oracle расширяет ИИ-инфраструктуру OCI за счёт Google TPU и других новых чипов. Одновременно компания углубляет партнёрство с Nvidia.",
+      "url": "https://www.datacenterknowledge.com/data-center-chips/oracle-cloud-to-offer-google-tpus-and-new-ai-chips",
+      "source": "datacenterknowledge.com",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Исследование сравнило длину цепочек рассуждений o1-mini и o3-mini",
+      "summary": "В работе систематически анализируется длина цепочек рассуждений вариантов o1-mini и o3-mini на бенчмарке Omni-MATH. Авторы обнаружили превосходство o3-mini (m) в рассмотренных сравнениях.",
+      "url": "https://nature.com/articles/s41598-026-50923-2.pdf",
+      "source": "nature.com",
+      "date": "",
+      "category": "Исследования",
+      "detail": ""
+    }
+  ]
+}
