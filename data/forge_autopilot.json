@@ -1,53 +1,51 @@
 {
-  "attempted_at": "2026-11-14T04:28:24.377218+00:00",
+  "attempted_at": "2026-11-15T04:22:59.263651+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
-  "stage": "suite",
-  "facts_digest": "Дрейф флота: REPLACED, средняя дельта 0.0, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта 0.0)\n- stepfun-ai/step-5-preview: балл 98.92, задержка 3.29с, ok_rate 1.0, слабейшая задача instruction=1.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.7с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- minimaxai/minimax-m3.1-flash: балл 89.71, задержка 4.45с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: stepfun-ai/step-5-preview, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 366, ошибок 68, ответов 628",
+  "stage": "apply_check",
+  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -18.61, худший: minimaxai/minimax-m3.1-flash (дельта -37.22)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.86с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 83.98, задержка 3.82с, ok_rate 0.875, слабейшая задача code=0.0\n- deepseek-ai/deepseek-v4.1-flash: балл 80.95, задержка 14.96с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 394, ошибок 76, ответов 686",
   "branch": null,
-  "error": "suite упал в песочнице",
-  "summary": "Патч отклонён конституцией на этапе «suite»: suite упал в песочнице",
+  "error": "error: patch fragment without header at /tmp/forge-patch-_9onz6zd/proposed.patch:3: @@ -380,6 +380,6 @@ class FleetTuner:\n",
+  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: patch fragment without header at /tmp/forge-patch-_9onz6zd/proposed.patch:3: @@ -380,6 +380,6 @@ class FleetTuner:\n",
   "writer": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
     "score": 96.75,
     "verified": true,
-    "elapsed": 82.24,
+    "elapsed": 117.15,
     "status": "SUCCESS"
   },
   "chooser": {
-    "model": "stepfun-ai/step-5-preview",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "elapsed": 235.65,
+    "elapsed": 6.35,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
   "local_status": null,
-  "target": "harness/telegram_bot.py",
+  "target": "harness/fleet_tuner.py",
   "normalised": true,
   "notes": [
-    "заголовок @@ -200,7 +200,7 @@ исправлен на измеренные -200,8 +200,8"
+    "заголовок @@ -380,7 +380,7 @@ исправлен на измеренные -380,6 +380,6"
   ],
   "repair": {
     "attempted": true,
     "ok": false,
-    "status": "suite",
-    "model": "stepfun-ai/step-5-preview"
+    "status": "SUCCESS_EMPTY_ANSWER"
   },
   "gate": {
     "ok": false,
-    "stage": "suite",
+    "stage": "apply_check",
     "branch": null,
-    "error": "suite упал в песочнице"
+    "error": "error: patch fragment without header at /tmp/forge-patch-_9onz6zd/proposed.patch:3: @@ -380,6 +380,6 @@ class FleetTuner:\n"
   },
-  "patch_bytes": 687,
-  "attempt_day": "2026-11-14",
-  "checked_at": "2026-11-14T11:25:12.779289+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261114T042824Z",
-  "last_attempt_at": "2026-11-14T04:28:24.377218+00:00",
-  "attempt_age_hours": 6.95,
-  "freshness": "Последняя попытка: 14.11 04:28 UTC (6.9 ч назад).",
-  "patch_file": "data/forge_autopilot/20261114T042824Z.patch",
-  "skipped_today": true
+  "patch_bytes": 583,
+  "attempt_day": "2026-11-15",
+  "checked_at": "2026-11-15T04:22:59.263560+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261115T042259Z",
+  "last_attempt_at": "2026-11-15T04:22:59.263651+00:00",
+  "attempt_age_hours": 0.28,
+  "freshness": "Последняя попытка: 15.11 04:22 UTC (0 мин назад).",
+  "patch_file": "data/forge_autopilot/20261115T042259Z.patch"
 }
