@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-16T06:15:12.243389+00:00",
+  "timestamp": "2026-11-16T13:40:26.036335+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -8,8 +8,6 @@
       "google/gemma-3-12b-it",
       "google/gemma-3-4b-it",
       "google/gemma-4-31b-it",
-      "meta/llama-3.2-90b-vision-instruct",
-      "meta/llama-guard-4-12b",
       "meta/muse-glimmer-30b",
       "minimaxai/minimax-m3.1-flash",
       "mistralai/mistral-large-4-1t-a52b",
@@ -17,12 +15,10 @@
       "nvidia/cosmos-reason2-8b",
       "nvidia/embed-qa-4",
       "nvidia/ising-calibration-1.5-31b",
-      "nvidia/llama-3.1-nemoguard-8b-content-safety",
       "nvidia/llama-3.1-nemoguard-8b-topic-control",
       "nvidia/llama-3.1-nemotron-safety-guard-8b-v3",
       "nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1",
       "nvidia/llama-3.2-nv-embedqa-1b-v1",
-      "nvidia/llama-nemotron-embed-vl-1b-v2",
       "nvidia/nemotron-3-embed-1b",
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       "nvidia/nemotron-3-ultra-550b-a55b",
@@ -32,8 +28,6 @@
       "nvidia/nemotron-3.5-embed-8b",
       "nvidia/nemotron-3.5-lightning-30b-a3b",
       "nvidia/nemotron-3.5-super-vl-120b-a12b",
-      "nvidia/nemotron-parse",
-      "nvidia/nemotron-parse-2.0",
       "nvidia/nv-embedqa-mistral-7b-v2",
       "nvidia/nvclip",
       "nvidia/riva-translate-4b-instruct-v2",
@@ -62,7 +56,7 @@
         "stepfun/step-5-preview": "stepfun-ai/step-5-preview"
       },
       "missing": [],
-      "live_count": 39
+      "live_count": 33
     },
     "missing_models": []
   },
@@ -92,18 +86,18 @@
     "files": {
       "data/.bot_sessions.json": 692,
       "data/telegram_history.txt": 41763,
-      "active_models.json": 16262,
+      "active_models.json": 16232,
       "data/.memory_vault.json": null
     }
   },
   "bot_health": {
     "ok": true,
-    "last_poll_at": "2026-11-16T06:10:58Z",
-    "age_min": 4.3,
-    "last_send_at": "2026-11-16T05:51:53Z",
+    "last_poll_at": "2026-11-16T13:39:24Z",
+    "age_min": 1.1,
+    "last_send_at": "2026-11-16T12:48:44Z",
     "updates_seen": 17,
-    "messages_sent": 749,
-    "errors": 81,
+    "messages_sent": 765,
+    "errors": 85,
     "last_chat_id": "чат#c03145cb",
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
   },
@@ -151,55 +145,55 @@
   "heartbeat": {
     "NVIDIA_API_KEY": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-16T06:15:17.450546+00:00",
+      "last_ok_at": "2026-11-16T13:40:31.454526+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "TINYFISH_API_KEYS": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-16T06:15:17.450546+00:00",
+      "last_ok_at": "2026-11-16T13:40:31.454526+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "LANGSEARCH_API_KEY": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-16T06:15:17.450546+00:00",
+      "last_ok_at": "2026-11-16T13:40:31.454526+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "KEENABLE_API_KEY": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-16T06:15:17.450546+00:00",
+      "last_ok_at": "2026-11-16T13:40:31.454526+00:00",
       "last_fail_at": "2026-11-07T03:35:03.693394+00:00",
       "dead_since": null
     },
     "FIRECRAWL_API_KEY": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-16T06:15:17.450546+00:00",
+      "last_ok_at": "2026-11-16T13:40:31.454526+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "TELEGRAM_BOT_TOKEN": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-16T06:15:17.450546+00:00",
+      "last_ok_at": "2026-11-16T13:40:31.454526+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "GMAIL_APP_PASSWORD": {
       "ok": true,
-      "at": "2026-11-16T06:15:17.450546+00:00",
+      "at": "2026-11-16T13:40:31.454526+00:00",
       "reason": "",
       "last_ok_at": "2026-11-16 06:03:46",
       "last_fail_at": null,
@@ -218,14 +212,14 @@
     "sealed_in_vault": 2,
     "sealed_self_provisioned": 2,
     "sealed_selfprov_layout": 0,
-    "checked_at": "2026-11-16T06:15:17.456732+00:00"
+    "checked_at": "2026-11-16T13:40:31.461210+00:00"
   },
   "governance": {
-    "measured_at": "2026-11-16T06:15:17Z",
+    "measured_at": "2026-11-16T13:40:31Z",
     "founder_last_seen": {
       "measured": true,
       "at": "2026-11-01T15:30:07Z",
-      "age_days": 14.61
+      "age_days": 14.92
     },
     "silence_days": 14.0,
     "steward_mode": true,
