@@ -1,0 +1,10 @@
+diff --git a/harness/tool_call.py b/harness/tool_call.py
+@@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:
+     for data in iter_json_objects(text):
+         if "tool" not in data and "tool_name" not in data and "function" not in data:
+             continue
+-        raw_name = data.get("tool") or data.get("tool_name") or data.get("function")
++        raw_name = data.get("tool") or data.get("tool_name") or data.get("function") or data.get("name")
+         args = data.get("arguments")
+         if args is None:
+             args = data.get("parameters")

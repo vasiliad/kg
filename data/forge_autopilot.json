@@ -1,33 +1,31 @@
 {
-  "attempted_at": "2026-11-15T04:22:59.263651+00:00",
+  "attempted_at": "2026-11-16T04:21:19.978165+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
   "stage": "apply_check",
-  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -18.61, худший: minimaxai/minimax-m3.1-flash (дельта -37.22)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 0.86с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 83.98, задержка 3.82с, ok_rate 0.875, слабейшая задача code=0.0\n- deepseek-ai/deepseek-v4.1-flash: балл 80.95, задержка 14.96с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 394, ошибок 76, ответов 686",
+  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -8.87, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -27.5)\n- stepfun-ai/step-5-preview: балл 81.36, задержка 6.97с, ok_rate 0.75, слабейшая задача json=0.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 69.25, задержка 36.81с, ok_rate 1.0, слабейшая задача instruction=0.5\n- minimaxai/minimax-m3.1-flash: балл 67.17, задержка 5.7с, ok_rate 0.625, слабейшая задача json=0.0\nДежурная смена: stepfun-ai/step-5-preview, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 422, ошибок 81, ответов 744",
   "branch": null,
-  "error": "error: patch fragment without header at /tmp/forge-patch-_9onz6zd/proposed.patch:3: @@ -380,6 +380,6 @@ class FleetTuner:\n",
-  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: patch fragment without header at /tmp/forge-patch-_9onz6zd/proposed.patch:3: @@ -380,6 +380,6 @@ class FleetTuner:\n",
+  "error": "error: patch fragment without header at /tmp/forge-patch-e0uo8c3a/proposed.patch:3: @@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:\n",
+  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: patch fragment without header at /tmp/forge-patch-e0uo8c3a/proposed.patch:3: @@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:\n",
   "writer": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "score": 96.75,
+    "score": 69.25,
     "verified": true,
-    "elapsed": 117.15,
+    "elapsed": 164.79,
     "status": "SUCCESS"
   },
   "chooser": {
-    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "model": "stepfun-ai/step-5-preview",
     "role": "duty_primary",
-    "elapsed": 6.35,
+    "elapsed": 45.4,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
   "local_status": null,
-  "target": "harness/fleet_tuner.py",
-  "normalised": true,
-  "notes": [
-    "заголовок @@ -380,7 +380,7 @@ исправлен на измеренные -380,6 +380,6"
-  ],
+  "target": "harness/tool_call.py",
+  "normalised": false,
+  "notes": [],
   "repair": {
     "attempted": true,
     "ok": false,
@@ -37,16 +35,15 @@
     "ok": false,
     "stage": "apply_check",
     "branch": null,
-    "error": "error: patch fragment without header at /tmp/forge-patch-_9onz6zd/proposed.patch:3: @@ -380,6 +380,6 @@ class FleetTuner:\n"
+    "error": "error: patch fragment without header at /tmp/forge-patch-e0uo8c3a/proposed.patch:3: @@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:\n"
   },
-  "patch_bytes": 583,
-  "attempt_day": "2026-11-15",
-  "checked_at": "2026-11-15T11:54:40.582886+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261115T042259Z",
-  "last_attempt_at": "2026-11-15T04:22:59.263651+00:00",
-  "attempt_age_hours": 7.53,
-  "freshness": "Последняя попытка: 15.11 04:22 UTC (7.5 ч назад).",
-  "patch_file": "data/forge_autopilot/20261115T042259Z.patch",
-  "skipped_today": true
+  "patch_bytes": 587,
+  "attempt_day": "2026-11-16",
+  "checked_at": "2026-11-16T04:21:19.978084+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261116T042119Z",
+  "last_attempt_at": "2026-11-16T04:21:19.978165+00:00",
+  "attempt_age_hours": 0.1,
+  "freshness": "Последняя попытка: 16.11 04:21 UTC (0 мин назад).",
+  "patch_file": "data/forge_autopilot/20261116T042119Z.patch"
 }
