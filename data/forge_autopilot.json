@@ -39,11 +39,12 @@
   },
   "patch_bytes": 587,
   "attempt_day": "2026-11-16",
-  "checked_at": "2026-11-16T04:21:19.978084+00:00",
-  "checked_kind": "attempt",
+  "checked_at": "2026-11-16T12:40:19.403119+00:00",
+  "checked_kind": "check_only",
   "verdict_id": "20261116T042119Z",
   "last_attempt_at": "2026-11-16T04:21:19.978165+00:00",
-  "attempt_age_hours": 0.1,
-  "freshness": "Последняя попытка: 16.11 04:21 UTC (0 мин назад).",
-  "patch_file": "data/forge_autopilot/20261116T042119Z.patch"
+  "attempt_age_hours": 8.32,
+  "freshness": "Последняя попытка: 16.11 04:21 UTC (8.3 ч назад).",
+  "patch_file": "data/forge_autopilot/20261116T042119Z.patch",
+  "skipped_today": true
 }
