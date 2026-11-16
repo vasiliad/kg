@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-11-16T06:03:43Z",
+  "subject": "Ежедневный дайджест ИИ: 16.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 39,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 2,
+  "items": [
+    {
+      "title": "Веса Muse Spark Open на 816 млрд параметров стали общедоступными",
+      "summary": "Веса модели Muse Spark Open на 816 млрд параметров опубликованы и теперь доступны всем желающим. Unite.AI отмечает риски широкого доступа к открытым моделям: незаконная деятельность, создание вредоносного программного обеспечения, разработка оружия и управление критически важной инфраструктурой.",
+      "url": "https://unite.ai/ru/metas-816b-parameter-muse-spark-open-weights-are-now-public",
+      "source": "unite.ai",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Google расширила линейку специализированных ИИ-чипов двумя новыми TPU",
+      "summary": "Google в понедельник представила два новых варианта своих тензорных процессоров — TPU 8i Max и 8TX, расширив портфель специализированных чипов для ИИ. Новинки анонсированы в корпоративном блоге Google.",
+      "url": "https://techcrunch.com/2026/11/10/google-broadens-its-ai-hardware-portfolio-with-two-new-specialized-chips",
+      "source": "techcrunch.com",
+      "date": "10.11.2026",
+      "category": "Инфраструктура",
+      "detail": ""
+    }
+  ]
+}
