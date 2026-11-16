@@ -1,5 +1,3 @@
-[2026-10-29 11:23:33 UTC] SOVEREIGN MIGRATION: Elected Qwen/Qwen2.5-1.5B-Instruct on GitHub CPU due to total external API blackout.
-[2026-10-30 08:35:51 UTC] EMERGENCY RUN SUCCESS | Diff: +81/-0 | Fleet: 5 models | Reason: Trigger forced by user / CLI flag --force
 [2026-10-30 11:10:55 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Проверка связи | получатель=настроен (sha256:2604fb61) | статус=DELIVERED
 [2026-10-30 11:16:54 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | получатель=настроен (sha256:2604fb61) | статус=DELIVERED
 [2026-10-30 17:58:01 UTC] EMERGENCY RUN SUCCESS | Diff: +0/-0 | Fleet: 5 models | Reason: State stale by 9.3h (threshold: 6h)
@@ -298,3 +296,5 @@
 [2026-11-16 14:40:54 UTC] ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов=5 | измерено=2 | состав=nvidia/nemotron-3-ultra-550b-a55b (Дежурный основной, 96.37)
 [2026-11-16 21:50:40 UTC] СМЕНА РОТИРОВАНА | модель=nvidia/nemotron-3-ultra-550b-a55b | до=2026-11-17T03:50:40Z | причина=смена на 6 часов истекла
 [2026-11-16 21:50:40 UTC] ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов=5 | измерено=4 | состав=nvidia/nemotron-3-ultra-550b-a55b (Дежурный основной, 100.0), deepseek-ai/deepseek-v4.1-flash (Дежурный быстрый, 94.43), stepfun-ai/step-5-preview (Дежурный кодер, 93.59), minimaxai/minimax-m3.1-flash (Дежурный флагман, 89.07)
+[2026-11-16 22:34:24 UTC] ФЛОТ ПЕРЕОБРАН | метод=живой замер | кандидатов=5 | измерено=4 | состав=nvidia/nemotron-3-ultra-550b-a55b (Дежурный основной, 96.75), deepseek-ai/deepseek-v4.1-flash (Дежурный кодер, 84.66), stepfun-ai/step-5-preview (Дежурный быстрый, 80.42)
+[2026-11-16 22:34:24 UTC] ДРЕЙФ ФЛОТА | Дрейф флота: DEGRADED; средний сдвиг -8.73; худший: stepfun-ai/step-5-preview (-13.17); выбыло: minimaxai/minimax-m3.1-flash.

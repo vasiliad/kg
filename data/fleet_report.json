@@ -1,5 +1,5 @@
 {
-  "tuned_at": "2026-11-16 21:35:11 UTC",
+  "tuned_at": "2026-11-16 22:18:14 UTC",
   "method": "live_probe",
   "quick": false,
   "policy": {
@@ -37,8 +37,8 @@
     "nvidia/nemotron-3-ultra-550b-a55b",
     "minimaxai/minimax-m3.1-flash",
     "deepseek-ai/deepseek-v4.1-flash",
-    "z-ai/glm-5.3-flash",
-    "stepfun-ai/step-5-preview"
+    "stepfun-ai/step-5-preview",
+    "z-ai/glm-5.3-flash"
   ],
   "size_policy": {
     "min_params_b": 150.0,
@@ -58,11 +58,11 @@
       "vendor": "nvidia",
       "prior": 31.5,
       "status": "MEASURED",
-      "final_score": 100.0,
-      "latency_sec": 0.68,
+      "final_score": 96.75,
+      "latency_sec": 1.27,
       "task_scores": {
         "instruction": 1.0,
-        "reasoning": 1.0,
+        "reasoning": 0.75,
         "code": 1.0,
         "json": 1.0,
         "translation": 1.0,
@@ -77,13 +77,23 @@
     {
       "id": "minimaxai/minimax-m3.1-flash",
       "vendor": "minimaxai",
-      "prior": 12.0,
+      "prior": 22.0,
+      "status": "FAILED_HTTP_503",
+      "final_score": null,
+      "latency_sec": 0.15,
+      "task_scores": null,
+      "roles": []
+    },
+    {
+      "id": "deepseek-ai/deepseek-v4.1-flash",
+      "vendor": "deepseek-ai",
+      "prior": 20.0,
       "status": "MEASURED",
-      "final_score": 89.07,
-      "latency_sec": 5.22,
+      "final_score": 84.66,
+      "latency_sec": 14.41,
       "task_scores": {
         "instruction": 0.5,
-        "reasoning": 0.75,
+        "reasoning": 1.0,
         "code": 1.0,
         "json": 1.0,
         "translation": 1.0,
@@ -92,24 +102,24 @@
         "canary_news": 1.0
       },
       "roles": [
-        "duty_flagship"
+        "duty_code"
       ]
     },
     {
-      "id": "deepseek-ai/deepseek-v4.1-flash",
-      "vendor": "deepseek-ai",
-      "prior": 10.0,
+      "id": "stepfun-ai/step-5-preview",
+      "vendor": "stepfun-ai",
+      "prior": 17.0,
       "status": "MEASURED",
-      "final_score": 94.43,
-      "latency_sec": 5.68,
+      "final_score": 80.42,
+      "latency_sec": 8.1,
       "task_scores": {
         "instruction": 1.0,
         "reasoning": 1.0,
-        "code": 1.0,
+        "code": 0.0,
         "json": 1.0,
         "translation": 1.0,
         "toolcall": 1.0,
-        "prose": 0.5,
+        "prose": 1.0,
         "canary_news": 1.0
       },
       "roles": [
@@ -120,32 +130,20 @@
       "id": "z-ai/glm-5.3-flash",
       "vendor": "z-ai",
       "prior": 10.0,
-      "status": "FAILED_TIMEOUT",
-      "final_score": null,
-      "latency_sec": 45.0,
-      "task_scores": null,
-      "roles": []
-    },
-    {
-      "id": "stepfun-ai/step-5-preview",
-      "vendor": "stepfun-ai",
-      "prior": 7.0,
       "status": "MEASURED",
-      "final_score": 93.59,
-      "latency_sec": 9.69,
+      "final_score": 34.0,
+      "latency_sec": 45.97,
       "task_scores": {
-        "instruction": 1.0,
-        "reasoning": 1.0,
+        "instruction": 0.5,
+        "reasoning": 0.0,
         "code": 1.0,
         "json": 1.0,
         "translation": 1.0,
-        "toolcall": 1.0,
-        "prose": 1.0,
-        "canary_news": 1.0
+        "toolcall": 0.0,
+        "prose": 0.0,
+        "canary_news": 0.0
       },
-      "roles": [
-        "duty_code"
-      ]
+      "roles": []
     }
   ],
   "fleet": [
@@ -156,18 +154,18 @@
       "roles": [
         "duty_primary"
       ],
-      "quality_score": 100.0,
+      "quality_score": 96.75,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-11-16T21:50:40+00:00",
+      "score_as_of": "2026-11-16T22:34:24+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 0.68,
+        "latency_sec": 1.27,
         "ok_rate": 1.0,
         "speed_score": 1.0,
         "task_scores": {
           "instruction": 1.0,
-          "reasoning": 1.0,
+          "reasoning": 0.75,
           "code": 1.0,
           "json": 1.0,
           "translation": 1.0,
@@ -177,7 +175,7 @@
         },
         "task_verdicts": {
           "instruction": "russian",
-          "reasoning": "correct",
+          "reasoning": "partial",
           "code": "compiles 5/5",
           "json": "keys 4/4",
           "translation": "correct",
@@ -195,7 +193,7 @@
         "task": "json",
         "variant": "deterministic",
         "score": 1.0,
-        "latency_sec": 1.27
+        "latency_sec": 2.53
       },
       "seed_prior": {
         "tier": "Ultra-Massive-Flagship",
@@ -205,21 +203,21 @@
     {
       "id": "deepseek-ai/deepseek-v4.1-flash",
       "owned_by": "deepseek-ai",
-      "tier": "Дежурный быстрый",
+      "tier": "Дежурный кодер",
       "roles": [
-        "duty_fast"
+        "duty_code"
       ],
-      "quality_score": 94.43,
+      "quality_score": 84.66,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-11-16T21:50:40+00:00",
+      "score_as_of": "2026-11-16T22:34:24+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 5.68,
+        "latency_sec": 14.41,
         "ok_rate": 1.0,
-        "speed_score": 0.877,
+        "speed_score": 0.586,
         "task_scores": {
-          "instruction": 1.0,
+          "instruction": 0.5,
           "reasoning": 1.0,
           "code": 1.0,
           "json": 1.0,
@@ -229,7 +227,7 @@
           "canary_news": 1.0
         },
         "task_verdicts": {
-          "instruction": "russian",
+          "instruction": "mixed",
           "reasoning": "correct",
           "code": "compiles 5/5",
           "json": "keys 4/4",
@@ -248,7 +246,7 @@
         "task": "json",
         "variant": "recommended",
         "score": 1.0,
-        "latency_sec": 12.04
+        "latency_sec": 6.19
       },
       "seed_prior": {
         "tier": "Ultra-Sparse-MTP",
@@ -258,23 +256,23 @@
     {
       "id": "stepfun-ai/step-5-preview",
       "owned_by": "stepfun-ai",
-      "tier": "Дежурный кодер",
+      "tier": "Дежурный быстрый",
       "roles": [
-        "duty_code"
+        "duty_fast"
       ],
-      "quality_score": 93.59,
+      "quality_score": 80.42,
       "score_source": "live_probe",
       "score_verified": true,
-      "score_as_of": "2026-11-16T21:50:40+00:00",
+      "score_as_of": "2026-11-16T22:34:24+00:00",
       "status": "APPROVED",
       "measured": {
-        "latency_sec": 9.69,
-        "ok_rate": 1.0,
-        "speed_score": 0.744,
+        "latency_sec": 8.1,
+        "ok_rate": 0.875,
+        "speed_score": 0.797,
         "task_scores": {
           "instruction": 1.0,
           "reasoning": 1.0,
-          "code": 1.0,
+          "code": 0.0,
           "json": 1.0,
           "translation": 1.0,
           "toolcall": 1.0,
@@ -284,7 +282,7 @@
         "task_verdicts": {
           "instruction": "russian",
           "reasoning": "correct",
-          "code": "compiles 5/5",
+          "code": "no_code",
           "json": "keys 4/4",
           "translation": "correct",
           "toolcall": "correct tool=get_weather",
@@ -301,73 +299,22 @@
         "task": "json",
         "variant": "recommended",
         "score": 1.0,
-        "latency_sec": 2.07
+        "latency_sec": 2.34
       },
       "seed_prior": {
         "tier": "Ultra-Multimodal-Preview",
         "arena_elo": 1380
       }
-    },
-    {
-      "id": "minimaxai/minimax-m3.1-flash",
-      "owned_by": "minimaxai",
-      "tier": "Дежурный флагман",
-      "roles": [
-        "duty_flagship"
-      ],
-      "quality_score": 89.07,
-      "score_source": "live_probe",
-      "score_verified": true,
-      "score_as_of": "2026-11-16T21:50:40+00:00",
-      "status": "APPROVED",
-      "measured": {
-        "latency_sec": 5.22,
-        "ok_rate": 1.0,
-        "speed_score": 0.893,
-        "task_scores": {
-          "instruction": 0.5,
-          "reasoning": 0.75,
-          "code": 1.0,
-          "json": 1.0,
-          "translation": 1.0,
-          "toolcall": 1.0,
-          "prose": 0.5,
-          "canary_news": 1.0
-        },
-        "task_verdicts": {
-          "instruction": "mixed",
-          "reasoning": "partial",
-          "code": "compiles 5/5",
-          "json": "keys 4/4",
-          "translation": "correct",
-          "toolcall": "correct tool=get_weather",
-          "prose": "mixed",
-          "canary_news": "full_news"
-        }
-      },
-      "recommended_params": {
-        "temperature": 0.6,
-        "top_p": 0.95,
-        "max_tokens": 4096
-      },
-      "param_sweep": {
-        "task": "json",
-        "variant": "recommended",
-        "score": 1.0,
-        "latency_sec": 3.71
-      },
-      "seed_prior": {
-        "tier": "Ultra-Flash-Reasoning",
-        "arena_elo": 1410
-      }
     }
   ],
   "decision_log": [
-    "  ping minimaxai/minimax-m3.1-flash: OK (5.22s)",
-    "  ping deepseek-ai/deepseek-v4.1-flash: OK (5.68s)",
-    "  ping z-ai/glm-5.3-flash: TIMEOUT (45.0s)",
-    "  ping stepfun-ai/step-5-preview: OK (9.69s)",
-    "  probe nvidia/nemotron-3-ultra-550b-a55b/reasoning: correct (score=1.0)",
+    "Stage A: pinging 5 candidates...",
+    "  ping nvidia/nemotron-3-ultra-550b-a55b: OK (1.27s)",
+    "  ping minimaxai/minimax-m3.1-flash: HTTP_503 (0.15s)",
+    "  ping deepseek-ai/deepseek-v4.1-flash: OK (14.41s)",
+    "  ping stepfun-ai/step-5-preview: OK (8.1s)",
+    "  ping z-ai/glm-5.3-flash: OK (45.97s)",
+    "  probe nvidia/nemotron-3-ultra-550b-a55b/reasoning: partial (score=0.75)",
     "  probe nvidia/nemotron-3-ultra-550b-a55b/code: compiles 5/5 (score=1.0)",
     "  probe nvidia/nemotron-3-ultra-550b-a55b/json: keys 4/4 (score=1.0)",
     "  probe nvidia/nemotron-3-ultra-550b-a55b/translation: correct (score=1.0)",
@@ -375,14 +322,14 @@
     "  probe nvidia/nemotron-3-ultra-550b-a55b/prose: prose_ru (score=1.0)",
     "  probe nvidia/nemotron-3-ultra-550b-a55b/canary_news: full_news (score=1.0)",
     "  params nvidia/nemotron-3-ultra-550b-a55b: variant=deterministic (json score=1.0)",
-    "  probe minimaxai/minimax-m3.1-flash/reasoning: partial (score=0.75)",
-    "  probe minimaxai/minimax-m3.1-flash/code: compiles 5/5 (score=1.0)",
-    "  probe minimaxai/minimax-m3.1-flash/json: keys 4/4 (score=1.0)",
-    "  probe minimaxai/minimax-m3.1-flash/translation: correct (score=1.0)",
-    "  probe minimaxai/minimax-m3.1-flash/toolcall: correct tool=get_weather (score=1.0)",
-    "  probe minimaxai/minimax-m3.1-flash/prose: mixed (score=0.5)",
-    "  probe minimaxai/minimax-m3.1-flash/canary_news: full_news (score=1.0)",
-    "  params minimaxai/minimax-m3.1-flash: variant=recommended (json score=1.0)",
+    "  probe stepfun-ai/step-5-preview/reasoning: correct (score=1.0)",
+    "  probe stepfun-ai/step-5-preview/code: no_code (score=0.0)",
+    "  probe stepfun-ai/step-5-preview/json: keys 4/4 (score=1.0)",
+    "  probe stepfun-ai/step-5-preview/translation: correct (score=1.0)",
+    "  probe stepfun-ai/step-5-preview/toolcall: correct tool=get_weather (score=1.0)",
+    "  probe stepfun-ai/step-5-preview/prose: prose_ru (score=1.0)",
+    "  probe stepfun-ai/step-5-preview/canary_news: full_news (score=1.0)",
+    "  params stepfun-ai/step-5-preview: variant=recommended (json score=1.0)",
     "  probe deepseek-ai/deepseek-v4.1-flash/reasoning: correct (score=1.0)",
     "  probe deepseek-ai/deepseek-v4.1-flash/code: compiles 5/5 (score=1.0)",
     "  probe deepseek-ai/deepseek-v4.1-flash/json: keys 4/4 (score=1.0)",
@@ -391,55 +338,61 @@
     "  probe deepseek-ai/deepseek-v4.1-flash/prose: mixed (score=0.5)",
     "  probe deepseek-ai/deepseek-v4.1-flash/canary_news: full_news (score=1.0)",
     "  params deepseek-ai/deepseek-v4.1-flash: variant=recommended (json score=1.0)",
-    "  probe stepfun-ai/step-5-preview/reasoning: correct (score=1.0)",
-    "  probe stepfun-ai/step-5-preview/code: compiles 5/5 (score=1.0)",
-    "  probe stepfun-ai/step-5-preview/json: keys 4/4 (score=1.0)",
-    "  probe stepfun-ai/step-5-preview/translation: correct (score=1.0)",
-    "  probe stepfun-ai/step-5-preview/toolcall: correct tool=get_weather (score=1.0)",
-    "  probe stepfun-ai/step-5-preview/prose: prose_ru (score=1.0)",
-    "  probe stepfun-ai/step-5-preview/canary_news: full_news (score=1.0)",
-    "  params stepfun-ai/step-5-preview: variant=recommended (json score=1.0)",
-    "  role: nvidia/nemotron-3-ultra-550b-a55b -> duty_primary | score=100.0 (задачи: {'instruction': 1.0, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 1.0, 'canary_news': 1.0}, задержка 0.68с, ok=1.0)",
-    "  role: deepseek-ai/deepseek-v4.1-flash -> duty_fast | score=94.43 (задачи: {'instruction': 1.0, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 0.5, 'canary_news': 1.0}, задержка 5.68с, ok=1.0)",
-    "  role: stepfun-ai/step-5-preview -> duty_code | score=93.59 (задачи: {'instruction': 1.0, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 1.0, 'canary_news': 1.0}, задержка 9.69с, ok=1.0)",
-    "  role: minimaxai/minimax-m3.1-flash -> duty_flagship | score=89.07 (задачи: {'instruction': 0.5, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 0.5, 'canary_news': 1.0}, задержка 5.22с, ok=1.0)"
+    "  probe z-ai/glm-5.3-flash/reasoning: empty (score=0.0)",
+    "  probe z-ai/glm-5.3-flash/code: compiles 5/5 (score=1.0)",
+    "  probe z-ai/glm-5.3-flash/json: keys 4/4 (score=1.0)",
+    "  probe z-ai/glm-5.3-flash/translation: correct (score=1.0)",
+    "  probe z-ai/glm-5.3-flash/toolcall: no_json (score=0.0)",
+    "  probe z-ai/glm-5.3-flash/prose: empty (score=0.0)",
+    "  probe z-ai/glm-5.3-flash/canary_news: empty (score=0.0)",
+    "  role: nvidia/nemotron-3-ultra-550b-a55b -> duty_primary | score=96.75 (задачи: {'instruction': 1.0, 'reasoning': 0.75, 'code': 1.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 1.0, 'canary_news': 1.0}, задержка 1.27с, ok=1.0)",
+    "  role: deepseek-ai/deepseek-v4.1-flash -> duty_code | score=84.66 (задачи: {'instruction': 0.5, 'reasoning': 1.0, 'code': 1.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 0.5, 'canary_news': 1.0}, задержка 14.41с, ok=1.0)",
+    "  role: stepfun-ai/step-5-preview -> duty_fast | score=80.42 (задачи: {'instruction': 1.0, 'reasoning': 1.0, 'code': 0.0, 'json': 1.0, 'translation': 1.0, 'toolcall': 1.0, 'prose': 1.0, 'canary_news': 1.0}, задержка 8.1с, ok=0.875)"
   ],
   "drift": {
-    "status": "IMPROVING",
-    "mean_score_delta": 41.36,
+    "status": "DEGRADED",
+    "mean_score_delta": -8.73,
     "worst": {
-      "id": "nvidia/nemotron-3-ultra-550b-a55b",
-      "delta": 3.63
+      "id": "stepfun-ai/step-5-preview",
+      "delta": -13.17
     },
-    "added": [
-      "deepseek-ai/deepseek-v4.1-flash",
-      "minimaxai/minimax-m3.1-flash",
-      "stepfun-ai/step-5-preview"
+    "added": [],
+    "removed": [
+      "minimaxai/minimax-m3.1-flash"
     ],
-    "removed": [],
     "per_model": {
       "nvidia/nemotron-3-ultra-550b-a55b": {
-        "score": 100.0,
-        "previous_score": 96.37,
-        "delta": 3.63,
-        "quality": 1.0,
-        "quality_delta": 0.0312,
+        "score": 96.75,
+        "previous_score": 100.0,
+        "delta": -3.25,
+        "quality": 0.9688,
+        "quality_delta": -0.0312,
         "roles": [
           "duty_primary"
         ]
       },
-      "stepfun-ai/step-5-preview": {
-        "score": 93.59,
-        "previous_score": 14.5,
-        "delta": 79.09,
-        "quality": 1.0,
-        "quality_delta": 0.75,
+      "deepseek-ai/deepseek-v4.1-flash": {
+        "score": 84.66,
+        "previous_score": 94.43,
+        "delta": -9.77,
+        "quality": 0.875,
+        "quality_delta": -0.0625,
         "roles": [
           "duty_code"
         ]
+      },
+      "stepfun-ai/step-5-preview": {
+        "score": 80.42,
+        "previous_score": 93.59,
+        "delta": -13.17,
+        "quality": 0.875,
+        "quality_delta": -0.125,
+        "roles": [
+          "duty_fast"
+        ]
       }
     },
-    "compared_models": 2,
+    "compared_models": 3,
     "previous_tasks": [
       "reasoning",
       "code",
@@ -458,6 +411,6 @@
       "prose",
       "canary_news"
     ],
-    "note": "ростер измерен лучше"
+    "note": "ростер измерен хуже"
   }
 }
