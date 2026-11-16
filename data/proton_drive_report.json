@@ -1,120 +1,16 @@
 {
-  "checked_at": "2026-11-15T12:57:21.010646+00:00",
-  "status": "ok",
+  "checked_at": "2026-11-16T06:43:18.873159+00:00",
+  "status": "failed",
   "remote": "protondrive:/immortal/",
   "account": "sha256:71182a53",
   "source": "environment",
-  "uploaded": [
-    {
-      "artefact": "nim_history.log",
-      "remote": "protondrive:/immortal/nim_history.log",
-      "bytes": 67590,
-      "verified": true,
-      "sha256": "f72e1f3dd93a5ca7a9fa4969fad648def492df6be15fd046e123a4803a8b3c76"
-    },
-    {
-      "artefact": "diagnostics_report.json",
-      "remote": "protondrive:/immortal/diagnostics_report.json",
-      "bytes": 9202,
-      "verified": true,
-      "sha256": "b893b1f40cf2a7f028b411e81b4ce3795fc124c498f6ed628aa3ee5bb57c658e"
-    },
-    {
-      "artefact": "data/daily_digest.json",
-      "remote": "protondrive:/immortal/data/daily_digest.json",
-      "bytes": 4140,
-      "verified": true,
-      "sha256": "5fe1bde37db533c94d1bad107bc08b0ea26500c5c1b68a5520ef1c565e2d9426"
-    },
-    {
-      "artefact": "data/fleet_report.json",
-      "remote": "protondrive:/immortal/data/fleet_report.json",
-      "bytes": 14226,
-      "verified": true,
-      "sha256": "42cb88a920871c6f4fb579dc6e7e31867049499a5621dbe668b8a01fdc377441"
-    },
-    {
-      "artefact": "data/bot_selftest_report.json",
-      "remote": "protondrive:/immortal/data/bot_selftest_report.json",
-      "bytes": 16181,
-      "verified": true,
-      "sha256": "d2c06a30d22cf94208c3b493e1e2d97a1fdc58bcd5776719770a28d807937a45"
-    },
-    {
-      "artefact": "data/cloud_tests_report.json",
-      "remote": "protondrive:/immortal/data/cloud_tests_report.json",
-      "bytes": 240,
-      "verified": true,
-      "sha256": "8400de1a178f0a092a583feabc0d47dfeefd682d7c03223012b860d63263f75e"
-    },
-    {
-      "artefact": "data/survival_report.json",
-      "remote": "protondrive:/immortal/data/survival_report.json",
-      "bytes": 306,
-      "verified": true,
-      "sha256": "cf87a7b5700c875b3ee252f74cebbed77977aefe3da54196f659bf2dc5548984"
-    },
-    {
-      "artefact": "data/forge_autopilot.json",
-      "remote": "protondrive:/immortal/data/forge_autopilot.json",
-      "bytes": 2930,
-      "verified": true,
-      "sha256": "43b46a1829bcaac109b88b8869177f2deb9065d6e26eafef6ddae4f5d4c2052a"
-    },
-    {
-      "artefact": "data/duty_shift.json",
-      "remote": "protondrive:/immortal/data/duty_shift.json",
-      "bytes": 453,
-      "verified": true,
-      "sha256": "732d7181470215d645cf6627041efaa5f4c31cbe3d414876657ea5ef996b978d"
-    },
-    {
-      "artefact": "data/telegram_history.txt",
-      "remote": "protondrive:/immortal/data/telegram_history.txt",
-      "bytes": 41763,
-      "verified": true,
-      "sha256": "c21fc5606cde2417c1989ad703f704430d78cb12f943c261f6cc15726dc3118e"
-    },
-    {
-      "artefact": "data/.cycle_supervisor.json",
-      "remote": "protondrive:/immortal/data/.cycle_supervisor.json",
-      "bytes": 2783,
-      "verified": true,
-      "sha256": "4d388cf6fa44f65a7b9034f8610cf890786eac9414e0a095fa4974f4d894dcc6"
-    },
-    {
-      "artefact": "data/.bot_sessions.json",
-      "remote": "protondrive:/immortal/data/.bot_sessions.json",
-      "bytes": 692,
-      "verified": true,
-      "sha256": "250015bba461b9c1f08603eba3e0477601a8d90629b1586a772e771c102cea2d"
-    },
-    {
-      "artefact": "data/.credential_heartbeat.json",
-      "remote": "protondrive:/immortal/data/.credential_heartbeat.json",
-      "bytes": 1509,
-      "verified": true,
-      "sha256": "4fff5ffadf9ad890b5fdd48f733f3f3e69978acfd2d3c9e5d9d89dd01d1c1fe2"
-    },
-    {
-      "artefact": "data/.sealed_vault.json",
-      "remote": "protondrive:/immortal/data/.sealed_vault.json",
-      "bytes": 5173,
-      "verified": true,
-      "sha256": "3d38e384e11aa385604f2a1febbfcf0fade8015bb7a1b1366dd59bb2fdb7ba15"
-    }
-  ],
+  "uploaded": [],
   "missing": [],
-  "errors": [],
+  "errors": [
+    "copy: rclone answered 1: 2026/11/16 06:43:18 NOTICE: Config file \"/home/runner/.config/rclone/rclone.conf\" not found - using defaults\n2026/11/16 06:43:25 NOTICE: proton drive root link ID 'immortal': 422 POST https://drive-api.proton.me/drive/shares/p2geCzvawEdgbPjkzJnOIA/files: A file or folder with that name already exist"
+  ],
   "notes": [],
   "degraded": false,
   "two_factor": "off",
-  "vault": {
-    "entries": 22,
-    "opened": 22,
-    "ok": true,
-    "why": ""
-  },
-  "verified": 14,
-  "count": 14
+  "vault": {}
 }
