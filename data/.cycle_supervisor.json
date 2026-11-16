@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-16T02:22:32.218110+00:00",
+  "checked_at": "2026-11-16T03:14:32.466854+00:00",
   "repo": "vasiliad/kg",
   "dry_run": false,
   "cycles": [
@@ -7,33 +7,25 @@
       "name": "fleet",
       "workflow": "fleet_tuner.yml",
       "artefact": "data/fleet_report.json",
-      "age_h": 7.41,
+      "age_h": 0.86,
       "max_age_h": 7.0,
-      "stale": true,
-      "action": "dispatched",
-      "busy": false,
-      "last_run_age_h": 7.42,
-      "local_dispatch_age_h": 12.11,
-      "effective_age_h": 7.42
+      "stale": false,
+      "action": "fresh"
     },
     {
       "name": "diagnostics",
       "workflow": "diagnostics.yml",
       "artefact": "diagnostics_report.json",
-      "age_h": 7.61,
+      "age_h": 0.86,
       "max_age_h": 7.0,
-      "stale": true,
-      "action": "dispatched",
-      "busy": false,
-      "last_run_age_h": 7.61,
-      "local_dispatch_age_h": 12.98,
-      "effective_age_h": 7.61
+      "stale": false,
+      "action": "fresh"
     },
     {
       "name": "selftest",
       "workflow": "bot_selftest.yml",
       "artefact": "data/bot_selftest_report.json",
-      "age_h": 14.7,
+      "age_h": 15.57,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh"
@@ -42,7 +34,7 @@
       "name": "daily_dispatch",
       "workflow": "daily_dispatch_novt.yml",
       "artefact": "nim_history.log",
-      "age_h": 20.51,
+      "age_h": 21.38,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -52,20 +44,16 @@
       "name": "cloud_tests",
       "workflow": "cloud_tests.yml",
       "artefact": "data/cloud_tests_report.json",
-      "age_h": 7.19,
+      "age_h": 0.54,
       "max_age_h": 7.0,
-      "stale": true,
-      "action": "dispatched",
-      "busy": false,
-      "last_run_age_h": 7.28,
-      "local_dispatch_age_h": 11.25,
-      "effective_age_h": 7.28
+      "stale": false,
+      "action": "fresh"
     },
     {
       "name": "forge_autopilot",
       "workflow": "forge_autopilot.yml",
       "artefact": "data/forge_autopilot.json",
-      "age_h": 14.46,
+      "age_h": 15.33,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -75,17 +63,21 @@
       "name": "survival_protocol",
       "workflow": "survival_protocol.yml",
       "artefact": "data/survival_report.json",
-      "age_h": 15.69,
+      "age_h": 16.55,
       "max_age_h": 26.0,
-      "stale": false,
-      "action": "fresh",
-      "due_today": false
+      "stale": true,
+      "action": "dispatched",
+      "due_today": true,
+      "busy": false,
+      "last_run_age_h": 16.56,
+      "local_dispatch_age_h": 24.24,
+      "effective_age_h": 16.56
     },
     {
       "name": "mega_archive",
       "workflow": "mega_archive.yml",
       "artefact": "data/mega_archive_report.json",
-      "age_h": 13.61,
+      "age_h": 14.48,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -95,7 +87,7 @@
       "name": "proton_drive",
       "workflow": "proton_drive_sync.yml",
       "artefact": "data/proton_drive_report.json",
-      "age_h": 13.42,
+      "age_h": 14.29,
       "max_age_h": 26.0,
       "stale": false,
       "action": "fresh",
@@ -103,13 +95,11 @@
     }
   ],
   "dispatched": [
-    "fleet_tuner.yml",
-    "diagnostics.yml",
-    "cloud_tests.yml"
+    "survival_protocol.yml"
   ],
   "dispatch_log": {
     "fleet": "2026-11-16T02:22:32.218110+00:00",
-    "survival_protocol": "2026-11-15T03:00:01.855559+00:00",
+    "survival_protocol": "2026-11-16T03:14:32.466854+00:00",
     "diagnostics": "2026-11-16T02:22:32.218110+00:00",
     "cloud_tests": "2026-11-16T02:22:32.218110+00:00",
     "forge_autopilot": "2026-11-15T04:22:38.874710+00:00",
