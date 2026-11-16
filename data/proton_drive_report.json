@@ -1,16 +1,120 @@
 {
-  "checked_at": "2026-11-16T06:43:18.873159+00:00",
-  "status": "failed",
+  "checked_at": "2026-11-16T13:59:56.690292+00:00",
+  "status": "ok",
   "remote": "protondrive:/immortal/",
   "account": "sha256:71182a53",
   "source": "environment",
-  "uploaded": [],
-  "missing": [],
-  "errors": [
-    "copy: rclone answered 1: 2026/11/16 06:43:18 NOTICE: Config file \"/home/runner/.config/rclone/rclone.conf\" not found - using defaults\n2026/11/16 06:43:25 NOTICE: proton drive root link ID 'immortal': 422 POST https://drive-api.proton.me/drive/shares/p2geCzvawEdgbPjkzJnOIA/files: A file or folder with that name already exist"
+  "uploaded": [
+    {
+      "artefact": "nim_history.log",
+      "remote": "protondrive:/immortal/nim_history.log",
+      "bytes": 71241,
+      "verified": true,
+      "sha256": "448ccc3a0ad39d6dbee17c7944d4effb3b28427a9fbb3a108d5f08a494d42063"
+    },
+    {
+      "artefact": "diagnostics_report.json",
+      "remote": "protondrive:/immortal/diagnostics_report.json",
+      "bytes": 7327,
+      "verified": true,
+      "sha256": "a206b11d771e9bcf4a9da199dafdfcdffbc860dff6bbf466b099d4a69248a34c"
+    },
+    {
+      "artefact": "data/daily_digest.json",
+      "remote": "protondrive:/immortal/data/daily_digest.json",
+      "bytes": 2448,
+      "verified": true,
+      "sha256": "91815aa0e2440ce4ae9c0132fee18af9f651bca36e2ca8665b4c4fc9744ccc9d"
+    },
+    {
+      "artefact": "data/fleet_report.json",
+      "remote": "protondrive:/immortal/data/fleet_report.json",
+      "bytes": 12268,
+      "verified": true,
+      "sha256": "bdb067dd76be5e4badafc8cbcd559e6b115c4d1e97c7899e9a21c8361fb8a953"
+    },
+    {
+      "artefact": "data/bot_selftest_report.json",
+      "remote": "protondrive:/immortal/data/bot_selftest_report.json",
+      "bytes": 15671,
+      "verified": true,
+      "sha256": "b3432d2028c94645c49e690a23656c89d2fcb9567a24c09208310929af06646c"
+    },
+    {
+      "artefact": "data/cloud_tests_report.json",
+      "remote": "protondrive:/immortal/data/cloud_tests_report.json",
+      "bytes": 241,
+      "verified": true,
+      "sha256": "a87dc489492aaf5f74a3ff844915156e4296b30005974a9b44daa04d437b8b82"
+    },
+    {
+      "artefact": "data/survival_report.json",
+      "remote": "protondrive:/immortal/data/survival_report.json",
+      "bytes": 306,
+      "verified": true,
+      "sha256": "54daaa3bcf08217f385db46a7b02c9d3aff20071b4d80e9a7d2a8ce13d6f06ad"
+    },
+    {
+      "artefact": "data/forge_autopilot.json",
+      "remote": "protondrive:/immortal/data/forge_autopilot.json",
+      "bytes": 2926,
+      "verified": true,
+      "sha256": "08100861ccfd86aff59d3d947166b92c8365ef243cd8ea72ea08d4b2551ec9b8"
+    },
+    {
+      "artefact": "data/duty_shift.json",
+      "remote": "protondrive:/immortal/data/duty_shift.json",
+      "bytes": 445,
+      "verified": true,
+      "sha256": "05f91e64b1597d9dd909277c82d5e6e6afaef97b11c505c44f4f9c42d6320d36"
+    },
+    {
+      "artefact": "data/telegram_history.txt",
+      "remote": "protondrive:/immortal/data/telegram_history.txt",
+      "bytes": 41763,
+      "verified": true,
+      "sha256": "c21fc5606cde2417c1989ad703f704430d78cb12f943c261f6cc15726dc3118e"
+    },
+    {
+      "artefact": "data/.cycle_supervisor.json",
+      "remote": "protondrive:/immortal/data/.cycle_supervisor.json",
+      "bytes": 2928,
+      "verified": true,
+      "sha256": "8f3d8116f9167b3e4c7fa8fe122e2f2a9eb0c23067ac24cc7e20220325606c77"
+    },
+    {
+      "artefact": "data/.bot_sessions.json",
+      "remote": "protondrive:/immortal/data/.bot_sessions.json",
+      "bytes": 692,
+      "verified": true,
+      "sha256": "039894545172360218a3e39911eb72ec0790bd60297b7aa00519f90e01908345"
+    },
+    {
+      "artefact": "data/.credential_heartbeat.json",
+      "remote": "protondrive:/immortal/data/.credential_heartbeat.json",
+      "bytes": 1509,
+      "verified": true,
+      "sha256": "dff4ef7be60a2078c679acda99cd58fec9dbda0c7bd65f35a65ccaadfeb130ea"
+    },
+    {
+      "artefact": "data/.sealed_vault.json",
+      "remote": "protondrive:/immortal/data/.sealed_vault.json",
+      "bytes": 5173,
+      "verified": true,
+      "sha256": "3d38e384e11aa385604f2a1febbfcf0fade8015bb7a1b1366dd59bb2fdb7ba15"
+    }
   ],
+  "missing": [],
+  "errors": [],
   "notes": [],
   "degraded": false,
   "two_factor": "off",
-  "vault": {}
+  "vault": {
+    "entries": 22,
+    "opened": 22,
+    "ok": true,
+    "why": ""
+  },
+  "verified": 14,
+  "count": 14
 }
