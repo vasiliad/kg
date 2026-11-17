@@ -1,50 +1,39 @@
 {
-  "attempted_at": "2026-11-16T04:21:19.978165+00:00",
+  "attempted_at": "2026-11-17T04:31:29.224805+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
-  "stage": "apply_check",
-  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -8.87, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -27.5)\n- stepfun-ai/step-5-preview: балл 81.36, задержка 6.97с, ok_rate 0.75, слабейшая задача json=0.0\n- nvidia/nemotron-3-ultra-550b-a55b: балл 69.25, задержка 36.81с, ok_rate 1.0, слабейшая задача instruction=0.5\n- minimaxai/minimax-m3.1-flash: балл 67.17, задержка 5.7с, ok_rate 0.625, слабейшая задача json=0.0\nДежурная смена: stepfun-ai/step-5-preview, задержка замеров нет, смена живая; выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 422, ошибок 81, ответов 744",
-  "branch": null,
-  "error": "error: patch fragment without header at /tmp/forge-patch-e0uo8c3a/proposed.patch:3: @@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:\n",
-  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: patch fragment without header at /tmp/forge-patch-e0uo8c3a/proposed.patch:3: @@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:\n",
-  "writer": {
+  "stage": "no_writer",
+  "facts_digest": "Дрейф флота: DEGRADED, средняя дельта -8.73, худший: stepfun-ai/step-5-preview (дельта -13.17)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.27с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- deepseek-ai/deepseek-v4.1-flash: балл 84.66, задержка 14.41с, ok_rate 1.0, слабейшая задача instruction=0.5\n- stepfun-ai/step-5-preview: балл 80.42, задержка 8.1с, ok_rate 0.875, слабейшая задача code=0.0\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (0.7 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 449, ошибок 90, ответов 800",
+  "error": "сетевая дежурная: SUCCESS_EMPTY_ANSWER; локальная резервная: DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "summary": "Ни одна модель не написала патч — улучшать нечего.",
+  "writer": {},
+  "chooser": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "score": 69.25,
-    "verified": true,
-    "elapsed": 164.79,
+    "elapsed": 6.41,
     "status": "SUCCESS"
   },
-  "chooser": {
-    "model": "stepfun-ai/step-5-preview",
-    "role": "duty_primary",
-    "elapsed": 45.4,
-    "status": "SUCCESS"
-  },
-  "duty_status": "SUCCESS",
-  "local_status": null,
-  "target": "harness/tool_call.py",
+  "duty_status": "SUCCESS_EMPTY_ANSWER",
+  "local_status": "DETERMINISTIC_KERNEL_CANNOT_WRITE_CODE",
+  "target": "harness/fleet_tuner.py",
   "normalised": false,
   "notes": [],
   "repair": {
-    "attempted": true,
-    "ok": false,
-    "status": "SUCCESS_EMPTY_ANSWER"
+    "attempted": false,
+    "ok": false
   },
   "gate": {
-    "ok": false,
-    "stage": "apply_check",
+    "ok": null,
+    "stage": null,
     "branch": null,
-    "error": "error: patch fragment without header at /tmp/forge-patch-e0uo8c3a/proposed.patch:3: @@ -209,7 +209,7 @@ def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:\n"
+    "error": null
   },
-  "patch_bytes": 587,
-  "attempt_day": "2026-11-16",
-  "checked_at": "2026-11-16T12:40:19.403119+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261116T042119Z",
-  "last_attempt_at": "2026-11-16T04:21:19.978165+00:00",
-  "attempt_age_hours": 8.32,
-  "freshness": "Последняя попытка: 16.11 04:21 UTC (8.3 ч назад).",
-  "patch_file": "data/forge_autopilot/20261116T042119Z.patch",
-  "skipped_today": true
+  "patch_bytes": 0,
+  "attempt_day": "2026-11-17",
+  "checked_at": "2026-11-17T04:31:29.224718+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261117T043129Z",
+  "last_attempt_at": "2026-11-17T04:31:29.224805+00:00",
+  "attempt_age_hours": 0.03,
+  "freshness": "Последняя попытка: 17.11 04:31 UTC (0 мин назад)."
 }
