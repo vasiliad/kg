@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-11-17T05:27:18Z",
+  "subject": "Ежедневный дайджест ИИ: 17.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 38,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 4,
+  "items": [
+    {
+      "title": "Mistral открыла веса модели Large 4 с триллионом параметров и удешевила доступ через API",
+      "summary": "Французская компания Mistral опубликовала открытые веса своей флагманской ИИ-модели Large 4 (Le Chonk). Компания также удешевила доступ к модели через API.",
+      "url": "https://3dnews.ru/1150622/mistral-otkrila-vesa-iimodeli-large-4-s-trillionom-parametrov-i-udeshevila-dostup-cherez-api",
+      "source": "3dnews.ru",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "Oracle Cloud предложит Google TPU и новые ИИ-чипы",
+      "summary": "Oracle объявила, что станет первым гиперскейлером, предлагающим TPU за пределами Google Cloud. Объявление было сделано на конференции Oracle AI World в Лас-Вегасе.",
+      "url": "https://datacenterknowledge.com/data-center-chips/oracle-cloud-to-offer-google-tpus-and-new-ai-chips",
+      "source": "datacenterknowledge.com",
+      "date": "27 октября",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Google Cloud расширила ИИ-инфраструктуру новыми чипами",
+      "summary": "По данным компании, новый чип обеспечивает в четыре раза большую пропускную способность, чем предыдущие поколения. Google заявила, что Virgo может соединять 134 000 TPU в единую ткань в пределах одного центра обработки данных.",
+      "url": "https://datacenter.news/story/google-cloud-expands-ai-infrastructure-with-new-chips",
+      "source": "datacenter.news",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Универсальность и специализация: обзор архитектуры оборудования для ИИ-центров обработки данных",
+      "summary": "Авторы обзора рассматривают архитектуру оборудования для ИИ-центров обработки данных и баланс между универсальностью и специализацией. За последнее десятилетие максимальная мощность высокопроизводительных GPU NVIDIA и AMD выросла примерно с 300 Вт до более чем 1000 Вт.",
+      "url": "https://arxiv.org/html/2609.26829v1",
+      "source": "arxiv.org",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    }
+  ]
+}
