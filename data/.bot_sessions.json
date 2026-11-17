@@ -8,7 +8,7 @@
   "health": {
     "runs": 450,
     "started_at": "2026-11-17T04:31:10Z",
-    "last_poll_at": "2026-11-17T04:39:57Z",
+    "last_poll_at": "2026-11-17T04:42:05Z",
     "last_update_at": "2026-11-02T13:18:23Z",
     "last_send_at": "2026-11-17T04:39:58Z",
     "updates_seen": 17,
@@ -17,7 +17,7 @@
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))",
     "last_chat_id": "чат#c03145cb",
     "last_digest_push": "2026-11-17",
-    "last_forge_push": "20261116T042119Z",
+    "last_forge_push": "20261117T043129Z",
     "last_chat_tag": "чат#c03145cb"
   }
 }
