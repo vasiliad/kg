@@ -1,74 +1,28 @@
 {
-  "timestamp": "2026-11-17T15:29:30.858748+00:00",
-  "emergency_mode": false,
-  "last_emergency_run": "2026-11-17T15:29:30.858748+00:00",
-  "emergency_reason": "",
-  "emergency_cause": "",
+  "timestamp": "2026-11-18T15:07:12.997729+00:00",
+  "emergency_mode": true,
+  "last_emergency_run": "2026-11-18T15:07:12.997729+00:00",
+  "emergency_reason": "State stale by 7.2h (threshold: 6.0h; measured 2026-11-18T07:42:00+00:00)",
+  "emergency_cause": "state_stale",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "minimaxai/minimax-m3.1-flash (дежурная команда по живому замеру)",
-  "local_arbiter_feedback": "# Emergency Status Report — DeepSeek-TPU-NIM Ecosystem\n**Emergency CPU Fallback | Issued 2026-11-17T15:22:50.697076+00:00**\n\n---\n\n## Executive Summary\n\n**Overall posture: DEGRADED — OPERABLE, WITH ZERO FAILOVER DEPTH.**\n\nThe primary TPU orchestrator is offline or queued, and emergency CPU fallback is carrying live traffic on a three-model duty roster. The roster itself is sound — all three entries are live-verified — but the surrounding catalog has undergone an **unprecedented one-way contractio...",
+  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter_feedback": "# Executive Summary — DeepSeek‑TPU‑NIM Emergency CPU Fallback\n\n**Status: DEGRADED BUT OPERABLE — duty coverage intact, redundancy depth thin.**\n\n| Dimension | State at snapshot (2026‑11‑18T14:56:49.548678Z) |\n|---|---|\n| Emergency mode | **ACTIVE** |\n| Recorded trigger | State stale **7.2 h** vs **6.0 h** threshold; state measured at 2026‑11‑18T07:42:00Z |\n| Primary TPU orchestrator | Offline or queued (per directive; the snapshot's own recorded trigger is staleness, not a TPU health probe) |\n| ...",
   "catalog_diff": {
-    "new_count": 0,
-    "removed_count": 51,
-    "new_ids": [],
-    "removed_ids": [
-      "ai21labs/jamba-1.5-large-instruct",
-      "databricks/dbrx-instruct",
-      "google/deplot",
-      "google/codegemma-7b",
-      "nvidia/neva-22b",
-      "meta/llama-guard-4-12b",
-      "writer/palmyra-med-70b-32k",
-      "zyphra/zamba2-7b-instruct",
-      "nvidia/llama-3.1-nemotron-51b-instruct",
-      "microsoft/phi-3.5-moe-instruct",
-      "nvidia/nemotron-4-340b-reward",
-      "mistralai/mistral-7b-instruct-v0.3",
-      "nvidia/llama-3.1-nemotron-ultra-253b-v1",
-      "writer/palmyra-med-70b",
-      "google/codegemma-1.1-7b",
-      "nvidia/vila",
-      "ibm/granite-8b-code-instruct",
-      "moonshotai/kimi-k2.6",
-      "ibm/granite-3.0-3b-a800m-instruct",
-      "nvidia/llama-nemotron-embed-vl-1b-v2",
-      "nvidia/nemotron-3-super-120b-a12b",
-      "nvidia/nemotron-parse-2.0",
-      "mistralai/codestral-22b-instruct-v0.1",
-      "nvidia/nemotron-4-340b-instruct",
-      "mistralai/mixtral-8x22b-v0.1",
-      "mistralai/mistral-large",
-      "adept/fuyu-8b",
-      "nvidia/mistral-nemo-minitron-8b-8k-instruct",
-      "deepseek-ai/deepseek-v4.1-flash",
-      "meta/llama-3.2-90b-vision-instruct",
-      "nvidia/llama-3.1-nemotron-70b-instruct",
-      "ibm/granite-3.0-8b-instruct",
-      "microsoft/phi-3-vision-128k-instruct",
-      "nv-mistralai/mistral-nemo-12b-instruct",
-      "nvidia/nemotron-parse",
-      "nvidia/llama3-chatqa-1.5-70b",
-      "deepseek-ai/deepseek-coder-6.7b-instruct",
-      "google/recurrentgemma-2b",
-      "ibm/granite-34b-code-instruct",
-      "01-ai/yi-large",
-      "nvidia/riva-translate-4b-instruct",
-      "aisingapore/sea-lion-7b-instruct",
-      "nvidia/llama-3.1-nemoguard-8b-content-safety",
-      "microsoft/kosmos-2",
-      "nvidia/nemotron-nano-3-30b-a3b",
-      "meta/llama2-70b",
-      "google/gemma-2b",
-      "meta/codellama-70b",
-      "mistralai/mistral-large-2-instruct",
-      "writer/palmyra-creative-122b",
-      "writer/palmyra-fin-70b-32k"
+    "new_count": 1,
+    "removed_count": 1,
+    "new_ids": [
+      "moonshotai/kimi-k3.1-pro"
     ],
-    "flagship_newcomers": []
+    "removed_ids": [
+      "openai/gpt-oss-20b"
+    ],
+    "flagship_newcomers": [
+      "moonshotai/kimi-k3.1-pro"
+    ]
   },
   "id_resolution": {
     "renamed": {
@@ -376,6 +330,7 @@
     "meta/muse-glimmer-30b",
     "minimaxai/minimax-m3.1-flash",
     "mistralai/mistral-large-4-1t-a52b",
+    "moonshotai/kimi-k3.1-pro",
     "nvidia/ai-synthetic-video-detector",
     "nvidia/cosmos-reason2-8b",
     "nvidia/embed-qa-4",
@@ -396,13 +351,10 @@
     "nvidia/nv-embedqa-mistral-7b-v2",
     "nvidia/nvclip",
     "nvidia/riva-translate-4b-instruct-v2",
-    "openai/gpt-oss-20b",
     "poolside/laguna-xs-2.1",
     "snowflake/arctic-embed-l",
     "stepfun-ai/step-5-preview",
     "z-ai/glm-5.3-flash"
   ],
-  "last_updated": "2026-11-18T07:56:32.373117+00:00Z",
-  "emergency_cleared_at": "2026-11-18T00:23:00.373266+00:00",
-  "emergency_cleared_because": "the fleet was measured again (2026-11-17T21:04:08+00:00, fleet_decision.tuned_at)"
+  "last_updated": "2026-11-18T15:07:12.997775+00:00Z"
 }
