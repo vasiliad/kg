@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-17T20:48:02.712402+00:00",
+  "timestamp": "2026-11-18T03:56:44.352473+00:00",
   "nvidia": {
     "ok": true,
     "models": [
@@ -10,6 +10,7 @@
       "meta/muse-glimmer-30b",
       "minimaxai/minimax-m3.1-flash",
       "mistralai/mistral-large-4-1t-a52b",
+      "moonshotai/kimi-k3.1-pro",
       "nvidia/ai-synthetic-video-detector",
       "nvidia/cosmos-reason2-8b",
       "nvidia/embed-qa-4",
@@ -57,7 +58,7 @@
       "missing": [
         "deepseek-ai/deepseek-v4.1-flash"
       ],
-      "live_count": 32
+      "live_count": 33
     },
     "missing_models": [
       "deepseek-ai/deepseek-v4.1-flash"
@@ -89,18 +90,18 @@
     "files": {
       "data/.bot_sessions.json": 693,
       "data/telegram_history.txt": 41763,
-      "active_models.json": 10470,
+      "active_models.json": 11293,
       "data/.memory_vault.json": null
     }
   },
   "bot_health": {
     "ok": true,
-    "last_poll_at": "2026-11-17T20:44:02Z",
-    "age_min": 4.1,
-    "last_send_at": "2026-11-17T20:19:24Z",
+    "last_poll_at": "2026-11-18T03:56:07Z",
+    "age_min": 0.7,
+    "last_send_at": "2026-11-18T03:07:15Z",
     "updates_seen": 17,
-    "messages_sent": 838,
-    "errors": 100,
+    "messages_sent": 855,
+    "errors": 101,
     "last_chat_id": "чат#c03145cb",
     "last_error": "poll: ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
   },
@@ -148,55 +149,55 @@
   "heartbeat": {
     "NVIDIA_API_KEY": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-17T20:48:08.688702+00:00",
+      "last_ok_at": "2026-11-18T03:56:48.272144+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "TINYFISH_API_KEYS": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-17T20:48:08.688702+00:00",
+      "last_ok_at": "2026-11-18T03:56:48.272144+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "LANGSEARCH_API_KEY": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-17T20:48:08.688702+00:00",
+      "last_ok_at": "2026-11-18T03:56:48.272144+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "KEENABLE_API_KEY": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-17T20:48:08.688702+00:00",
+      "last_ok_at": "2026-11-18T03:56:48.272144+00:00",
       "last_fail_at": "2026-11-07T03:35:03.693394+00:00",
       "dead_since": null
     },
     "FIRECRAWL_API_KEY": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-17T20:48:08.688702+00:00",
+      "last_ok_at": "2026-11-18T03:56:48.272144+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "TELEGRAM_BOT_TOKEN": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
-      "last_ok_at": "2026-11-17T20:48:08.688702+00:00",
+      "last_ok_at": "2026-11-18T03:56:48.272144+00:00",
       "last_fail_at": null,
       "dead_since": null
     },
     "GMAIL_APP_PASSWORD": {
       "ok": true,
-      "at": "2026-11-17T20:48:08.688702+00:00",
+      "at": "2026-11-18T03:56:48.272144+00:00",
       "reason": "",
       "last_ok_at": "2026-11-17 05:27:19",
       "last_fail_at": null,
@@ -215,14 +216,14 @@
     "sealed_in_vault": 2,
     "sealed_self_provisioned": 2,
     "sealed_selfprov_layout": 0,
-    "checked_at": "2026-11-17T20:48:08.693456+00:00"
+    "checked_at": "2026-11-18T03:56:48.278737+00:00"
   },
   "governance": {
-    "measured_at": "2026-11-17T20:48:08Z",
+    "measured_at": "2026-11-18T03:56:48Z",
     "founder_last_seen": {
       "measured": true,
       "at": "2026-11-01T15:30:07Z",
-      "age_days": 16.22
+      "age_days": 16.52
     },
     "silence_days": 14.0,
     "steward_mode": true,
