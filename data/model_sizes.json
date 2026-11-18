@@ -43,6 +43,10 @@
     "params_b": 1000.0,
     "source": "docs"
   },
+  "moonshotai/kimi-k3.1-pro": {
+    "params_b": 2800.0,
+    "source": "docs"
+  },
   "nvidia/vila": {
     "params_b": 7.0,
     "source": "docs"
