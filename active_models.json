@@ -1,28 +1,22 @@
 {
-  "timestamp": "2026-11-18T15:07:12.997729+00:00",
-  "emergency_mode": false,
-  "last_emergency_run": "2026-11-18T15:07:12.997729+00:00",
-  "emergency_reason": "",
-  "emergency_cause": "",
+  "timestamp": "2026-11-19T15:10:28.082759+00:00",
+  "emergency_mode": true,
+  "last_emergency_run": "2026-11-19T15:10:28.082759+00:00",
+  "emergency_reason": "State stale by 7.4h (threshold: 6.0h; measured 2026-11-19T07:37:59+00:00)",
+  "emergency_cause": "state_stale",
   "key_health": {
     "valid": true,
     "status_code": 200,
     "message": "Key is active and authorized."
   },
-  "local_arbiter": "nvidia/nemotron-3-ultra-550b-a55b (дежурная команда по живому замеру)",
-  "local_arbiter_feedback": "# Executive Summary — DeepSeek‑TPU‑NIM Emergency CPU Fallback\n\n**Status: DEGRADED BUT OPERABLE — duty coverage intact, redundancy depth thin.**\n\n| Dimension | State at snapshot (2026‑11‑18T14:56:49.548678Z) |\n|---|---|\n| Emergency mode | **ACTIVE** |\n| Recorded trigger | State stale **7.2 h** vs **6.0 h** threshold; state measured at 2026‑11‑18T07:42:00Z |\n| Primary TPU orchestrator | Offline or queued (per directive; the snapshot's own recorded trigger is staleness, not a TPU health probe) |\n| ...",
+  "local_arbiter": "minimaxai/minimax-m3.1-flash (Emergency Fallback Surrogate)",
+  "local_arbiter_feedback": "# Emergency Lead Systems Architect — DeepSeek-TPU-NIM Ecosystem\n\n**Assessment mode:** Emergency CPU fallback · **Directive:** roster pre-selected by live measurement — no re-ranking, no self-assigned scores\n**Emergency trigger:** state stale **7.4 h** vs **6.0 h** threshold (last measurement `2026-11-19T07:37:59+00:00`; report timestamp `2026-11-19T15:04:08.619864+00:00` — arithmetic reconciles to 7 h 26 m 09 s)\n\n---\n\n## 1. Executive Summary\n\nThe complex is **operational but degraded**, not fail...",
   "catalog_diff": {
-    "new_count": 1,
-    "removed_count": 1,
-    "new_ids": [
-      "moonshotai/kimi-k3.1-pro"
-    ],
-    "removed_ids": [
-      "openai/gpt-oss-20b"
-    ],
-    "flagship_newcomers": [
-      "moonshotai/kimi-k3.1-pro"
-    ]
+    "new_count": 0,
+    "removed_count": 0,
+    "new_ids": [],
+    "removed_ids": [],
+    "flagship_newcomers": []
   },
   "id_resolution": {
     "renamed": {
@@ -342,7 +336,5 @@
     "stepfun-ai/step-5-preview",
     "z-ai/glm-5.3-flash"
   ],
-  "last_updated": "2026-11-19T07:49:57.266085+00:00Z",
-  "emergency_cleared_at": "2026-11-18T23:47:59.084705+00:00",
-  "emergency_cleared_because": "the fleet was measured again (2026-11-18T20:40:45+00:00, fleet_decision.tuned_at)"
+  "last_updated": "2026-11-19T15:10:28.082822+00:00Z"
 }
