@@ -1,0 +1,21 @@
+diff --git a/harness/duty_shift.py b/harness/duty_shift.py
+@@ -430,10 +430,19 @@ def rotate_if_expired(
+     """
+     moment = now or _now()
+     before = load_shift(path)
++    # If the caller passed an empty roster, load the measured roster from disk
++    # so that rotation can proceed even if the measurement cycle calls us
++    # before populating the roster argument.
++    if not _roster_candidates(roster):
++        try:
++            from harness.duty_team import DutyTeam
++            roster = DutyTeam().load_roster()
++        except Exception:
++            pass
+     shift, _info = current_duty(roster, keeper=keeper, now=moment, path=path)
+     rotated = bool(shift.get("model_id")) and (
+         not before
+         or str(before.get("started_at")) != str(shift.get("started_at"))
+         or str(before.get("model_id")) != str(shift.get("model_id"))
+     )
+     return shift, rotated
