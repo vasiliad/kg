@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-18T05:57:42Z",
-  "subject": "Ежедневный дайджест ИИ: 18.11.2026",
+  "generated_at": "2026-11-19T05:22:22Z",
+  "subject": "Ежедневный дайджест ИИ: 19.11.2026",
   "tier": "TinyFish",
   "queries": [
     "новые модели ИИ релиз открытые веса",
@@ -12,55 +12,19 @@
     "исследования ИИ reasoning бенчмарки модели",
     "AI research reasoning benchmark LLM paper"
   ],
-  "sources_count": 40,
+  "sources_count": 38,
   "selection_mode": "модель отобрала",
-  "full_news_count": 0,
-  "items_count": 5,
+  "full_news_count": 1,
+  "items_count": 1,
   "items": [
     {
-      "title": "Mistral открыла веса Large 4 с триллионом параметров и удешевила доступ через API",
-      "summary": "Французская компания Mistral опубликовала открытые веса своей флагманской модели Large 4 (Le Chonk) с триллионом параметров. Компания также удешевила доступ к модели через API.",
-      "url": "https://3dnews.ru/1150622/mistral-otkrila-vesa-iimodeli-large-4-s-trillionom-parametrov-i-udeshevila-dostup-cherez-api",
-      "source": "3dnews.ru",
-      "date": "",
-      "category": "Модели",
-      "detail": ""
-    },
-    {
-      "title": "Qwen4-Max от Alibaba снижает стоимость ИИ-задач, но получила критику за результаты бенчмарков",
-      "summary": "Alibaba выпустила модель Qwen4-Max, снижающую стоимость выполнения ИИ-задач. Результаты бенчмарков подверглись критике из-за разрыва между отобранными результатами и показателями в более широких рейтингах.",
-      "url": "https://pcnews.ru/news/qwen4_max_ot_alibaba_snizaet_stoimost_zadac_ii_no_bencmarki_pokazyvaut_cto_konkurencia_s_peredovymi_sopernikami_neravnomerna-1857068.html",
+      "title": "Cloudflare открыла веса обновлённых Clairic и Clairic-flash",
+      "summary": "Cloudflare выпустила обновлённые модели Clairic и Clairic-flash с открытыми весами: полные веса опубликованы на Hugging Face, а сами модели доступны через платформу Workers AI. Главный фокус — извлечение структурированных данных из неструктурированного контента: после предварительного релиза команда Workers AI Superintelligence переработала архитектуру Clairic, добавив поддержку изображений и PDF-файлов, более надёжную обработку таблиц, списков и дат и привязку ответов к исходным материалам. Вместо одного прямого прохода модель теперь генерирует поля параллельно и авторегрессивно, останавливая каждое поле на собственном маркере конца, а для вычислений, оценок, прогнозов, длительности и вычисляемых дат добавлены специальные головы. Типизированный API сохранён: в каждом ответе по-прежнему доступны оценки уверенности, диапазоны символов и вероятности. По внутренним тестам Cloudflare, число ошибок распознавания на смешанных текстовых и визуальных данных снизилось с 207 до 0, а в наборе из 139 клиентских форм Clairic и Clairic-flash получили 1263 из 1263 правильных полей. Скорость остаётся высокой: на 96 запросах с новыми текстовыми полями медианное время ответа Clairic составило 358 мс при 95-м перцентиле 736 мс, а у девятимиллиардной Clairic-flash — 155 и 328 мс; за один запрос можно обработать до четырёх изображений или страниц PDF. Цены: Clairic на 27 млрд параметров стоит $0,24 за миллион входных токенов, Clairic-flash на 9 млрд — $0,10, причём оплачиваются только входные токены; при этом результаты пока внутренние, без публичных тестов, и сами авторы признают, что их следует воспринимать лишь как ориентир.",
+      "url": "https://pcnews.ru/blogs/obnovlennye_clairic_i_clairic_flash_teper_dostupny_s_otkrytymi_vesami__ot_novoj_komandy_workers_ai_superintelligence-1857666.html",
       "source": "pcnews.ru",
-      "date": "",
+      "date": "19.11.2026",
       "category": "Модели",
-      "detail": ""
-    },
-    {
-      "title": "Google начала предлагать свои TPU облачным провайдерам ИИ",
-      "summary": "Google предложила доступ к TPU облачным провайдерам ИИ, включая Crusoe и CoreWeave. По данным источника, лондонская компания Fluidstack уже подписала соглашение и намерена развернуть эти чипы в своём дата-центре.",
-      "url": "https://datacenterdynamics.com/en/news/google-offers-its-tpus-to-ai-cloud-providers-report",
-      "source": "datacenterdynamics.com",
-      "date": "",
-      "category": "Инфраструктура",
-      "detail": ""
-    },
-    {
-      "title": "Google расширила линейку TPU двумя новыми ИИ-чипами",
-      "summary": "Google представила два новых процессора для ИИ: TPU 8i Max и TPU 8tx. TPU 8i Max удваивает вычислительную мощность и пропускную способность памяти, а TPU 8tx ориентирован на безопасную обработку данных.",
-      "url": "https://www.kucoin.com/ru/news/flash/google-expands-tpu-lineup-with-two-new-ai-chips-to-challenge-nvidia",
-      "source": "kucoin.com",
-      "date": "",
-      "category": "Инфраструктура",
-      "detail": ""
-    },
-    {
-      "title": "Представлен бенчмарк ArXivMath для оценки математических исследовательских задач",
-      "summary": "ArXivMath — новый бенчмарк с ответами в финальном виде, разработанный для оценки LLM на математических исследовательских задачах, взятых из arXiv. Его создание направлено на устранение нехватки подобных оценочных наборов.",
-      "url": "https://matharena.ai/arxivmath/",
-      "source": "matharena.ai",
-      "date": "",
-      "category": "Исследования",
-      "detail": ""
+      "detail": "full"
     }
   ]
 }
