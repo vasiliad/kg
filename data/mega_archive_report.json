@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-19T05:06:20.688382+00:00",
+  "checked_at": "2026-11-19T14:27:43.098403+00:00",
   "status": "ok",
   "archive": "kg-archive",
   "folder": "kg-archive/2026-11-19",
@@ -8,90 +8,90 @@
     {
       "artefact": "nim_history.log",
       "remote": "nim_history.log",
-      "bytes": 71380,
+      "bytes": 71431,
       "chunks": 1,
-      "handle": "SDwXSTBS",
+      "handle": "bGgxFDaI",
       "reused": false,
       "verified": true,
-      "sha256": "44841faade7bbbfa908e9304e721a08ea9f67f6f8e02e0f73cf26e06bd7780ad"
+      "sha256": "a432f7e28380172d7b991decaab4d5d1990d44bbd30581a4fe77f50503d8dc7b"
     },
     {
       "artefact": "diagnostics_report.json",
       "remote": "diagnostics_report.json",
       "bytes": 7358,
       "chunks": 1,
-      "handle": "nPx1zQjJ",
+      "handle": "aDAiVD6Y",
       "reused": false,
       "verified": true,
-      "sha256": "28b78b704b56809ac3a1ee1bf21bc5992dda6a634c887f9ae89eed78ef5707da"
+      "sha256": "07378fba8c0dd18aa2a1a0981d223384b0e41adb5e88080202facdfe07162065"
     },
     {
       "artefact": "data/daily_digest.json",
       "remote": "data__daily_digest.json",
-      "bytes": 4580,
+      "bytes": 4018,
       "chunks": 1,
-      "handle": "Wb4nlTbD",
+      "handle": "TehyxBLQ",
       "reused": false,
       "verified": true,
-      "sha256": "15481630f671a9a788fc44e9d91e57f74dd195dab1d4a9d142dd4693705b9b90"
+      "sha256": "65aec040a872311023f2f9b0d6a3f3b71a8edfea9145f2ab1b4684a4360ec332"
     },
     {
       "artefact": "data/fleet_report.json",
       "remote": "data__fleet_report.json",
-      "bytes": 9388,
+      "bytes": 9284,
       "chunks": 1,
-      "handle": "LSgh1QJQ",
+      "handle": "SbZjyJwT",
       "reused": false,
       "verified": true,
-      "sha256": "5b0698418ef572117a7045467ea5125a6386266a0cbc031075c2857a28df8eb8"
+      "sha256": "3782dfb0cb92a66b6b8abb32553398a390d0f9d3576bdf0150755700c62a7bbb"
     },
     {
       "artefact": "data/bot_selftest_report.json",
       "remote": "data__bot_selftest_report.json",
-      "bytes": 15671,
+      "bytes": 15383,
       "chunks": 1,
-      "handle": "3T5iiKQL",
+      "handle": "zLhhQYLK",
       "reused": false,
       "verified": true,
-      "sha256": "ac03b667a946b4b45d6c50e54d62427ed379f2885ac7265f087d0d595f149585"
+      "sha256": "c27b81885460d007edbb605e7314c4c85df6943060bd2cbf72c94cb8a42207e3"
     },
     {
       "artefact": "data/cloud_tests_report.json",
       "remote": "data__cloud_tests_report.json",
       "bytes": 241,
       "chunks": 1,
-      "handle": "2GgjAaQD",
+      "handle": "yH5AUIwZ",
       "reused": false,
       "verified": true,
-      "sha256": "7eb6bc69cae45db8c1a01f2df11c163bc493535cb9cc4586b30d94181d1cbd37"
+      "sha256": "a890b5565a2baa0c19185dab4967eabb41e2ac0afd37bda692b2165b82a0ffdf"
     },
     {
       "artefact": "data/survival_report.json",
       "remote": "data__survival_report.json",
       "bytes": 306,
       "chunks": 1,
-      "handle": "nPAygLqB",
+      "handle": "rax2VDII",
       "reused": false,
       "verified": true,
-      "sha256": "5cf45b19158be83b2c4bc33485ea53bcffe840b73c20a69231ce1ed3934317a6"
+      "sha256": "f3f19d59c2090990133010d14221bd11eb5884222972f8794c85c8ca33a0bd0d"
     },
     {
       "artefact": "data/forge_autopilot.json",
       "remote": "data__forge_autopilot.json",
-      "bytes": 2817,
+      "bytes": 2843,
       "chunks": 1,
-      "handle": "yS5GmYCY",
+      "handle": "bOQnADrI",
       "reused": false,
       "verified": true,
-      "sha256": "55bcd7e2880b620bb78512d3d022046bb9880b20d7a950e8617299d67bd740c9"
+      "sha256": "7581abb11b52f79bda533c023d23dbb45ffe7e353ad45d7a090ba928393f7965"
     },
     {
       "artefact": "data/duty_shift.json",
       "remote": "data__duty_shift.json",
       "bytes": 453,
-      "chunks": 1,
+      "chunks": null,
       "handle": "7TBDXZaC",
-      "reused": false,
+      "reused": true,
       "verified": true,
       "sha256": "1642157e7643b7d30a076021f06a95a75870f07b8a4dad632c21dd9ac26306f7"
     },
@@ -99,29 +99,29 @@
       "artefact": "data/telegram_history.txt",
       "remote": "data__telegram_history.txt",
       "bytes": 41763,
-      "chunks": 1,
+      "chunks": null,
       "handle": "aGp1FD4S",
-      "reused": false,
+      "reused": true,
       "verified": true,
       "sha256": "c21fc5606cde2417c1989ad703f704430d78cb12f943c261f6cc15726dc3118e"
     },
     {
       "artefact": "data/.cycle_supervisor.json",
       "remote": "data__.cycle_supervisor.json",
-      "bytes": 3379,
+      "bytes": 2782,
       "chunks": 1,
-      "handle": "SPhwRQ7S",
+      "handle": "2fpyhCLa",
       "reused": false,
       "verified": true,
-      "sha256": "8a0bd3f5744c8fb71715f056a2c5643a68cb3259eb0b6b38933d1f75d6eff2f8"
+      "sha256": "92d1b99790758f8320c913408eed67bc54c96145c50ff74199c8a003595de8d7"
     },
     {
       "artefact": "data/.sealed_vault.json",
       "remote": "data__.sealed_vault.json",
       "bytes": 5173,
-      "chunks": 1,
+      "chunks": null,
       "handle": "CSBQDbJJ",
-      "reused": false,
+      "reused": true,
       "verified": true,
       "sha256": "3d38e384e11aa385604f2a1febbfcf0fade8015bb7a1b1366dd59bb2fdb7ba15"
     }
