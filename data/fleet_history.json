@@ -1,25 +1,5 @@
 [
   {
-    "tuned_at": "2026-11-13 14:36:32 UTC",
-    "fleet": [
-      "nvidia/nemotron-3-ultra-550b-a55b"
-    ],
-    "primary": "nvidia/nemotron-3-ultra-550b-a55b",
-    "tasks": [
-      "reasoning",
-      "code",
-      "json",
-      "translation",
-      "toolcall",
-      "prose",
-      "canary_news"
-    ],
-    "scores": {
-      "nvidia/nemotron-3-ultra-550b-a55b": 96.75,
-      "minimaxai/minimax-m3.1-flash": 52.31
-    }
-  },
-  {
     "tuned_at": "2026-11-13 19:51:31 UTC",
     "fleet": [
       "nvidia/nemotron-3-ultra-550b-a55b",
@@ -523,6 +503,27 @@
     "scores": {
       "nvidia/nemotron-3-ultra-550b-a55b": 96.75,
       "stepfun-ai/step-5-preview": 84.17
+    }
+  },
+  {
+    "tuned_at": "2026-11-19 04:14:16 UTC",
+    "fleet": [
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "minimaxai/minimax-m3.1-flash"
+    ],
+    "primary": "nvidia/nemotron-3-ultra-550b-a55b",
+    "tasks": [
+      "reasoning",
+      "code",
+      "json",
+      "translation",
+      "toolcall",
+      "prose",
+      "canary_news"
+    ],
+    "scores": {
+      "nvidia/nemotron-3-ultra-550b-a55b": 96.75,
+      "minimaxai/minimax-m3.1-flash": 86.28
     }
   }
 ]
