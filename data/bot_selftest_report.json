@@ -1,5 +1,5 @@
 {
-  "ran_at": "2026-11-18T12:24:54.644595+00:00",
+  "ran_at": "2026-11-19T12:18:23.145589+00:00",
   "tests": [
     {
       "label": "пароль_неверный",
@@ -21,10 +21,10 @@
       "label": "статус",
       "input": "📡 Статус системы",
       "ok": true,
-      "elapsed_sec": 0.1,
+      "elapsed_sec": 0.2,
       "missing_soft_markers": [],
       "replies": [
-        "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n👑 <b>Верховный арбитр (CPU):</b> <code>minimaxai/minimax-m3.1-flash (дежурная команда по живому замеру)</code>\n🧑‍💼 <b>Дежурная команда:</b> 2 моделей, источник: <code>live_probe</code>\n📉 <b>Дрейф флота:</b> ростер в пределах шума; средний сдвиг -4.92; худший: nvidia/nemotron-3-ultra-550b-a55b (-4.92); добавлено: minimaxai/minimax-m3.1-flash.\n🫀 <b>Активность бота:</b> последний ответ 2026-11-18T11:47:35Z; ответов 876; ошибок 101\n⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n🔑 <b>NVIDIA NIM API:</b> Key is active and authorized. (HTTP 200)\n💾 <b>Дисковое пространство:</b> 87.14 ГБ свободно (39.6% занято)\n📬 <b>Последняя отправка отчётов:</b> <code>[2026-11-18 05:57:45 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | получатель=настроен (sha256:499f460d) | статус=DELIVERED | via=sha256:cc9a125c</code>\n📨 <b>Получатель отчётов:</b> <code>настроен (sha256:499f460d)</code>\n🕒 <b>Обновлено:</b> 2026-11-18T07:56:32.373117+00:00Z\n\n🛡️ <i>Автономный суверенный комплекс полностью отвязан от очередей сторонних сервисов.</i>"
+        "📡 <b>СИСТЕМНЫЙ СТАТУС АВТОНОМНОГО КОМПЛЕКСА</b>\n\n👑 <b>Верховный арбитр (CPU):</b> <code>nvidia/nemotron-3-ultra-550b-a55b (дежурная команда по живому замеру)</code>\n🧑‍💼 <b>Дежурная команда:</b> 2 моделей, источник: <code>live_probe</code>\n📉 <b>Дрейф флота:</b> ростер в пределах шума; средний сдвиг +0.00; худший: nvidia/nemotron-3-ultra-550b-a55b (+0.00); добавлено: stepfun-ai/step-5-preview; выбыло: minimaxai/minimax-m3.1-flash.\n🫀 <b>Активность бота:</b> последний ответ 2026-11-19T12:05:24Z; ответов 930; ошибок 114\n⚡ <b>Тактический исполнитель:</b> <code>по замеру флота (см. «Состав команды»)</code>\n🧠 <b>Вечная память (RAG):</b> <code>NVIDIA Nemotron 3.5 Embed 8B (4096d)</code>\n🔑 <b>NVIDIA NIM API:</b> Key is active and authorized. (HTTP 200)\n💾 <b>Дисковое пространство:</b> 87.16 ГБ свободно (39.6% занято)\n📬 <b>Последняя отправка отчётов:</b> <code>[2026-11-19 05:22:24 UTC] ОТЧЁТЫ ОТПРАВЛЕНЫ | тип=Ежедневный дайджест ИИ | получатель=настроен (sha256:499f460d) | статус=DELIVERED | via=sha256:cc9a125c</code>\n📨 <b>Получатель отчётов:</b> <code>настроен (sha256:499f460d)</code>\n🕒 <b>Обновлено:</b> 2026-11-19T07:49:57.266085+00:00Z\n\n🛡️ <i>Автономный суверенный комплекс полностью отвязан от"
       ]
     },
     {
@@ -34,76 +34,76 @@
       "elapsed_sec": 0.0,
       "missing_soft_markers": [],
       "replies": [
-        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (2):</b>\n<b>1. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный основной\n   • балл: <b>91.83</b> (✅ замер, 7.91с)\n   • вендор: nvidia\n<b>2. minimaxai/minimax-m3.1-flash</b>\n   • роль: дежурный быстрый\n   • балл: <b>87.73</b> (✅ замер, 9.82с)\n   • вендор: minimaxai"
+        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (2):</b>\n<b>1. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный основной\n   • балл: <b>96.75</b> (✅ замер, 0.88с)\n   • вендор: nvidia\n<b>2. stepfun-ai/step-5-preview</b>\n   • роль: дежурный быстрый\n   • балл: <b>75.76</b> (✅ замер, 4.09с)\n   • вендор: stepfun-ai"
       ]
     },
     {
       "label": "быстрый_вопрос",
       "input": "какой сейчас основной дежурный и почему он выбран?",
       "ok": true,
-      "elapsed_sec": 38.5,
+      "elapsed_sec": 39.0,
       "missing_soft_markers": [],
       "replies": [
         "🧠 <i>Хранитель передаёт задачу дежурной модели смены...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 18.11 18:20 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 91.83 (замер ✅) · 13.64с</b>\n\n**Основной дежурный прямо сейчас:** `nvidia/nemotron-3-ultra-550b-a55b` (тир «Дежурный основной», счёт 91.83, верифицирован, статус APPROVED).\n\n**Почему он выбран — по логам:**\n\n1. **Ротация смены** — 2026-11-18 04:51:43 UTC сработал таймер 6-часовой смены (`причина=смена на 6 часов истекла`).\n2. **Живой замер флота** — в тот же момент запущен перебор кандидатов (5 кандидатов, измерено 1). `nvidia/nemotron-3-ultra-550b-a55b` получил 96.75 и занял слот «Дежурный основной».\n3. **Повторный замер** — 2026-11-18 07:56:32 UTC флот измерен снова (3 из 5 кандидатов измерены). Счёт обновился до 91.83, но модель осталась лидером. Вторым стал `minimaxai/minimax-m3.1-flash` (87.73, «Дежурный быстрый»).\n4. **Дрейф флота** — статус `STABLE`, средний сдвиг −4.92, худший сдвиг у того же Nemotron (−4.92), то есть позиция устойчива.\n\n**Итог:** модель выбрана автоматически по результатам живых замеров как имеющая наивысший счёт на "
+        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 19.11 18:15 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 96.75 (замер ✅) · 9.04с</b>\n\n**Основной дежурный прямо сейчас:** `nvidia/nemotron-3-ultra-550b-a55b` (тир «Дежурный основной», счёт 96.75, статус `APPROVED`, верифицирован).\n\n**Почему он выбран:**\n- Последний живой замер флота от **2026-11-19 07:49:57 UTC** измерил 2 кандидатов из 5 и поставил эту модель на первое место со счётом **96.75** — самый высокий результат в текущем наборе.\n- Раннее, в **04:20:54 UTC**, смена ротации подтвердила её на 6 часов (до 10:20:54 UTC) с пометкой «смена на 6 часов истекла», и тот же замер зафиксировал счёт 96.75.\n- В `active_models.json` она числится единственной моделью с тиром «Дежурный основной» и флагом `verified=True`.\n\nКоротко: модель выиграла последний конкурсный замер (live benchmark) и формально закреплена за сменой до 10:20 UTC сегодня."
       ]
     },
     {
       "label": "код_задача",
       "input": "напиши python функцию is_palindrome(s) с обработкой ошибок",
       "ok": true,
-      "elapsed_sec": 12.5,
+      "elapsed_sec": 7.7,
       "missing_soft_markers": [],
       "replies": [
         "⚙️ <i>Кузница: модель пишет код, песочница запускает…</i>",
-        "⚙️ <b>Кузница — код написан и выполнен</b> ✅\n🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 18.11 18:20 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n✍️ <b>Автор:</b> nvidia/nemotron-3-ultra-550b-a55b — балл 91.83 (замер ✅) · 12.48с\n\n<b>Код:</b>\n<pre>def is_palindrome(s):\n    &quot;&quot;&quot;\n    Проверяет, является ли строка палиндромом.\n    Игнорирует регистр, пробелы и знаки препинания.\n    Возвращает True/False или сообщение об ошибке.\n    &quot;&quot;&quot;\n    try:\n        if s is None:\n            return &quot;Ошибка: входное значение None&quot;\n        if not isinstance(s, str):\n            return f&quot;Ошибка: ожидается строка, получен {type(s).__name__}&quot;\n        \n        # Очистка строки: оставляем только буквы и цифры, приводим к нижнему регистру\n        cleaned = &#x27;&#x27;.join(ch.lower() for ch in s if ch.isalnum())\n        \n        if not cleaned:\n            return &quot;Ошибка: после очистки строка пуста&quot;\n        \n        return cleaned == cleaned[::-1]\n    \n    except Exception as e:\n        return f&quot;Неожиданная ошибка: {e}&quot;\n\n\nif __name__ == &quot;__main__&quot;:\n    "
+        "⚙️ <b>Кузница — код написан и выполнен</b> ✅\n🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 19.11 18:15 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n✍️ <b>Автор:</b> nvidia/nemotron-3-ultra-550b-a55b — балл 96.75 (замер ✅) · 7.69с\n\n<b>Код:</b>\n<pre>import sys\n\ndef is_palindrome(s):\n    &quot;&quot;&quot;\n    Check if the given string is a palindrome.\n    Ignores case and non-alphanumeric characters.\n    Returns True if palindrome, False otherwise.\n    Raises TypeError if input is not a string.\n    &quot;&quot;&quot;\n    if not isinstance(s, str):\n        raise TypeError(f&quot;Expected string, got {type(s).__name__}&quot;)\n    # Normalize: keep only alphanumeric, lower case\n    cleaned = &#x27;&#x27;.join(ch.lower() for ch in s if ch.isalnum())\n    return cleaned == cleaned[::-1]\n\ndef main():\n    # Test cases: can be extended or read from command line\n    test_cases = [\n        &quot;A man, a plan, a canal: Panama&quot;,\n        &quot;racecar&quot;,\n        &quot;hello&quot;,\n        &quot;&quot;,\n        &quot;12321&quot;,\n        &quot;No &#x27;x&#x27; in Nixon&quot;,\n        None,  # will cause TypeError\n "
       ]
     },
     {
       "label": "код_в_песочнице",
       "input": "напиши программу, которая печатает 6*7",
       "ok": true,
-      "elapsed_sec": 2.9,
+      "elapsed_sec": 2.6,
       "missing_soft_markers": [],
       "replies": [
         "⚙️ <i>Кузница: модель пишет код, песочница запускает…</i>",
-        "⚙️ <b>Кузница — код написан и выполнен</b> ✅\n🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 18.11 18:20 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n✍️ <b>Автор:</b> nvidia/nemotron-3-ultra-550b-a55b — балл 91.83 (замер ✅) · 2.91с\n\n<b>Код:</b>\n<pre>print(6 * 7)</pre>\n\n🧪 <b>Песочница:</b> exit=0 · 0.01с · изолированный каталог, без секретов, таймаут 60с\n\n<b>Вывод:</b>\n<pre>42</pre>"
+        "⚙️ <b>Кузница — код написан и выполнен</b> ✅\n🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 19.11 18:15 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n✍️ <b>Автор:</b> nvidia/nemotron-3-ultra-550b-a55b — балл 96.75 (замер ✅) · 2.63с\n\n<b>Код:</b>\n<pre>def main():\n    try:\n        result = 6 * 7\n        print(f&quot;6 * 7 = {result}&quot;)\n    except Exception as e:\n        print(f&quot;Ошибка при вычислении: {e}&quot;)\n\nif __name__ == &quot;__main__&quot;:\n    main()</pre>\n\n🧪 <b>Песочница:</b> exit=0 · 0.01с · изолированный каталог, без секретов, таймаут 60с\n\n<b>Вывод:</b>\n<pre>6 * 7 = 42</pre>"
       ]
     },
     {
       "label": "память_фактов",
       "input": "отправляли ли мне сегодня отчёты на почту?",
       "ok": true,
-      "elapsed_sec": 48.8,
+      "elapsed_sec": 36.0,
       "missing_soft_markers": [
         "ОТЧЁТЫ",
         "нет записей"
       ],
       "replies": [
         "🧠 <i>Хранитель передаёт задачу дежурной модели смены...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 18.11 18:20 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 91.83 (замер ✅) · 11.97с</b>\n\n**Да, сегодня оба отчёта уже ушли на почту.**\n\nПо записям диспетчера рассылки (authoritative log) для получателя `sha256:499f460d` (это ваш настроенный адрес `настроен (sha256:499f460d)`):\n\n| Время (UTC) | Тип отчёта | Статус |\n|-------------|------------|--------|\n| **2026-11-18 05:40:53** | Проверка связи | **DELIVERED** |\n| **2026-11-18 05:57:45** | Ежедневный дайджест ИИ | **DELIVERED** |\n\nОба письма имеют статус `DELIVERED` и прошли через транспорт `sha256:cc9a125c`. Повторная отправка сегодня не производилась (система пропускает дубликаты, как видно в логах 14:06 вчера)."
+        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 19.11 18:15 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 96.75 (замер ✅) · 8.07с</b>\n\n**Да, сегодня отчёты на почту отправлялись — оба доставлены.**\n\nПо данным авторитетного журнала рассылки (report dispatch records) за **2026-11-19**:\n\n| Время (UTC) | Тип отчёта | Статус | Получатель (sha256) |\n|-------------|------------|--------|---------------------|\n| **05:06:20** | Проверка связи | **DELIVERED** | 499f460d (настроен (sha256:499f460d)) |\n| **05:22:24** | Ежедневный дайджест ИИ | **DELIVERED** | 499f460d (настроен (sha256:499f460d)) |\n\nОба сообщения прошли через транспорт `sha256:cc9a125c` и имеют финальный статус `DELIVERED`. Дублирующих или последующих отправок за сегодня в журнале нет."
       ]
     },
     {
       "label": "поиск",
       "input": "найди в интернете: что нового в NVIDIA NIM за последние дни",
       "ok": true,
-      "elapsed_sec": 46.8,
+      "elapsed_sec": 36.2,
       "missing_soft_markers": [],
       "replies": [
         "🧠 <i>Хранитель передаёт задачу дежурной модели смены...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 18.11 18:20 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 91.83 (замер ✅) · 9.97с</b>\n\nМодель nvidia/nemotron-3-ultra-550b-a55b вернула вызов инструмента (live_search по запросу «NVIDIA NIM latest updates November 2026 release notes new models features»), но ответ получить не удалось.\nЗапрос, который она хотела выполнить: NVIDIA NIM latest updates November 2026 release notes new models features\n\n\n🔗 <b>Источники</b>\n<a href=\"https://forums.developer.nvidia.com/c/ai-data-science/nvidia-nim/678\">forums.developer.nvidia.com/c/ai-data-science/nvidia-nim/678</a>\n<a href=\"https://developer.nvidia.com/nim\">developer.nvidia.com/nim</a>\n<a href=\"https://docs.nvidia.com/ai-enterprise/lifecycle/latest\">docs.nvidia.com/ai-enterprise/lifecycle/latest</a>\n<a href=\"https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b/apireference\">build.nvidia.comdia/nemotron-3.5-super-vl-120b-a12b/apireference</a>\n<a href=\"https://downforai.com/nvidia-nim\">downforai.com/nvidia-nim</a>\n<a href=\"https://blockchain.news/ne"
+        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 19.11 18:15 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 96.75 (замер ✅) · 10.21с</b>\n\nМодель nvidia/nemotron-3-ultra-550b-a55b вернула вызов инструмента (live_search по запросу «NVIDIA NIM release notes November 2026 new features updates»), но ответ получить не удалось.\nЗапрос, который она хотела выполнить: NVIDIA NIM release notes November 2026 new features updates\n\n\n🔗 <b>Источники</b>\n<a href=\"https://forums.developer.nvidia.com/c/ai-data-science/nvidia-nim/678\">forums.developer.nvidia.com/c/ai-data-science/nvidia-nim/678</a>\n<a href=\"https://developer.nvidia.com/nim\">developer.nvidia.com/nim</a>\n<a href=\"https://downforai.com/nvidia-nim\">downforai.com/nvidia-nim</a>\n<a href=\"https://developer.nvidia.com/blog/how-full-stack-nim-optimizations-deliver-2-5x-more-users-on-nemotron-3-ultra\">developer.nvidia.comions-deliver-2-5x-more-users-on-nemotron-3-ultra</a>\n<a href=\"https://resources.nvidia.com/en-us-nim/generative-ai-with-nvidia-nim\">resources.nvidia.com/en-us-nim/generative-ai-with-nvidia-nim<"
       ]
     },
     {
       "label": "поиск_на_сайте",
       "input": "найди на озон генетический тест",
       "ok": true,
-      "elapsed_sec": 100.1,
+      "elapsed_sec": 28.3,
       "missing_soft_markers": [],
       "replies": [
         "🧠 <i>Хранитель передаёт задачу дежурной модели смены...</i>",
-        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 18.11 18:20 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 91.83 (замер ✅) · 56.23с</b>\n\nНа Ozon есть несколько категорий и популярных брендов генетических тестов. Вот что нашёл по живой выдаче:\n\n**Основные категории:**\n- **Общая категория генетических тестов** — `ozon.ru/category/testy-geneticheskie-38306/` (здесь собраны разные бренды и направления).\n- **Тесты бренда Genotek** — отдельная витрина внутри категории.\n- **Тесты Atlas** — `ozon.ru/category/geneticheskiy-test-atlas`.\n- **Российские предложения** — `ozon.ru/category/testy-geneticheskie-rossiya`.\n- **Чёрная пятница / акции** — `ozon.ru/category/testy-geneticheskie-chernye`.\n\n**Что обычно в ассортименте (по сниппетам):**\n- **MyGenetics Wellness** — питание, похудение, диета, подбор тренировок (для мужчин и женщин).\n- **Genotek** — склонности к заболеваниям, видам спорта, происхождение, фармакогенетика.\n- **Atlas** — здоровье, питание, спорт, происхождение.\n\n**Как выбрать:**\n1. Зайди в общую категорию `testy-geneticheskie-38306` — там фильтр"
+        "🧑‍💼 <i>Хранитель:</i> Дежурная модель: nvidia/nemotron-3-ultra-550b-a55b (смена до 19.11 18:15 UTC; Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру).\n\n⚡ <b>nvidia/nemotron-3-ultra-550b-a55b — дежурный основной · балл 96.75 (замер ✅) · 10.72с</b>\n\nНа Ozon есть несколько категорий и популярных брендов генетических тестов. Вот что нашёл по живой выдаче:\n\n## Основные категории на Ozon\n1. **Общая категория генетических тестов** — `ozon.ru/category/testy-geneticheskie-38306/`\n2. **Тесты бренда Genotek** — `ozon.ru/category/testy-geneticheskie-38306/genotek-100404723/`\n3. **Тесты для России** — `ozon.ru/category/testy-geneticheskie-rossiya/`\n4. **Чёрные/премиальные тесты** — `ozon.ru/category/testy-geneticheskie-chernye/`\n5. **Тесты Atlas** — `ozon.ru/category/geneticheskiy-test-atlas/`\n\n## Популярные бренды, которые встречаются в выдаче\n- **MyGenetics** — наборы «Веллнесс» для мужчин и женщин (питание, похудение, диета)\n- **Genotek** — определение склонностей к заболеваниям, видам спорта, места происхождения\n- **Atlas** — аналогичные комплексные панели\n\n## Что обычно входят в такие тесты\n- Предиспозиция к наследственным заболеваниям\n- Метаболические особенности"
       ]
     },
     {
@@ -111,7 +111,7 @@
       "input": "inline: roster",
       "ok": true,
       "replies": [
-        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (2):</b>\n<b>1. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный основной\n   • балл: <b>91.83</b> (✅ замер, 7.91с)\n   • вендор: nvidia\n<b>2. minimaxai/minimax-m3.1-flash</b>\n   • роль: дежурный быстрый\n   • балл: <b>87.73</b> (✅ замер, 9.82с)\n   • вендор: minimaxai"
+        "🧑‍💼 <b>СОСТАВ КОМАНДЫ КОМПЛЕКСА</b>\n\n👑 <b>Хранитель системы (локальный CPU)</b>\n   • Qwen/Qwen2.5-1.5B-Instruct — начальник проекта: распределяет задачи, работает без сети\n\n⚡ <b>Дежурные сетевые модели (2):</b>\n<b>1. nvidia/nemotron-3-ultra-550b-a55b</b>\n   • роль: дежурный основной\n   • балл: <b>96.75</b> (✅ замер, 0.88с)\n   • вендор: nvidia\n<b>2. stepfun-ai/step-5-preview</b>\n   • роль: дежурный быстрый\n   • балл: <b>75.76</b> (✅ замер, 4.09с)\n   • вендор: stepfun-ai"
       ]
     },
     {
