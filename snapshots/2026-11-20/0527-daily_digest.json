@@ -1,0 +1,66 @@
+{
+  "generated_at": "2026-11-20T05:27:14Z",
+  "subject": "Ежедневный дайджест ИИ: 20.11.2026",
+  "tier": "TinyFish",
+  "queries": [
+    "новые модели ИИ релиз открытые веса",
+    "new AI model release open weights LLM",
+    "агентные ИИ системы tool calling фреймворки",
+    "AI agents frameworks autonomous tool calling",
+    "NVIDIA GPU TPU инфраструктура ИИ чипы",
+    "AI infrastructure chips NVIDIA GPU TPU datacenter",
+    "исследования ИИ reasoning бенчмарки модели",
+    "AI research reasoning benchmark LLM paper"
+  ],
+  "sources_count": 39,
+  "selection_mode": "модель отобрала",
+  "full_news_count": 0,
+  "items_count": 5,
+  "items": [
+    {
+      "title": "Обновлённые Clairic и Clairic-flash доступны с открытыми весами",
+      "summary": "Обе модели Clairic теперь доступны с открытыми весами на Hugging Face. После выпуска Clef появилось множество экспериментов и дообученных моделей.",
+      "url": "https://pcnews.ru/blogs/obnovlennye_clairic_i_clairic_flash_teper_dostupny_s_otkrytymi_vesami__ot_novoj_komandy_workers_ai_superintelligence-1857666.html",
+      "source": "pcnews.ru",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "OpenAI планирует выпустить модель с открытыми весами, чтобы догнать DeepSeek и Meta",
+      "summary": "OpenAI готовит выпуск модели с открытыми весами, чтобы догнать DeepSeek и Meta. В такой модели веса общедоступны: пользователи могут видеть и изменять их без необходимости переобучать модель.",
+      "url": "https://devby.io/news/openai-vypustit-model-s-otkrytymi-vesami-chtoby-dognat-deepseek-i-meta",
+      "source": "devby.io",
+      "date": "",
+      "category": "Модели",
+      "detail": ""
+    },
+    {
+      "title": "OpenAI переходит на Google TPU, меняя рынок ИИ-вычислений",
+      "summary": "OpenAI переходит на использование тензорных процессоров Google TPU. Переход меняет структуру рынка ИИ-вычислений и создаёт угрозу монополии Nvidia.",
+      "url": "https://www.pravda.ru/news/technolgies/2433972-openai-google-tpu-shift/",
+      "source": "pravda.ru",
+      "date": "",
+      "category": "Инфраструктура",
+      "detail": ""
+    },
+    {
+      "title": "Представлен бенчмарк ArXivMath для оценки LLM на математических исследовательских задачах",
+      "summary": "Разработчики представили ArXivMath — новый бенчмарк с итоговыми ответами, предназначенный для оценки LLM на математических исследовательских задачах. Бенчмарк разработан, чтобы закрыть выявленный пробел.",
+      "url": "https://matharena.ai/arxivmath/",
+      "source": "matharena.ai",
+      "date": "",
+      "category": "Исследования",
+      "detail": ""
+    },
+    {
+      "title": "Для Time Series-LLM создан набор из 337 тысяч обучающих и 44 тысяч оценочных примеров",
+      "summary": "В работе построен первый набор данных такого типа: 337 тысяч обучающих и 44 тысячи оценочных примеров для трёх прогрессивных способностей — Perceive, Solve и Reason. Набор используется для изучения того, как формируются способности у LLM для временных рядов.",
+      "url": "https://arxiv.org/html/2610.23521",
+      "source": "arxiv.org",
+      "date": "2026-10",
+      "category": "Исследования",
+      "detail": ""
+    }
+  ]
+}
