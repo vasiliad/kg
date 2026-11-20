@@ -1,0 +1,17 @@
+diff --git a/harness/duty_shift.py b/harness/duty_shift.py
+@@ -340,14 +340,13 @@ def start_shift(
+     shift = {
+         "model_id": model_id,
+         "started_at": _iso(moment),
+         "until": _iso(moment + timedelta(hours=SHIFT_HOURS)),
+         "chosen_by": reason,
+         "calls": 0,
+         "failures": 0,
+         "last_latency_sec": None,
+         "broken_at": "",
+         "broken_reason": "",
+     }
+-    if model_id:
+-        save_shift(shift, path)
++    save_shift(shift, path)
+     return shift

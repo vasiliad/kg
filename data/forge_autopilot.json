@@ -1,24 +1,24 @@
 {
-  "attempted_at": "2026-11-19T04:14:26.034456+00:00",
+  "attempted_at": "2026-11-20T04:30:16.848389+00:00",
   "reason": "Улучшить работу комплекса по ИЗМЕРЕННЫМ слабым местам: исправь узкое место, которое замеры уже показали.",
   "ok": false,
   "stage": "apply_check",
-  "facts_digest": "Дрейф флота: STABLE, средняя дельта 0.0, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта 0.0)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.75, задержка 1.23с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 84.17, задержка 20.99с, ok_rate 1.0, слабейшая задача instruction=1.0\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (7.1 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 504, ошибок 113, ответов 909",
+  "facts_digest": "Дрейф флота: STABLE, средняя дельта -0.47, худший: nvidia/nemotron-3-ultra-550b-a55b (дельта -0.47)\n- nvidia/nemotron-3-ultra-550b-a55b: балл 96.28, задержка 2.57с, ok_rate 1.0, слабейшая задача reasoning=0.75\n- stepfun-ai/step-5-preview: балл 83.43, задержка 4.49с, ok_rate 0.875, слабейшая задача code=0.0\n- z-ai/glm-5.3-flash: балл 79.28, задержка 19.97с, ok_rate 1.0, слабейшая задача instruction=0.5\nДежурная смена: nvidia/nemotron-3-ultra-550b-a55b, задержка замеров нет, смена ИСТЕКЛА (7.3 ч назад); выбрана: Хранитель без нейросети (детерминированное ядро); выбрано по живому замеру\nЗдоровье бота: запусков 532, ошибок 118, ответов 967",
   "branch": null,
-  "error": "error: patch fragment without header at /tmp/forge-patch-k43u0ck1/proposed.patch:3: @@ -430,10 +430,19 @@ def rotate_if_expired(\n",
-  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: patch fragment without header at /tmp/forge-patch-k43u0ck1/proposed.patch:3: @@ -430,10 +430,19 @@ def rotate_if_expired(\n",
+  "error": "error: patch fragment without header at /tmp/forge-patch-iw0xcen3/proposed.patch:3: @@ -340,14 +340,13 @@ def start_shift(\n",
+  "summary": "Патч отклонён конституцией на этапе «apply_check»: error: patch fragment without header at /tmp/forge-patch-iw0xcen3/proposed.patch:3: @@ -340,14 +340,13 @@ def start_shift(\n",
   "writer": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "score": 96.75,
+    "score": 96.28,
     "verified": true,
-    "elapsed": 108.14,
+    "elapsed": 103.76,
     "status": "SUCCESS"
   },
   "chooser": {
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
     "role": "duty_primary",
-    "elapsed": 5.98,
+    "elapsed": 8.96,
     "status": "SUCCESS"
   },
   "duty_status": "SUCCESS",
@@ -26,7 +26,7 @@
   "target": "harness/duty_shift.py",
   "normalised": true,
   "notes": [
-    "заголовок @@ -430,15 +430,20 @@ исправлен на измеренные -430,10 +430,19"
+    "заголовок @@ -340,8 +340,7 @@ исправлен на измеренные -340,14 +340,13"
   ],
   "repair": {
     "attempted": true,
@@ -37,16 +37,15 @@
     "ok": false,
     "stage": "apply_check",
     "branch": null,
-    "error": "error: patch fragment without header at /tmp/forge-patch-k43u0ck1/proposed.patch:3: @@ -430,10 +430,19 @@ def rotate_if_expired(\n"
+    "error": "error: patch fragment without header at /tmp/forge-patch-iw0xcen3/proposed.patch:3: @@ -340,14 +340,13 @@ def start_shift(\n"
   },
-  "patch_bytes": 897,
-  "attempt_day": "2026-11-19",
-  "checked_at": "2026-11-19T12:56:59.066902+00:00",
-  "checked_kind": "check_only",
-  "verdict_id": "20261119T041426Z",
-  "last_attempt_at": "2026-11-19T04:14:26.034456+00:00",
-  "attempt_age_hours": 8.71,
-  "freshness": "Последняя попытка: 19.11 04:14 UTC (8.7 ч назад).",
-  "patch_file": "data/forge_autopilot/20261119T041426Z.patch",
-  "skipped_today": true
+  "patch_bytes": 515,
+  "attempt_day": "2026-11-20",
+  "checked_at": "2026-11-20T04:30:16.848291+00:00",
+  "checked_kind": "attempt",
+  "verdict_id": "20261120T043016Z",
+  "last_attempt_at": "2026-11-20T04:30:16.848389+00:00",
+  "attempt_age_hours": 0.11,
+  "freshness": "Последняя попытка: 20.11 04:30 UTC (0 мин назад).",
+  "patch_file": "data/forge_autopilot/20261120T043016Z.patch"
 }
