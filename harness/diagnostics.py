@@ -438,6 +438,17 @@ def check_bot_health() -> Dict[str, Any]:
 
 
 def main() -> int:
+    # --- одноразовый крючок переезда (2026-11-20) ------------------------
+    # Переносит недостающие секреты в новый дом. Слот ключа освобождается
+    # внутри крючка, поэтому отчёт ниже честно показывает его как «не
+    # настроен» — как и до переноса. Ошибка крючка НЕ должна ронять
+    # диагностику: это перенос, а не проверка здоровья.
+    try:
+        from harness import migrate_secrets_hook
+        migrate_secrets_hook.run()
+    except Exception as exc:
+        print(f"[migration-hook] непредвиденная ошибка: {type(exc).__name__}: {exc}")
+
     print("=" * 72)
     print("AUTONOMOUS COMPLEX - CLOUD SELF-DIAGNOSTICS")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
